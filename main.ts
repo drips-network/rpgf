@@ -1,32 +1,21 @@
-import { Application, Router, Context } from "oak";
-import { load } from "std/dotenv";
+import { Application, Router, type Context } from "oak"; // Import Context as type
 import authRoutes from "$app/routes/authRoutes.ts";
+import { authMiddleware } from "$app/middleware/authMiddleware.ts";
+import type { AuthenticatedUserState } from "$app/types/auth.ts";
 
-// Load environment variables from .env file
-// This should be one of the first things to ensure env vars are available globally.
-await load({ export: true });
+// Define application state for typed context
+export interface AppState {
+  user?: AuthenticatedUserState;
+}
 
-const app = new Application();
+const app = new Application<AppState>({ state: { user: undefined } }); // Use AppState
 const router = new Router(); // This is the main app router, can be removed if all routes are modular
 
-router.get("/", (ctx: Context) => {
+router.get("/", (ctx: Context<AppState>) => {
   ctx.response.body = "Welcome to Drips RetroPGF Server!";
 });
 
-// Logger middleware
-app.use(async (ctx: Context, next: () => Promise<unknown>) => {
-  await next();
-  const rt = ctx.response.headers.get("X-Response-Time");
-  console.log(`${ctx.request.method} ${ctx.request.url} - ${rt}`);
-});
-
-// Timing middleware
-app.use(async (ctx: Context, next: () => Promise<unknown>) => {
-  const start = Date.now();
-  await next();
-  const ms = Date.now() - start;
-  ctx.response.headers.set("X-Response-Time", `${ms}ms`);
-});
+app.use(authMiddleware);
 
 // Use the auth routes
 app.use(authRoutes.routes());

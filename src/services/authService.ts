@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import type { AppJwtPayload } from "$app/types/auth.ts";
 import { crypto } from "std/crypto"; // Updated import alias
 
-// In-memory nonce store: Map<nonce, expirationTimestamp>
+// simple in-memory nonce store: Map<nonce, expirationTimestamp>
 const nonceStore = new Map<string, number>();
 const NONCE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -40,11 +40,12 @@ function consumeNonce(nonce: string): boolean {
   return true;
 }
 
-async function getJwtSecret(): Promise<CryptoKey> {
+export async function getJwtSecret(): Promise<CryptoKey> {
   const secret = Deno.env.get("JWT_SECRET");
   if (!secret) {
     throw new Error("JWT_SECRET environment variable is not set.");
   }
+
   // Prepare the key for HMAC SHA-256.
   // The key material should be a Uint8Array.
   const keyData = new TextEncoder().encode(secret);
