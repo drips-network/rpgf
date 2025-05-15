@@ -1,0 +1,35 @@
+{
+  "imports": {
+    "std/dotenv": "https://deno.land/std@0.224.0/dotenv/mod.ts",
+    "std/crypto": "https://deno.land/std@0.224.0/crypto/mod.ts",
+    "std/csv": "https://deno.land/std@0.224.0/csv/stringify.ts",
+    "oak": "https://deno.land/x/oak@v16.0.0/mod.ts",
+    "siwe": "npm:siwe@^3.0.0",
+    "djwt": "https://deno.land/x/djwt@v3.0.2/mod.ts",
+    "drizzle-orm": "npm:drizzle-orm@^0.43.1",
+    "pg": "npm:pg@^8.16.0",
+    "drizzle-kit": "npm:drizzle-kit@^0.31.1",
+    "$app/": "./src/"
+  },
+  "fmt": {
+    "options": {
+      "useTabs": false,
+      "lineWidth": 80,
+      "indentWidth": 2,
+      "singleQuote": false
+    }
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"],
+      "include": []
+    }
+  },
+  "tasks": {
+    "start": "deno run --node-modules-dir --allow-net --allow-env --allow-read main.ts",
+    "dev": "deno run --node-modules-dir --watch --allow-net --allow-env --allow-read main.ts",
+    "db:generate": "deno run -A --node-modules-dir  npm:drizzle-kit generate",
+    "db:migrate": "deno run -A --node-modules-dir npm:drizzle-kit migrate",
+    "db:studio": "deno run -A --node-modules-dir npm:drizzle-kit studio"
+  }
+}
