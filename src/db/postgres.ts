@@ -1,5 +1,7 @@
-import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle, NodePgDatabase, NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import * as schema from "$app/db/schema.ts";
+import { PgTransaction } from "drizzle-orm/pg-core/session";
+import { ExtractTablesWithRelations } from "drizzle-orm";
 
 const DB_HOST = Deno.env.get("DB_HOST") || "localhost";
 const DB_PORT = parseInt(Deno.env.get("DB_PORT") || "5432");
@@ -19,8 +21,11 @@ console.log(
 export const db: NodePgDatabase<typeof schema> = drizzle({ 
   connection: { 
     connectionString,
-  }
+  },
+  schema,
 });
+
+export type Transaction = PgTransaction<NodePgQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
 
 // The old getDbClient() and ensureSchema() are no longer needed in the same way.
 // Drizzle uses its own migration system. We'll create a migration script later.

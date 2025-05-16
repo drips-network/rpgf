@@ -5,10 +5,23 @@ import { users } from "$app/db/schema.ts";
 import { eq } from "drizzle-orm";
 import type { AppJwtPayload } from "$app/types/auth.ts";
 import { crypto } from "std/crypto"; // Updated import alias
+import { Context } from "oak";
+import { AppState, AuthenticatedAppState } from "../../main.ts";
+import { UnauthenticatedError } from "../errors/auth.ts";
 
 // simple in-memory nonce store: Map<nonce, expirationTimestamp>
 const nonceStore = new Map<string, number>();
 const NONCE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutes
+
+export function enforceAuthentication(ctx: Context<AppState>): ctx is Context<AuthenticatedAppState> {
+  if (!ctx.state.user) {
+    ctx.response.status = 401; // Unauthorized
+    ctx.response.body = { error: "Unauthorized" };
+
+    throw new UnauthenticatedError();
+  }
+  return true;
+}
 
 // Helper to generate a cryptographically secure random string for nonce
 function generateSecureNonce(): string {
@@ -110,6 +123,7 @@ export async function verifySignatureAndCreateToken(
     );
     const payload: AppJwtPayload = {
       walletAddress: user.walletAddress,
+      userId: user.id,
       exp: getNumericDate(expirationMinutes * 60), // Expires in X minutes
       iat: getNumericDate(0), // Issued at now
     };

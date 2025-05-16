@@ -1,3 +1,5 @@
+import z from 'zod';
+
 export interface CustomApplicationField {
   name: string;
   description: string;
@@ -16,33 +18,79 @@ export interface VotingConfiguration {
   allowedVoters: string[]; // List of ETH addresses
 }
 
-export interface Round {
-  id: number;
-  name: string;
-  description?: string;
-  applicationPeriodStart: Date;
-  applicationPeriodEnd: Date;
-  votingPeriodStart: Date;
-  votingPeriodEnd: Date;
-  resultsPeriodStart: Date;
-  applicationFormat: ApplicationFormat;
-  votingConfig: VotingConfiguration;
-  createdByUserId: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
+export const roundPublicFieldsSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  description: z.string().nullable(),
+  applicationPeriodStart: z.date(),
+  applicationPeriodEnd: z.date(),
+  votingPeriodStart: z.date(),
+  votingPeriodEnd: z.date(),
+  resultsPeriodStart: z.date(),
+  applicationFormat: z.object({
+    customFields: z.array(z.object({
+      name: z.string(),
+      description: z.string(),
+      type: z.enum(["text", "textarea", "url", "number", "date"]),
+      required: z.boolean(),
+      isPublic: z.boolean(),
+    })),
+  }),
+  votingConfig: z.object({
+    maxVotesPerVoter: z.number().int().positive(),
+    maxVotesPerProjectPerVoter: z.number().int().positive(),
+  }),
+  createdByUserId: z.number(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type RoundPublicFields = z.infer<typeof roundPublicFieldsSchema>;
 
-// Data Transfer Object for creating a new round
-// Omits id, createdByUserId (derived from auth), createdAt, updatedAt (auto-generated)
-export interface CreateRoundDto {
-  name: string;
-  description?: string;
-  applicationPeriodStart: string; // ISO Date strings from client
-  applicationPeriodEnd: string;   // ISO Date strings from client
-  votingPeriodStart: string;    // ISO Date strings from client
-  votingPeriodEnd: string;      // ISO Date strings from client
-  resultsPeriodStart: string;   // ISO Date strings from client
-  applicationFormat: ApplicationFormat;
-  votingConfig: VotingConfiguration;
-  adminWalletAddresses: string[]; // Wallet addresses of users to be made admins for this round
-}
+export const roundAdminFieldsSchema = roundPublicFieldsSchema.extend({
+  votingConfig: z.object({
+    maxVotesPerVoter: z.number().int().positive(),
+    maxVotesPerProjectPerVoter: z.number().int().positive(),
+    allowedVoters: z.array(z.string()).nonempty(),
+  }),
+  adminWalletAddresses: z.array(z.string()).nonempty(), // Array of wallet addresses
+});
+export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
+
+export const createRoundDtoSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().optional(),
+  applicationPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
+    message: "Invalid date format for applicationPeriodStart",
+  }),
+  applicationPeriodEnd: z.string().refine((date) => !isNaN(Date.parse(date)), {
+    message: "Invalid date format for applicationPeriodEnd",
+  }),
+  votingPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
+    message: "Invalid date format for votingPeriodStart",
+  }),
+  votingPeriodEnd: z.string().refine((date) => !isNaN(Date.parse(date)), {
+    message: "Invalid date format for votingPeriodEnd",
+  }),
+  resultsPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
+    message: "Invalid date format for resultsPeriodStart",
+  }),
+  applicationFormat: z.object({
+    customFields: z.array(z.object({
+      name: z.string(),
+      description: z.string(),
+      type: z.enum(["text", "textarea", "url", "number", "date"]),
+      required: z.boolean(),
+      isPublic: z.boolean(),
+    })),
+  }),
+  votingConfig: z.object({
+    maxVotesPerVoter: z.number().int().positive(),
+    maxVotesPerProjectPerVoter: z.number().int().positive(),
+    allowedVoters: z.array(z.string()).nonempty(),
+  }),
+  adminWalletAddresses: z.array(z.string()).nonempty(), // Array of wallet addresses
+});
+export type CreateRoundDto = z.infer<typeof createRoundDtoSchema>;
+
+export const patchRoundDtoSchema = createRoundDtoSchema.partial();
+export type PatchRoundDto = z.infer<typeof patchRoundDtoSchema>;

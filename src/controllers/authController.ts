@@ -22,6 +22,8 @@ export async function verifySignatureController(ctx: Context) {
     const body = await ctx.request.body.json();
     const { message: clientSiweMessageFields, signature } = body as SiweVerifyRequest;
 
+    console.log({ clientSiweMessageFields, signature })
+
     if (!clientSiweMessageFields || !signature) {
       ctx.throw(Status.BadRequest, "Missing SIWE message or signature in request body.");
     }
