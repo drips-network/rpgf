@@ -8,7 +8,7 @@ import {
   jsonb,
   primaryKey,
 } from "drizzle-orm/pg-core";
-import type { ApplicationFormat, VotingConfiguration } from "$app/types/round.ts"; // Re-using these for JSONB structure
+import type { ApplicationFormat, CreateRoundDto } from "$app/types/round.ts"; // Re-using these for JSONB structure
 import { relations, sql } from "drizzle-orm";
 
 // Users table
@@ -42,7 +42,7 @@ export const rounds = pgTable("rounds", {
   // Storing complex objects as JSONB
   // The '$type' property helps Drizzle infer the shape for type safety
   applicationFormat: jsonb("application_format").notNull().$type<ApplicationFormat>(),
-  votingConfig: jsonb("voting_config").notNull().$type<VotingConfiguration>(),
+  votingConfig: jsonb("voting_config").notNull().$type<CreateRoundDto['votingConfig']>(),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),

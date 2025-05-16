@@ -129,7 +129,10 @@ export async function createRound(
     return newRound;
   });
 
-  return roundAdminFieldsSchema.parse(result);
+  return roundAdminFieldsSchema.parse({
+    ...result,
+    adminWalletAddresses: roundDto.adminWalletAddresses,
+  });
 }
 
 export async function patchRound(
@@ -165,4 +168,12 @@ export async function patchRound(
     return null;
   }
   return roundAdminFieldsSchema.parse(result[0]);
+}
+
+export async function deleteRound(roundId: number): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.delete(rounds).where(eq(rounds.id, roundId));
+    await tx.delete(roundAdmins).where(eq(roundAdmins.roundId, roundId));
+    await tx.delete(roundVoters).where(eq(roundVoters.roundId, roundId));
+  });
 }

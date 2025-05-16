@@ -2,12 +2,17 @@ import { Context, RouteParams, RouterContext } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
 import { createRoundDtoSchema, patchRoundDtoSchema } from "../types/round.ts";
-import { createRound, getRound, getRounds, isUserRoundAdmin, patchRound } from "../services/roundService.ts";
+import { createRound, deleteRound, getRound, getRounds, isUserRoundAdmin, patchRound } from "../services/roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
-import { NotFoundError } from "../errors/generic.ts";
+import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 
 export async function createRoundController(ctx: Context<AuthenticatedAppState>) {
   const dto = await parseDto(createRoundDtoSchema, ctx);
+
+  const adminAddresses = dto.adminWalletAddresses.map((a) => a.toLowerCase());
+  if (!adminAddresses.includes(ctx.state.user.walletAddress.toLowerCase())) {
+    throw new BadRequestError("Round must include the creator's wallet address as an admin");
+  }
 
   const round = await createRound(dto, ctx.state.user.userId);
 
@@ -58,4 +63,17 @@ export async function getRoundsController(ctx: Context<AppState>) {
 
   ctx.response.status = 200;
   ctx.response.body = rounds;
+}
+
+export async function deleteRoundController(ctx: RouterContext<'/api/rounds/:id', RouteParams<'/api/rounds/:id'>, AuthenticatedAppState>) {
+  const roundId = ctx.params.id;
+  const userId = ctx.state.user.userId;
+
+  if (!(await isUserRoundAdmin(userId, Number(roundId)))) {
+    throw new UnauthorizedError("You are not authorized to delete this round");
+  }
+
+  await deleteRound(Number(roundId));
+
+  ctx.response.status = 204; // No content
 }
