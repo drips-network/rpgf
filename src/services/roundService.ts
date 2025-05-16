@@ -3,7 +3,6 @@ import { rounds, roundAdmins, roundVoters } from "$app/db/schema.ts";
 import { roundAdminFieldsSchema, RoundPublicFields, roundPublicFieldsSchema, type CreateRoundDto, type PatchRoundDto, type RoundAdminFields } from "$app/types/round.ts";
 import { and, eq } from "drizzle-orm";
 import createOrGetUser from "./userService.ts";
-import { access } from "node:fs";
 import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
 
 export async function isUserRoundAdmin(userId: number | undefined, roundId: number): Promise<boolean> {
@@ -18,6 +17,17 @@ export async function isUserRoundAdmin(userId: number | undefined, roundId: numb
     .limit(1);
 
   return result.length > 0;
+}
+
+export async function getRounds(limit = 20, offset = 0): Promise<RoundPublicFields[]> {
+  const results = await db.query.rounds.findMany({
+    limit,
+    offset,
+  });
+
+  return results.map((round) => {
+    return roundPublicFieldsSchema.parse(round);
+  });
 }
 
 export async function getRound(roundId: number, accessLevel: 'public' | 'admin'): Promise<typeof accessLevel extends 'admin' ? RoundAdminFields : RoundPublicFields | null> {

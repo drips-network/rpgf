@@ -2,7 +2,7 @@ import { Context, RouteParams, RouterContext } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
 import { createRoundDtoSchema, patchRoundDtoSchema } from "../types/round.ts";
-import { createRound, getRound, isUserRoundAdmin, patchRound } from "../services/roundService.ts";
+import { createRound, getRound, getRounds, isUserRoundAdmin, patchRound } from "../services/roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { NotFoundError } from "../errors/generic.ts";
 
@@ -46,4 +46,16 @@ export async function getRoundController(ctx: RouterContext<'/api/rounds/:id', R
 
   ctx.response.status = 200;
   ctx.response.body = round;
+}
+
+export async function getRoundsController(ctx: Context<AppState>) {
+  const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
+  const offset = Number(ctx.request.url.searchParams.get("offset")) || 0;
+
+  console.log({ limit, offset });
+
+  const rounds = await getRounds(limit, offset);
+
+  ctx.response.status = 200;
+  ctx.response.body = rounds;
 }

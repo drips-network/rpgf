@@ -58,7 +58,7 @@ export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
 
 export const createRoundDtoSchema = z.object({
   name: z.string().min(1).max(255),
-  description: z.string().optional(),
+  description: z.string().max(10000).optional(),
   applicationPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: "Invalid date format for applicationPeriodStart",
   }),
