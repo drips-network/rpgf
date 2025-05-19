@@ -1,4 +1,4 @@
-import { Application } from "oak"; // Import Context as type
+import { Application } from "oak";
 import authRoutes from "$app/routes/authRoutes.ts";
 import roundRoutes from "$app/routes/roundRoutes.ts";
 import applicationRoutes from "$app/routes/applicationRoutes.ts";

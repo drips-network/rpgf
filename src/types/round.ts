@@ -118,6 +118,7 @@ export type ApplicationFormat = z.infer<typeof applicationFormatSchema>;
 
 export const roundPublicFieldsSchema = z.object({
   id: z.number(),
+  chainId: z.number(),
   state: roundStateSchema,
   name: z.string(),
   description: z.string().nullable(),
@@ -149,6 +150,7 @@ export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
 
 export const createRoundDtoSchema = z.object({
   name: z.string().min(1).max(255),
+  chainId: z.number().int().positive(),
   description: z.string().max(10000).optional(),
   applicationPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: "Invalid date format for applicationPeriodStart",

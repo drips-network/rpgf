@@ -1,10 +1,11 @@
 import { db } from "$app/db/postgres.ts";
-import { rounds, roundAdmins, roundVoters } from "$app/db/schema.ts";
+import { rounds, roundAdmins, roundVoters, chains } from "$app/db/schema.ts";
 import { roundAdminFieldsSchema, RoundPublicFields, RoundState, type CreateRoundDto, type PatchRoundDto, type RoundAdminFields } from "$app/types/round.ts";
 import { and, eq } from "drizzle-orm";
 import createOrGetUser from "./userService.ts";
 import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
 import ensureAtLeastOneArrayMember from "../utils/ensureAtLeastOneArrayMember.ts";
+import { BadRequestError } from "../errors/generic.ts";
 
 export async function isUserRoundAdmin(userId: number | undefined, roundId: number): Promise<boolean> {
   if (!userId) {
@@ -20,10 +21,11 @@ export async function isUserRoundAdmin(userId: number | undefined, roundId: numb
   return result.length > 0;
 }
 
-export async function getRounds(limit = 20, offset = 0): Promise<RoundPublicFields[]> {
+export async function getRounds(filter?: { chainId?: number }, limit = 20, offset = 0): Promise<RoundPublicFields[]> {
   const results = await db.query.rounds.findMany({
     limit,
     offset,
+    where: filter?.chainId ? eq(rounds.chainId, filter.chainId) : undefined,
   });
 
   return results.map((round) => {
@@ -92,9 +94,16 @@ export async function createRound(
   creatorUserId: number,
 ): Promise<RoundAdminFields> {
   const result = await db.transaction(async (tx) => {
+    const chain = await tx.query.chains.findFirst({
+      where: eq(chains.id, roundDto.chainId),
+    });
+    if (!chain) {
+      throw new BadRequestError(`Chain with ID ${roundDto.chainId} is unsupported.`);
+    }
 
     const newRounds = await tx.insert(rounds).values({
       name: roundDto.name,
+      chainId: roundDto.chainId,
       description: roundDto.description,
       applicationPeriodStart: new Date(roundDto.applicationPeriodStart),
       applicationPeriodEnd: new Date(roundDto.applicationPeriodEnd),

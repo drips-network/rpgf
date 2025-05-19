@@ -56,10 +56,9 @@ export async function getRoundController(ctx: RouterContext<'/api/rounds/:id', R
 export async function getRoundsController(ctx: Context<AppState>) {
   const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
   const offset = Number(ctx.request.url.searchParams.get("offset")) || 0;
+  const chainId = Number(ctx.request.url.searchParams.get("chainId"));
 
-  console.log({ limit, offset });
-
-  const rounds = await getRounds(limit, offset);
+  const rounds = await getRounds({ chainId }, limit, offset);
 
   ctx.response.status = 200;
   ctx.response.body = rounds;

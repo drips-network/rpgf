@@ -10,6 +10,21 @@ CREATE TABLE "applications" (
 	"round_id" integer NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "ballots" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"round_id" integer NOT NULL,
+	"voter_user_id" integer NOT NULL,
+	"ballot" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "chains" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"chain_id" integer NOT NULL,
+	"gql_name" varchar(255) NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "round_admins" (
 	"round_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
@@ -26,6 +41,7 @@ CREATE TABLE "round_voters" (
 --> statement-breakpoint
 CREATE TABLE "rounds" (
 	"id" serial PRIMARY KEY NOT NULL,
+	"chain_id" integer NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"description" text,
 	"application_period_start" timestamp with time zone NOT NULL,
@@ -50,4 +66,7 @@ CREATE TABLE "users" (
 --> statement-breakpoint
 ALTER TABLE "applications" ADD CONSTRAINT "applications_submitter_users_id_fk" FOREIGN KEY ("submitter") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "applications" ADD CONSTRAINT "applications_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ballots" ADD CONSTRAINT "ballots_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ballots" ADD CONSTRAINT "ballots_voter_user_id_users_id_fk" FOREIGN KEY ("voter_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "rounds" ADD CONSTRAINT "rounds_chain_id_chains_id_fk" FOREIGN KEY ("chain_id") REFERENCES "public"."chains"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rounds" ADD CONSTRAINT "rounds_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;

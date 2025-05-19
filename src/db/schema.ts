@@ -14,7 +14,6 @@ import { relations, sql } from "drizzle-orm";
 import { CreateApplicationDto } from "../types/application.ts";
 import { SubmitBallotDto } from "../types/ballot.ts";
 
-// Users table
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   walletAddress: varchar("wallet_address", { length: 42 }).notNull().unique(),
@@ -22,9 +21,15 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
-// Rounds table
+export const chains = pgTable("chains", {
+  id: serial("id").primaryKey(),
+  chainId: integer("chain_id").notNull(),
+  gqlName: varchar("gql_name", { length: 255 }).notNull(),
+});
+
 export const rounds = pgTable("rounds", {
   id: serial("id").primaryKey(),
+  chainId: integer("chain_id").notNull().references(() => chains.id),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   applicationPeriodStart: timestamp("application_period_start", {
@@ -50,6 +55,11 @@ export const rounds = pgTable("rounds", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
+
+export const roundsRelations = relations(rounds, ({ one }) => ({
+  chain: one(chains, { fields: [rounds.chainId], references: [chains.id] }),
+  createdBy: one(users, { fields: [rounds.createdByUserId], references: [users.id] }),
+}));
 
 // Round Admins table (join table for many-to-many relationship)
 export const roundAdmins = pgTable("round_admins", {
