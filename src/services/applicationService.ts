@@ -98,8 +98,6 @@ export async function getApplications(
     return filterPrivateFields(applicationFormat, application);
   });
 
-  console.log({ filter, result });
-  
   return result;
 }
 

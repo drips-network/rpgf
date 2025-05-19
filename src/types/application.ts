@@ -54,7 +54,7 @@ export const applicationSchema = (applicationFormat: ApplicationFormat) => z.obj
   id: z.number(),
   state: applicationStateSchema,
   projectName: z.string().min(1).max(255),
-  projectDataSnapshot: projectChainDataSchema,
+  dripsProjectDataSnapshot: projectChainDataSchema,
   dripsAccountId: z.string().min(1).max(255),
   submitterUserId: z.number(),
   roundId: z.number(),
