@@ -19,10 +19,9 @@ export async function createAppplicationController(
     AuthenticatedAppState
   >,
 ) {
-  // TODO: Validate `accountId` being for a project claimed on Drips
-
   const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
+  const userWalletAddress = ctx.state.user.walletAddress;
 
   const round = await getRound(Number(roundId), "public");
   if (!round) {
@@ -41,6 +40,7 @@ export async function createAppplicationController(
   const application = await createApplication(
     Number(roundId),
     userId,
+    userWalletAddress,
     round.applicationFormat,
     dto,
   );

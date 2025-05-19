@@ -1,5 +1,7 @@
 {
   "imports": {
+    "graphql": "npm:graphql@^16.11.0",
+    "graphql-request": "npm:graphql-request@^7.1.2",
     "std/dotenv": "https://deno.land/std@0.224.0/dotenv/mod.ts",
     "std/crypto": "https://deno.land/std@0.224.0/crypto/mod.ts",
     "std/csv": "https://deno.land/std@0.224.0/csv/stringify.ts",

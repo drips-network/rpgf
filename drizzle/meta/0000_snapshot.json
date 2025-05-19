@@ -1,5 +1,5 @@
 {
-  "id": "b8ebbbd0-c9d2-4efe-9f93-32d32e1a28c8",
+  "id": "0a83a493-1780-4b76-9db4-85e3307dbb53",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -30,6 +30,12 @@
         "drips_account_id": {
           "name": "drips_account_id",
           "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "drips_project_data_snapshot": {
+          "name": "drips_project_data_snapshot",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },

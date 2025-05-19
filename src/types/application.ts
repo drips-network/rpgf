@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ApplicationFormat } from "./round.ts";
 import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
+import { projectChainDataSchema } from "../gql/projects.ts";
 
 export const applicationStateSchema = z.enum(["pending", "approved", "rejected"]);
 export type ApplicationState = z.infer<typeof applicationStateSchema>;
@@ -53,6 +54,7 @@ export const applicationSchema = (applicationFormat: ApplicationFormat) => z.obj
   id: z.number(),
   state: applicationStateSchema,
   projectName: z.string().min(1).max(255),
+  projectDataSnapshot: projectChainDataSchema,
   dripsAccountId: z.string().min(1).max(255),
   submitterUserId: z.number(),
   roundId: z.number(),

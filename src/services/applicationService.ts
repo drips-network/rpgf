@@ -1,7 +1,7 @@
 import { and, eq, or } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
-import { applications } from "../db/schema.ts";
-import { BadRequestError } from "../errors/generic.ts";
+import { applications, rounds } from "../db/schema.ts";
+import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
   Application,
   ApplicationReviewDto,
@@ -11,13 +11,17 @@ import {
 } from "../types/application.ts";
 import { ApplicationFormat } from "../types/round.ts";
 import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
+import { getProject } from "../gql/projects.ts";
 
 export async function createApplication(
   roundId: number,
   submitterUserId: number,
+  submitterWalletAddress: string,
   applicationFormat: ApplicationFormat,
   applicationDto: CreateApplicationDto,
 ): Promise<Application> {
+  // TODO: Validate an on-chain attestation for this application
+
   const result = await db.transaction(async (tx) => {
     const existingApplication = await tx.query.applications.findFirst({
       where: and(
@@ -32,8 +36,30 @@ export async function createApplication(
       );
     }
 
+    const round = await db.query.rounds.findFirst({
+      where: eq(rounds.id, roundId),
+      with: {
+        chain: true,
+      }
+    });
+    if (!round) {
+      throw new NotFoundError("Round not found");
+    }
+
+    const { gqlName: chainGqlName } = round?.chain;
+
+    const onChainProject = await getProject(applicationDto.dripsAccountId, chainGqlName);
+    if (!onChainProject) {
+      throw new BadRequestError("Drips Account ID is not for a valid, claimed project");
+    }
+    if (onChainProject.owner.address.toLowerCase() !== submitterWalletAddress.toLowerCase()) {
+      console.log({ onChainProject, submitterWalletAddress });
+      throw new BadRequestError("Drips Account ID is pointing at a project not currently owned by the submitter");
+    }
+
     const newApplications = await tx.insert(applications).values({
       projectName: applicationDto.projectName,
+      dripsProjectDataSnapshot: onChainProject,
       dripsAccountId: applicationDto.dripsAccountId,
       fields: applicationDto.fields,
       submitterUserId,

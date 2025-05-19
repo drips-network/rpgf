@@ -13,6 +13,7 @@ import type { ApplicationState } from "$app/types/application.ts";
 import { relations, sql } from "drizzle-orm";
 import { CreateApplicationDto } from "../types/application.ts";
 import { SubmitBallotDto } from "../types/ballot.ts";
+import { ProjectChainData } from "../gql/projects.ts";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -47,8 +48,6 @@ export const rounds = pgTable("rounds", {
   resultsPeriodStart: timestamp("results_period_start", {
     withTimezone: true,
   }).notNull(),
-  // Storing complex objects as JSONB
-  // The '$type' property helps Drizzle infer the shape for type safety
   applicationFormat: jsonb("application_format").notNull().$type<ApplicationFormat>(),
   votingConfig: jsonb("voting_config").notNull().$type<CreateRoundDto['votingConfig']>(),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
@@ -95,6 +94,7 @@ export const applications = pgTable("applications", {
   state: varchar("state", { length: 255 }).notNull().default("pending").$type<ApplicationState>(),
   projectName: varchar("project_name", { length: 255 }).notNull(),
   dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
+  dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectChainData>().notNull(),
   submitterUserId: integer("submitter").notNull().references(() => users.id),
   fields: jsonb("fields").notNull().$type<CreateApplicationDto['fields']>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

@@ -3,6 +3,7 @@ CREATE TABLE "applications" (
 	"state" varchar(255) DEFAULT 'pending' NOT NULL,
 	"project_name" varchar(255) NOT NULL,
 	"drips_account_id" varchar(255) NOT NULL,
+	"drips_project_data_snapshot" jsonb NOT NULL,
 	"submitter" integer NOT NULL,
 	"fields" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
