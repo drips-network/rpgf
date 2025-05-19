@@ -12,6 +12,7 @@ import type { ApplicationFormat, CreateRoundDto } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
 import { relations, sql } from "drizzle-orm";
 import { CreateApplicationDto } from "../types/application.ts";
+import { SubmitBallotDto } from "../types/ballot.ts";
 
 // Users table
 export const users = pgTable("users", {
@@ -94,4 +95,17 @@ export const applications = pgTable("applications", {
 export const applicationsRelations = relations(applications, ({ one }) => ({
   round: one(rounds, { fields: [applications.roundId], references: [rounds.id] }),
   submitter: one(users, { fields: [applications.submitterUserId], references: [users.id] }),
+}));
+
+export const ballots = pgTable("ballots", {
+  id: serial("id").primaryKey(),
+  roundId: integer("round_id").notNull().references(() => rounds.id),
+  voterUserId: integer("voter_user_id").notNull().references(() => users.id),
+  ballot: jsonb("ballot").notNull().$type<SubmitBallotDto['ballot']>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export const votesRelations = relations(ballots, ({ one }) => ({
+  round: one(rounds, { fields: [ballots.roundId], references: [rounds.id] }),
+  voter: one(users, { fields: [ballots.voterUserId], references: [users.id] }),
 }));
