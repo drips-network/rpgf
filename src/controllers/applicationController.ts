@@ -19,6 +19,8 @@ export async function createAppplicationController(
     AuthenticatedAppState
   >,
 ) {
+  // TODO: Validate `accountId` being for a project claimed on Drips
+
   const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
