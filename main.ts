@@ -3,6 +3,7 @@ import authRoutes from "$app/routes/authRoutes.ts";
 import roundRoutes from "$app/routes/roundRoutes.ts";
 import applicationRoutes from "$app/routes/applicationRoutes.ts";
 import ballotRoutes from "$app/routes/ballotRoutes.ts";
+import resultRoutes from "$app/routes/resultRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
@@ -63,6 +64,9 @@ app.use(applicationRoutes.allowedMethods());
 
 app.use(ballotRoutes.routes());
 app.use(ballotRoutes.allowedMethods());
+
+app.use(resultRoutes.routes());
+app.use(resultRoutes.allowedMethods());
 
 const port = parseInt(Deno.env.get("PORT") || "8000");
 console.log(`Server listening on http://localhost:${port}`);

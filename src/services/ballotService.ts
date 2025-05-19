@@ -78,19 +78,23 @@ export async function getBallots(
   roundId: number,
   limit = 20,
   offset = 0,
-): Promise<{ voterWalletAddress: EthereumAddress; ballot: Ballot | null }[]> {
+  format: 'json' | 'csv' = 'json',
+): Promise<{ voterWalletAddress: EthereumAddress; ballot: Ballot | null }[] | string> {
   const submittedBallots = await db.query.ballots.findMany({
     where: eq(ballots.roundId, roundId),
-    limit,
-    offset,
+
   });
 
   const voters = await db.query.roundVoters.findMany({
     where: eq(roundVoters.roundId, roundId),
     with: {
       user: true,
-    }
+    },
+    limit,
+    offset,
   });
+
+  console.log({ limit, offset, submittedBallots, voters });
 
   const result = voters.map((voter) => {
     const ballot = submittedBallots.find(
@@ -101,6 +105,13 @@ export async function getBallots(
       ballot: ballot ? ballot.ballot : null,
     };
   });
+
+  if (format === 'csv') {
+    const csv = result.map((r) => {
+      return `${r.voterWalletAddress},${JSON.stringify(r.ballot)}`;
+    }).join("\n");
+    return csv;
+  }
 
   return result;
 }

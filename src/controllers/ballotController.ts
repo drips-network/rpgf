@@ -77,6 +77,18 @@ export async function getBallotsController(
 ) {
   const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
+  const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
+  const offset = Number(ctx.request.url.searchParams.get("page")) || 0;
+  const format = ctx.request.url.searchParams.get("format") || "json";
+
+  if (format !== "json" && format !== "csv") {
+    throw new BadRequestError("Invalid format. Possible: json, csv");
+  }
+
+  const isAdmin = await isUserRoundAdmin(userId, Number(roundId));
+  if (!isAdmin) {
+    throw new UnauthorizedError("You are not an admin of this round");
+  }
 
   const round = await getRound(Number(roundId), "public");
   if (!round) {
@@ -86,12 +98,7 @@ export async function getBallotsController(
     throw new BadRequestError("Round voting hasn't started yet");
   }
 
-  const isAdmin = await isUserRoundAdmin(userId, Number(roundId));
-  if (!isAdmin) {
-    throw new UnauthorizedError("You are not an admin of this round");
-  }
-
-  const ballots = await getBallots(Number(roundId), userId);
+  const ballots = await getBallots(Number(roundId), limit, offset, format);
 
   ctx.response.status = 200;
   ctx.response.body = ballots;
