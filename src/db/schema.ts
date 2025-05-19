@@ -8,8 +8,10 @@ import {
   jsonb,
   primaryKey,
 } from "drizzle-orm/pg-core";
-import type { ApplicationFormat, CreateRoundDto } from "$app/types/round.ts"; // Re-using these for JSONB structure
+import type { ApplicationFormat, CreateRoundDto } from "$app/types/round.ts";
+import type { ApplicationState } from "$app/types/application.ts";
 import { relations, sql } from "drizzle-orm";
+import { CreateApplicationDto } from "../types/application.ts";
 
 // Users table
 export const users = pgTable("users", {
@@ -75,4 +77,21 @@ export const roundAdminsRelations = relations(roundAdmins, ({ one }) => ({
 export const roundVotersRelations = relations(roundVoters, ({ one }) => ({
   user: one(users, { fields: [roundVoters.userId], references: [users.id] }),
   round: one(rounds, { fields: [roundVoters.roundId], references: [rounds.id] }),
+}));
+
+export const applications = pgTable("applications", {
+  id: serial("id").primaryKey(),
+  state: varchar("state", { length: 255 }).notNull().default("pending").$type<ApplicationState>(),
+  projectName: varchar("project_name", { length: 255 }).notNull(),
+  dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
+  submitterUserId: integer("submitter").notNull().references(() => users.id),
+  fields: jsonb("fields").notNull().$type<CreateApplicationDto['fields']>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  roundId: integer("round_id").notNull().references(() => rounds.id),
+});
+
+export const applicationsRelations = relations(applications, ({ one }) => ({
+  round: one(rounds, { fields: [applications.roundId], references: [rounds.id] }),
+  submitter: one(users, { fields: [applications.submitterUserId], references: [users.id] }),
 }));

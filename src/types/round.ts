@@ -1,6 +1,16 @@
 import z from 'zod';
 import { ethereumAddressSchema } from "./shared.ts";
 
+export const roundStateSchema = z.union([
+  z.literal("pending-intake"),
+  z.literal("intake"),
+  z.literal("pending-voting"),
+  z.literal("voting"),
+  z.literal("pending-results"),
+  z.literal("results"),
+]);
+export type RoundState = z.infer<typeof roundStateSchema>;
+
 // Simply just renders some markdown content in the application form
 export const applicationMarkdownFieldSchema = z.object({
   type: z.literal("markdown"),
@@ -16,6 +26,8 @@ export const applicationDividerFieldSchema = z.object({
 export const applicationTextFieldSchema = z.object({
   type: z.literal("text"),
   private: z.boolean(),
+  required: z.boolean(),
+  slug: z.string().min(1).max(255),
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
 });
@@ -24,6 +36,8 @@ export const applicationTextFieldSchema = z.object({
 export const applicationTextAreaFieldSchema = z.object({
   type: z.literal("textarea"),
   private: z.boolean(),
+  required: z.boolean(),
+  slug: z.string().min(1).max(255),
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
 });
@@ -32,6 +46,8 @@ export const applicationTextAreaFieldSchema = z.object({
 export const applicationUrlFieldSchema = z.object({
   type: z.literal("url"),
   private: z.boolean(),
+  required: z.boolean(),
+  slug: z.string().min(1).max(255),
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
 });
@@ -40,6 +56,8 @@ export const applicationUrlFieldSchema = z.object({
 export const applicationEmailFieldSchema = z.object({
   type: z.literal("email"),
   private: z.boolean(),
+  required: z.boolean(),
+  slug: z.string().min(1).max(255),
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
 });
@@ -48,6 +66,8 @@ export const applicationEmailFieldSchema = z.object({
 export const applicationListFieldSchema = z.object({
   type: z.literal("list"),
   private: z.boolean(),
+  slug: z.string().min(1).max(255),
+  required: z.boolean(),
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
   maxItems: z.number().int().positive(),
@@ -69,8 +89,10 @@ export const applicationListFieldSchema = z.object({
 
 // Displays as a ListSelect component, either multi- or single-select
 export const applicationSelectFieldSchema = z.object({
-  type: z.literal("dropdown"),
+  type: z.literal("select"),
   private: z.boolean(),
+  required: z.boolean(),
+  slug: z.string().min(1).max(255),
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
   options: z.array(z.object({
@@ -96,6 +118,7 @@ export type ApplicationFormat = z.infer<typeof applicationFormatSchema>;
 
 export const roundPublicFieldsSchema = z.object({
   id: z.number(),
+  state: roundStateSchema,
   name: z.string(),
   description: z.string().nullable(),
   applicationPeriodStart: z.date(),

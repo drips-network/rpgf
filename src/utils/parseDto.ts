@@ -1,8 +1,8 @@
 import { Context } from "oak";
-import { z } from "zod";
+import { z, ZodSchema } from "zod";
 import { BadRequestError } from "../errors/generic.ts";
 
-export default async function parseDto<T extends z.AnyZodObject>(
+export default async function parseDto<T extends ZodSchema>(
   dtoSchema: T,
   context: Context,
 ): Promise<z.infer<T>> {

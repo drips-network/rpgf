@@ -1,9 +1,10 @@
 import { db } from "$app/db/postgres.ts";
 import { rounds, roundAdmins, roundVoters } from "$app/db/schema.ts";
-import { roundAdminFieldsSchema, RoundPublicFields, roundPublicFieldsSchema, type CreateRoundDto, type PatchRoundDto, type RoundAdminFields } from "$app/types/round.ts";
+import { roundAdminFieldsSchema, RoundPublicFields, RoundState, type CreateRoundDto, type PatchRoundDto, type RoundAdminFields } from "$app/types/round.ts";
 import { and, eq } from "drizzle-orm";
 import createOrGetUser from "./userService.ts";
 import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
+import ensureAtLeastOneArrayMember from "../utils/ensureAtLeastOneArrayMember.ts";
 
 export async function isUserRoundAdmin(userId: number | undefined, roundId: number): Promise<boolean> {
   if (!userId) {
@@ -26,7 +27,11 @@ export async function getRounds(limit = 20, offset = 0): Promise<RoundPublicFiel
   });
 
   return results.map((round) => {
-    return roundPublicFieldsSchema.parse(round);
+    const state = inferRoundState(round);
+    return {
+      ...round,
+      state,
+    };
   });
 }
 
@@ -38,6 +43,8 @@ export async function getRound(roundId: number, accessLevel: 'public' | 'admin')
     return null;
   }
 
+  const state = inferRoundState(round);
+
   if (accessLevel === 'admin') {
     const admins = await db.query.roundAdmins.findMany({
       where: eq(roundAdmins.roundId, roundId),
@@ -46,6 +53,9 @@ export async function getRound(roundId: number, accessLevel: 'public' | 'admin')
       },
     });
     const adminAddresses = mapFilterUndefined(admins, (admin) => admin.user?.walletAddress);
+    if (!ensureAtLeastOneArrayMember(adminAddresses)) {
+      throw new Error("Round must have at least one admin");
+    }
     
     const voters = await db.query.roundVoters.findMany({
       where: eq(roundVoters.roundId, roundId),
@@ -54,17 +64,26 @@ export async function getRound(roundId: number, accessLevel: 'public' | 'admin')
       },
     });
     const voterAddresses = mapFilterUndefined(voters, (voter) => voter.user?.walletAddress);
+    if (!ensureAtLeastOneArrayMember(voterAddresses)) {
+      throw new Error("Round must have at least one voter");
+    }
 
-    return roundAdminFieldsSchema.parse({
+    const result: RoundAdminFields = {
       ...round,
+      state,
       adminWalletAddresses: adminAddresses,
       votingConfig: {
         ...round.votingConfig,
         allowedVoters: voterAddresses,
       },
-    });
+    };
+
+    return result;
   } else {
-    return roundPublicFieldsSchema.parse(round);
+    return {
+      state,
+      ...round,
+    };
   }
 }
 
@@ -129,10 +148,11 @@ export async function createRound(
     return newRound;
   });
 
-  return roundAdminFieldsSchema.parse({
+  return {
     ...result,
+    state: inferRoundState(result),
     adminWalletAddresses: roundDto.adminWalletAddresses,
-  });
+  }
 }
 
 export async function patchRound(
@@ -176,4 +196,22 @@ export async function deleteRound(roundId: number): Promise<void> {
     await tx.delete(roundAdmins).where(eq(roundAdmins.roundId, roundId));
     await tx.delete(roundVoters).where(eq(roundVoters.roundId, roundId));
   });
+}
+
+export function inferRoundState(round: Omit<RoundPublicFields, "state">): RoundState {
+  const now = new Date();
+
+  if (now < round.applicationPeriodStart) {
+    return "pending-intake";
+  } else if (now < round.applicationPeriodEnd) {
+    return "intake";
+  } else if (now < round.votingPeriodStart) {
+    return "pending-voting";
+  } else if (now < round.votingPeriodEnd) {
+    return "voting";
+  } else if (now < round.resultsPeriodStart) {
+    return "pending-results";
+  } else {
+    return "results";
+  }
 }

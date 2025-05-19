@@ -1,3 +1,15 @@
+CREATE TABLE "applications" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"state" varchar(255) DEFAULT 'pending' NOT NULL,
+	"project_name" varchar(255) NOT NULL,
+	"drips_account_id" varchar(255) NOT NULL,
+	"submitter" integer NOT NULL,
+	"fields" jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"round_id" integer NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "round_admins" (
 	"round_id" integer NOT NULL,
 	"user_id" integer NOT NULL,
@@ -36,4 +48,6 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_wallet_address_unique" UNIQUE("wallet_address")
 );
 --> statement-breakpoint
+ALTER TABLE "applications" ADD CONSTRAINT "applications_submitter_users_id_fk" FOREIGN KEY ("submitter") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "applications" ADD CONSTRAINT "applications_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rounds" ADD CONSTRAINT "rounds_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
