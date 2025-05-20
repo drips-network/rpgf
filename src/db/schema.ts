@@ -8,13 +8,20 @@ import {
   jsonb,
   primaryKey,
   uuid,
+  uniqueIndex,
+  AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { ApplicationFormat, CreateRoundDraftDto, CreateRoundDto } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
-import { relations, sql } from "drizzle-orm";
+import { relations, SQL, sql } from "drizzle-orm";
 import { CreateApplicationDto } from "../types/application.ts";
 import { SubmitBallotDto } from "../types/ballot.ts";
 import { ProjectChainData } from "../gql/projects.ts";
+
+// custom lower function
+export function lower(email: AnyPgColumn): SQL {
+  return sql`lower(${email})`;
+}
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -56,7 +63,10 @@ export const rounds = pgTable("rounds", {
   createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
-});
+}, (table => [
+    uniqueIndex('url_slug_unique_index').on(lower(table.urlSlug)),
+  ]
+));
 export const roundsRelations = relations(rounds, ({ one }) => ({
   chain: one(chains, { fields: [rounds.chainId], references: [chains.id] }),
   createdBy: one(users, { fields: [rounds.createdByUserId], references: [users.id] }),

@@ -1,6 +1,7 @@
-import { db } from "$app/db/postgres.ts";
+import { db, Transaction } from "$app/db/postgres.ts";
 import {
   chains,
+  lower,
   roundAdmins,
   roundDrafts,
   rounds,
@@ -44,6 +45,20 @@ export async function isUserRoundAdmin(
   });
 
   return Boolean(result);
+}
+
+async function checkUrlSlugAvailability(
+  urlSlug: string,
+  tx: Transaction,
+): Promise<boolean> {
+  const existingRound = await tx.query.rounds.findFirst({
+    where: eq(lower(rounds.urlSlug), urlSlug.toLowerCase()),
+  });
+  if (existingRound) {
+    return false;
+  }
+
+  return true;
 }
 
 export async function isUserRoundDraftAdmin(
@@ -91,7 +106,7 @@ export async function getRound(
     : RoundPublicFields | null
 > {
   const round = await db.query.rounds.findFirst({
-    where: eq(rounds.urlSlug, roundSlug),
+    where: eq(lower(rounds.urlSlug), roundSlug.toLowerCase()),
   });
   if (!round) {
     return null;
@@ -161,6 +176,19 @@ export async function createRoundDraft(
       );
     }
 
+    if (roundDraftDto.urlSlug) {
+      const isAvailable = await checkUrlSlugAvailability(
+        roundDraftDto.urlSlug,
+        tx,
+      );
+
+      if (!isAvailable) {
+        throw new BadRequestError(
+          'URL slug already taken.',
+        );
+      }
+    }
+
     const newRoundDraft = (await tx.insert(roundDrafts).values({
       chainId: roundDraftDto.chainId,
       createdByUserId: creatorUserId,
@@ -199,6 +227,19 @@ export async function patchRoundDraft(
       throw new BadRequestError(
         "Cannot modify a round draft that has already been published.",
       );
+    }
+
+    if (updates.urlSlug) {
+      const isAvailable = await checkUrlSlugAvailability(
+        updates.urlSlug,
+        tx,
+      );
+
+      if (!isAvailable) {
+        throw new BadRequestError(
+          'URL slug already taken.',
+        );
+      }
     }
 
     const result = await tx.update(roundDrafts)
@@ -346,6 +387,19 @@ export async function patchRound(
   updates: PatchRoundDto,
 ): Promise<RoundAdminFields | null> {
   const result = await db.transaction(async (tx) => {
+    if (updates.urlSlug) {
+      const isAvailable = await checkUrlSlugAvailability(
+        updates.urlSlug,
+        tx,
+      );
+      
+      if (!isAvailable) {
+        throw new BadRequestError(
+          'URL slug already taken.',
+        );
+      }
+    }
+
     const result = await tx.update(rounds)
       .set({
         name: updates.name,

@@ -1,4 +1,4 @@
-import z from 'zod';
+import z from "zod";
 import { ethereumAddressSchema } from "./shared.ts";
 
 export const roundStateSchema = z.union([
@@ -119,7 +119,7 @@ export type ApplicationFormat = z.infer<typeof applicationFormatSchema>;
 export const roundPublicFieldsSchema = z.object({
   id: z.string().uuid(),
   chainId: z.number(),
-  urlSlug: z.string(),
+  urlSlug: z.string().transform((val) => val.toLowerCase()),
   state: roundStateSchema,
   name: z.string(),
   description: z.string().nullable(),
@@ -151,12 +151,18 @@ export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
 
 export const createRoundDtoSchema = z.object({
   name: z.string().min(1).max(255),
-  urlSlug: z.string().max(255).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "URL slug must be URL-safe"),
+  urlSlug: z.string().max(255).regex(
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+    "URL slug must be URL-safe",
+  ).transform((val) => val.toLowerCase()),
   chainId: z.number().int().positive(),
   description: z.string().max(10000).optional(),
-  applicationPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
-    message: "Invalid date format for applicationPeriodStart",
-  }),
+  applicationPeriodStart: z.string().refine(
+    (date) => !isNaN(Date.parse(date)),
+    {
+      message: "Invalid date format for applicationPeriodStart",
+    },
+  ),
   applicationPeriodEnd: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: "Invalid date format for applicationPeriodEnd",
   }),

@@ -15,6 +15,13 @@
       "when": 1747743191347,
       "tag": "0001_calm_kree",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1747745576920,
+      "tag": "0002_yummy_selene",
+      "breakpoints": true
     }
   ]
 }
