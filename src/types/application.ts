@@ -51,13 +51,13 @@ export const createApplicationDtoSchema = (applicationFormat: ApplicationFormat)
 export type CreateApplicationDto = z.infer<ReturnType<typeof createApplicationDtoSchema>>;
 
 export const applicationSchema = (applicationFormat: ApplicationFormat) => z.object({
-  id: z.number(),
+  id: z.string(),
   state: applicationStateSchema,
   projectName: z.string().min(1).max(255),
   dripsProjectDataSnapshot: projectChainDataSchema,
   dripsAccountId: z.string().min(1).max(255),
-  submitterUserId: z.number(),
-  roundId: z.number(),
+  submitterUserId: z.string(),
+  roundId: z.string(),
   fields: buildDynamicApplicatonFieldSchema(applicationFormat),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -65,7 +65,7 @@ export const applicationSchema = (applicationFormat: ApplicationFormat) => z.obj
 export type Application = z.infer<ReturnType<typeof applicationSchema>>;
 
 export const applicationReviewDtoSchema = z.array(z.object({
-  applicationId: z.number(),
+  applicationId: z.string(),
   decision: z.enum(["approve", "reject"]),
 }));
 export type ApplicationReviewDto = z.infer<typeof applicationReviewDtoSchema>;

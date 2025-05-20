@@ -1,6 +1,6 @@
 {
-  "id": "3da9344b-dc12-45f5-a708-429832dbb843",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "9669a13f-6f6f-41bd-a22c-07773c823b50",
+  "prevId": "3da9344b-dc12-45f5-a708-429832dbb843",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -441,6 +441,12 @@
         "name": {
           "name": "name",
           "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_from_draft_id": {
+          "name": "created_from_draft_id",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },

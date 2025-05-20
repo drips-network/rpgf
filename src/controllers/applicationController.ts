@@ -23,7 +23,7 @@ export async function createAppplicationController(
   const userId = ctx.state.user.userId;
   const userWalletAddress = ctx.state.user.walletAddress;
 
-  const round = await getRound(Number(roundId), "public");
+  const round = await getRound(roundId, "public");
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -38,7 +38,7 @@ export async function createAppplicationController(
   );
 
   const application = await createApplication(
-    Number(roundId),
+    roundId,
     userId,
     userWalletAddress,
     round.applicationFormat,
@@ -59,22 +59,22 @@ export async function getApplicationsForRoundController(
   const roundId = ctx.params.id;
   const userId = ctx.state.user?.userId;
 
-  const isAdmin = await isUserRoundAdmin(userId, Number(roundId));
+  const isAdmin = await isUserRoundAdmin(userId, roundId);
 
-  const round = await getRound(Number(roundId), "public");
+  const round = await getRound(roundId, "public");
   if (!round) {
     throw new NotFoundError("Round not found");
   }
 
   if (isAdmin) {
     // admins can see all applications, always
-    return await getApplications(Number(roundId), round.applicationFormat);
+    return await getApplications(roundId, round.applicationFormat);
   }
 
   // non-admins can see their own application plus all approved ones, but without private fields
 
   const approvedApplications = await getApplications(
-    Number(roundId),
+    roundId,
     round.applicationFormat,
     false,
     {
@@ -83,7 +83,7 @@ export async function getApplicationsForRoundController(
   );
 
   const ownApplication = userId
-    ? (await getApplications(Number(roundId), round.applicationFormat, true, {
+    ? (await getApplications(roundId, round.applicationFormat, true, {
       submitterUserId: userId,
     }))[0]
     : null;
@@ -111,12 +111,12 @@ export async function submitApplicationReviewController(
   const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
-  const isAdmin = await isUserRoundAdmin(userId, Number(roundId));
+  const isAdmin = await isUserRoundAdmin(userId, roundId);
   if (!isAdmin) {
     throw new UnauthorizedError("You are not an admin of this round");
   }
 
-  const round = await getRound(Number(roundId), "public");
+  const round = await getRound(roundId, "public");
   console.log({ round });
   if (!round) {
     throw new NotFoundError("Round not found");

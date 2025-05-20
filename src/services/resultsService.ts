@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
 import { applications, ballots } from "../db/schema.ts";
 
-export async function getResults(roundId: number, format: "json" | "csv") {
+export async function getResults(roundId: string, format: "json" | "csv") {
   const submittedVotes = await db.query.ballots.findMany({
     where: eq(ballots.roundId, roundId),
   });

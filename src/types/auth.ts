@@ -8,10 +8,10 @@ export interface SiweVerifyRequest {
 
 export interface AppJwtPayload extends DjwtPayload {
   walletAddress: string;
-  userId: number;
+  userId: string;
 }
 
 export interface AuthenticatedUserState {
   walletAddress: string;
-  userId: number;
+  userId: string;
 }

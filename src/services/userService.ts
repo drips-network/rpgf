@@ -11,7 +11,7 @@ export default async function createOrGetUser(tx: Transaction, walletAddress: st
     .limit(1)
     .then(res => res[0]);
 
-  let userId: number;
+  let userId: string;
 
   if (user) {
     userId = user.id;

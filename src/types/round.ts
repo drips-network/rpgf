@@ -117,8 +117,9 @@ const applicationFormatSchema = z.array(applicationFieldSchema).max(50);
 export type ApplicationFormat = z.infer<typeof applicationFormatSchema>;
 
 export const roundPublicFieldsSchema = z.object({
-  id: z.number(),
+  id: z.string().uuid(),
   chainId: z.number(),
+  urlSlug: z.string(),
   state: roundStateSchema,
   name: z.string(),
   description: z.string().nullable(),
@@ -132,7 +133,7 @@ export const roundPublicFieldsSchema = z.object({
     maxVotesPerVoter: z.number().int().positive(),
     maxVotesPerProjectPerVoter: z.number().int().positive(),
   }),
-  createdByUserId: z.number(),
+  createdByUserId: z.string().uuid(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -150,6 +151,7 @@ export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
 
 export const createRoundDtoSchema = z.object({
   name: z.string().min(1).max(255),
+  urlSlug: z.string().max(255).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "URL slug must be URL-safe"),
   chainId: z.number().int().positive(),
   description: z.string().max(10000).optional(),
   applicationPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
@@ -176,6 +178,12 @@ export const createRoundDtoSchema = z.object({
   adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(), // Array of wallet addresses
 });
 export type CreateRoundDto = z.infer<typeof createRoundDtoSchema>;
+
+export const createRoundDraftDtoSchema = createRoundDtoSchema.partial().extend({
+  chainId: z.number().int().positive(),
+  adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(),
+});
+export type CreateRoundDraftDto = z.infer<typeof createRoundDraftDtoSchema>;
 
 export const patchRoundDtoSchema = createRoundDtoSchema.partial();
 export type PatchRoundDto = z.infer<typeof patchRoundDtoSchema>;

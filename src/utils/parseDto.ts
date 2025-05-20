@@ -4,11 +4,15 @@ import { BadRequestError } from "../errors/generic.ts";
 
 export default async function parseDto<T extends ZodSchema>(
   dtoSchema: T,
-  context: Context,
+  context: Context | unknown,
 ): Promise<z.infer<T>> {
   let body: unknown;
   try {
-    body = await context.request.body.json();
+    if (context instanceof Context) {
+      body = await context.request.body.json();
+    } else {
+      body = context;
+    }
   } catch {
     throw new BadRequestError("Invalid JSON body");
   }

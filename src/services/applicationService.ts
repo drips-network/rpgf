@@ -14,8 +14,8 @@ import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
 import { getProject } from "../gql/projects.ts";
 
 export async function createApplication(
-  roundId: number,
-  submitterUserId: number,
+  roundId: string,
+  submitterUserId: string,
   submitterWalletAddress: string,
   applicationFormat: ApplicationFormat,
   applicationDto: CreateApplicationDto,
@@ -77,10 +77,10 @@ export async function createApplication(
 }
 
 export async function getApplications(
-  roundId: number,
+  roundId: string,
   applicationFormat: ApplicationFormat,
   includePrivateFields = false,
-  filter?: { state?: ApplicationState; submitterUserId?: number },
+  filter?: { state?: ApplicationState; submitterUserId?: string },
   limit = 20,
   offset = 0,
 ): Promise<Application[]> {
@@ -129,7 +129,7 @@ export function filterPrivateFields(
 // submit application reviews
 export async function setApplicationsState(
   tx: Transaction,
-  applicationIds: number[],
+  applicationIds: string[],
   newState: ApplicationState,
 ): Promise<Application[]> {
   if (applicationIds.length === 0) {

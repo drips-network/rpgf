@@ -1,0 +1,1 @@
+ALTER TABLE "rounds" ADD COLUMN "created_from_draft_id" uuid NOT NULL;
