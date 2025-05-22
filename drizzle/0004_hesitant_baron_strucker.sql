@@ -1,0 +1,1 @@
+ALTER TABLE "rounds" ADD COLUMN "color" varchar(255) NOT NULL;

@@ -22,6 +22,20 @@
       "when": 1747745576920,
       "tag": "0002_yummy_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1747826171182,
+      "tag": "0003_dark_deathbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1747826700136,
+      "tag": "0004_hesitant_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

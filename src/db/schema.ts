@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import type { ApplicationFormat, CreateRoundDraftDto, CreateRoundDto } from "$app/types/round.ts";
+import { PossibleColor, type ApplicationFormat, type CreateRoundDraftDto, type CreateRoundDto } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
 import { relations, SQL, sql } from "drizzle-orm";
 import { CreateApplicationDto } from "../types/application.ts";
@@ -41,6 +41,8 @@ export const rounds = pgTable("rounds", {
   chainId: integer("chain_id").notNull().references(() => chains.id),
   urlSlug: varchar("url_slug", { length: 255 }).notNull().unique(),
   name: varchar("name", { length: 255 }).notNull(),
+  emoji: varchar("emoji", { length: 255 }).notNull(),
+  color: varchar("color", { length: 255 }).notNull().$type<PossibleColor>(),
   createdFromDraftId: uuid("created_from_draft_id").notNull(),
   description: text("description"),
   applicationPeriodStart: timestamp("application_period_start", {

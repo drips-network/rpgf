@@ -11,6 +11,25 @@ export const roundStateSchema = z.union([
 ]);
 export type RoundState = z.infer<typeof roundStateSchema>;
 
+export const possibleColorSchema = z.union([
+  z.literal('#27C537'),
+  z.literal('#FF5F5F'),
+  z.literal('#5FB2FF'),
+  z.literal('#9A5E27'),
+  z.literal('#9B5DFF'),
+  z.literal('#FF84DC'),
+  z.literal('#FFA24B'),
+  z.literal('#27939A'),
+  z.literal('#FFAB99'),
+  z.literal('#FF7020'),
+  z.literal('#FFC120'),
+  z.literal('#BD4139'),
+  z.literal('#5555FF'),
+  z.literal('#BBA781'),
+  z.literal('#9BD226'),
+]);
+export type PossibleColor = z.infer<typeof possibleColorSchema>;
+
 // Simply just renders some markdown content in the application form
 export const applicationMarkdownFieldSchema = z.object({
   type: z.literal("markdown"),
@@ -119,6 +138,8 @@ export type ApplicationFormat = z.infer<typeof applicationFormatSchema>;
 export const roundPublicFieldsSchema = z.object({
   id: z.string().uuid(),
   chainId: z.number(),
+  emoji: z.string().emoji(),
+  color: possibleColorSchema,
   urlSlug: z.string().transform((val) => val.toLowerCase()),
   state: roundStateSchema,
   name: z.string(),
@@ -151,6 +172,8 @@ export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
 
 export const createRoundDtoSchema = z.object({
   name: z.string().min(1).max(255),
+  emoji: z.string().emoji(),
+  color: possibleColorSchema,
   urlSlug: z.string().max(255).regex(
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
     "URL slug must be URL-safe",
@@ -187,6 +210,8 @@ export type CreateRoundDto = z.infer<typeof createRoundDtoSchema>;
 
 export const createRoundDraftDtoSchema = createRoundDtoSchema.partial().extend({
   chainId: z.number().int().positive(),
+  emoji: z.string().emoji(),
+  color: possibleColorSchema,
   adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(),
 });
 export type CreateRoundDraftDto = z.infer<typeof createRoundDraftDtoSchema>;

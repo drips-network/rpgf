@@ -22,9 +22,9 @@ export type AppState = UnauthenticatedAppState | AuthenticatedAppState;
 const app = new Application<AppState>({ state: { user: undefined } });
 
 app.use((ctx, next) => {
-  ctx.response.headers.set('Access-Control-Allow-Origin', 'http://localhost:8125');
+  ctx.response.headers.set('Access-Control-Allow-Origin', ctx.request.headers.get('Origin') || '*');
   ctx.response.headers.set('Access-Control-Allow-Credentials', 'true');
-  ctx.response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  ctx.response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Credentials');
   ctx.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   return next();
 });
