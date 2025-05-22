@@ -25,7 +25,7 @@ app.use((ctx, next) => {
   ctx.response.headers.set('Access-Control-Allow-Origin', ctx.request.headers.get('Origin') || '*');
   ctx.response.headers.set('Access-Control-Allow-Credentials', 'true');
   ctx.response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Credentials');
-  ctx.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  ctx.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
   return next();
 });
 
