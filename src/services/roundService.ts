@@ -15,11 +15,11 @@ import {
   type RoundAdminFields,
   roundAdminFieldsSchema,
   RoundPublicFields,
+  roundPublicFieldsSchema,
   RoundState,
 } from "$app/types/round.ts";
-import { and, eq } from "drizzle-orm";
+import { and, eq, InferSelectModel, isNull } from "drizzle-orm";
 import createOrGetUser from "./userService.ts";
-import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
 import ensureAtLeastOneArrayMember from "../utils/ensureAtLeastOneArrayMember.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import parseDto from "../utils/parseDto.ts";
@@ -47,7 +47,7 @@ export async function isUserRoundAdmin(
   return Boolean(result);
 }
 
-async function checkUrlSlugAvailability(
+export async function checkUrlSlugAvailability(
   urlSlug: string,
   tx: Transaction,
 ): Promise<boolean> {
@@ -78,6 +78,20 @@ export async function isUserRoundDraftAdmin(
   return Boolean(result);
 }
 
+function mapVotersOrAdminsToAddresses(
+  votersOrAdmins: { user: { walletAddress: string } }[],
+): [string, ...string[]] {
+  const addresses = votersOrAdmins.map((voterOrAdmin) =>
+    voterOrAdmin.user.walletAddress
+  );
+
+  if (ensureAtLeastOneArrayMember(addresses)) {
+    return addresses as [string, ...string[]];
+  } else {
+    throw new Error("Voters or admins must include at least one address.");
+  }
+}
+
 export async function getRounds(
   filter?: { chainId?: number },
   limit = 20,
@@ -87,12 +101,21 @@ export async function getRounds(
     limit,
     offset,
     where: filter?.chainId ? eq(rounds.chainId, filter.chainId) : undefined,
+    with: {
+      admins: {
+        with: {
+          user: true,
+        },
+      },
+    },
   });
 
   return results.map((round) => {
     const state = inferRoundState(round);
+
     return {
       ...round,
+      adminWalletAddresses: mapVotersOrAdminsToAddresses(round.admins),
       state,
     };
   });
@@ -107,6 +130,18 @@ export async function getRound(
 > {
   const round = await db.query.rounds.findFirst({
     where: eq(lower(rounds.urlSlug), roundSlug.toLowerCase()),
+    with: {
+      admins: {
+        with: {
+          user: true,
+        },
+      },
+      voters: {
+        with: {
+          user: true,
+        },
+      },
+    },
   });
   if (!round) {
     return null;
@@ -114,52 +149,24 @@ export async function getRound(
 
   const state = inferRoundState(round);
 
-  if (accessLevel === "admin") {
-    const admins = await db.query.roundAdmins.findMany({
-      where: eq(roundAdmins.roundId, round.id),
-      with: {
-        user: true,
-      },
-    });
-    const adminAddresses = mapFilterUndefined(
-      admins,
-      (admin) => admin.user?.walletAddress,
-    );
-    if (!ensureAtLeastOneArrayMember(adminAddresses)) {
-      throw new Error("Round must have at least one admin");
-    }
+  const mapped: RoundAdminFields = {
+    ...round,
+    state,
+    adminWalletAddresses: mapVotersOrAdminsToAddresses(round.admins),
+    votingConfig: {
+      ...round.votingConfig,
+      allowedVoters: mapVotersOrAdminsToAddresses(round.voters),
+    },
+  };
 
-    const voters = await db.query.roundVoters.findMany({
-      where: eq(roundVoters.roundId, round.id),
-      with: {
-        user: true,
-      },
-    });
-    const voterAddresses = mapFilterUndefined(
-      voters,
-      (voter) => voter.user?.walletAddress,
-    );
-    if (!ensureAtLeastOneArrayMember(voterAddresses)) {
-      throw new Error("Round must have at least one voter");
-    }
+  if (accessLevel === "public") {
+    const withoutAdminFields = roundPublicFieldsSchema.parse(mapped);
 
-    const result: RoundAdminFields = {
-      ...round,
-      state,
-      adminWalletAddresses: adminAddresses,
-      votingConfig: {
-        ...round.votingConfig,
-        allowedVoters: voterAddresses,
-      },
-    };
-
-    return result;
-  } else {
-    return {
-      state,
-      ...round,
-    };
+    return withoutAdminFields;
   }
+
+  // admin level access
+  return mapped;
 }
 
 export async function createRoundDraft(
@@ -184,27 +191,46 @@ export async function createRoundDraft(
 
       if (!isAvailable) {
         throw new BadRequestError(
-          'URL slug already taken.',
+          "URL slug already taken.",
         );
       }
     }
 
-    const newRoundDraft = (await tx.insert(roundDrafts).values({
+    const { insertedId } = (await tx.insert(roundDrafts).values({
       chainId: roundDraftDto.chainId,
       createdByUserId: creatorUserId,
       draft: roundDraftDto,
-    }).returning())[0];
+    }).returning({ insertedId: roundDrafts.id }))[0];
 
-    for (const adminAddress of roundDraftDto.adminWalletAddresses) {
-      const adminUser = await createOrGetUser(tx, adminAddress);
+    for (const address of roundDraftDto.adminWalletAddresses) {
+      const adminUser = await createOrGetUser(tx, address);
 
       await tx.insert(roundAdmins).values({
-        roundDraftId: newRoundDraft.id,
+        roundDraftId: insertedId,
         userId: adminUser,
       });
     }
 
-    return newRoundDraft;
+    const newRoundDraft = await tx.query.roundDrafts.findFirst({
+      where: eq(roundDrafts.id, insertedId),
+      with: {
+        admins: {
+          with: {
+            user: true,
+          },
+        },
+      },
+    });
+    if (!newRoundDraft) {
+      throw new Error("Failed to create round draft.");
+    }
+
+    return {
+      ...newRoundDraft.draft,
+      adminWalletAddresses: mapVotersOrAdminsToAddresses(
+        newRoundDraft.admins,
+      ),
+    };
   });
 
   return result;
@@ -213,7 +239,8 @@ export async function createRoundDraft(
 export async function patchRoundDraft(
   roundDraftId: string,
   updates: CreateRoundDraftDto,
-): Promise<typeof roundDrafts.$inferSelect | null> {
+) {
+
   const result = await db.transaction(async (tx) => {
     const roundDraft = await tx.query.roundDrafts.findFirst({
       where: eq(roundDrafts.id, roundDraftId),
@@ -229,7 +256,18 @@ export async function patchRoundDraft(
       );
     }
 
-    if (updates.urlSlug) {
+    // Compare the current draft with the updates to determine which fields have changed
+    const changedFields = (Object.keys(updates) as (keyof CreateRoundDraftDto)[]).filter((key) => {
+      // Skip the adminWalletAddresses field, as it will be handled separately
+      if (key === "adminWalletAddresses") {
+        return false;
+      }
+      // Check if the value has changed
+      return roundDraft.draft[key] !== updates[key];
+    });
+
+    // If the URL slug has changed and is provided, check its availability
+    if (changedFields.includes("urlSlug") && updates.urlSlug) {
       const isAvailable = await checkUrlSlugAvailability(
         updates.urlSlug,
         tx,
@@ -237,9 +275,21 @@ export async function patchRoundDraft(
 
       if (!isAvailable) {
         throw new BadRequestError(
-          'URL slug already taken.',
+          "URL slug already taken.",
         );
       }
+    }
+
+    // If some schedule-related fields have changed, validate the new schedule
+    if (
+      ["applicationPeriodStart", "applicationPeriodEnd", "votingPeriodStart", "votingPeriodEnd", "resultsPeriodStart"].some(
+        (key) => changedFields.includes(key as keyof CreateRoundDraftDto),
+      )
+    ) {
+      validateSchedule({
+        ...roundDraft.draft,
+        ...updates,
+      });
     }
 
     const result = await tx.update(roundDrafts)
@@ -266,7 +316,10 @@ export async function patchRoundDraft(
     return result;
   });
 
-  return result[0];
+  return {
+    ...result[0],
+    validation: validateRoundDraft(result[0].draft),
+  };
 }
 
 export async function deleteRoundDraft(
@@ -297,11 +350,36 @@ export async function deleteRoundDraft(
   });
 }
 
+function validateRoundDraft(
+  roundDraft: Partial<CreateRoundDraftDto>,
+) {
+  let scheduleValid = true;
+  let draftComplete = true;
+
+  if (roundDraft.applicationPeriodStart &&
+    roundDraft.applicationPeriodEnd &&
+    roundDraft.votingPeriodStart &&
+    roundDraft.votingPeriodEnd &&
+    roundDraft.resultsPeriodStart
+  ) {
+    scheduleValid = validateSchedule(roundDraft, false);
+  }
+
+  if (!createRoundDtoSchema.safeParse(roundDraft).success) {
+    draftComplete = false;
+  }
+
+  return {
+    scheduleValid,
+    draftComplete,
+  }
+}
+
 export async function getRoundDrafts(
   filter?: { chainId?: number; creatorUserId?: string; id?: string },
   limit = 20,
   offset = 0,
-): Promise<CreateRoundDraftDto[]> {
+): Promise<InferSelectModel<typeof roundDrafts>[]> {
   const results = await db.query.roundDrafts.findMany({
     limit,
     offset,
@@ -311,15 +389,32 @@ export async function getRoundDrafts(
         ? eq(roundDrafts.createdByUserId, filter.creatorUserId)
         : undefined,
       filter?.id ? eq(roundDrafts.id, filter.id) : undefined,
+      isNull(roundDrafts.publishedAsRoundId),
     ),
+    with: {
+      admins: {
+        with: {
+          user: true,
+        },
+      },
+    },
   });
 
-  return results.map((rd) => rd.draft);
+  return results.map((draftWrapper) => {
+    return {
+      ...draftWrapper,
+      validation: validateRoundDraft(draftWrapper.draft),
+      draft: {
+        ...draftWrapper.draft,
+        adminWalletAddresses: mapVotersOrAdminsToAddresses(draftWrapper.admins),
+      },
+    };
+  });
 }
 
 export async function publishRoundDraft(
   roundDraftId: string,
-) {
+): Promise<RoundAdminFields> {
   const result = await db.transaction(async (tx) => {
     const roundDraft = await tx.query.roundDrafts.findFirst({
       where: eq(roundDrafts.id, roundDraftId),
@@ -339,10 +434,14 @@ export async function publishRoundDraft(
       );
     }
 
+    validateSchedule(roundDto);
+
     const newRounds = await tx.insert(rounds).values({
       urlSlug: roundDto.urlSlug,
       createdFromDraftId: roundDraft.id,
       name: roundDto.name,
+      emoji: roundDto.emoji,
+      color: roundDto.color,
       chainId: roundDto.chainId,
       description: roundDto.description,
       applicationPeriodStart: new Date(roundDto.applicationPeriodStart),
@@ -376,30 +475,146 @@ export async function publishRoundDraft(
       publishedAsRoundId: newRound.id,
     }).where(eq(roundDrafts.id, roundDraftId));
 
-    return newRound;
+    const fullRound = await getRound(newRound.urlSlug, "admin");
+    if (!fullRound) {
+      throw new Error("Failed to retrieve the newly created round.");
+    }
+
+    return fullRound;
   });
 
-  return result;
+  return result as RoundAdminFields;
+}
+
+function validateSchedule(
+  schedule: Partial<
+    Pick<
+      CreateRoundDto,
+      | "applicationPeriodStart"
+      | "applicationPeriodEnd"
+      | "votingPeriodStart"
+      | "votingPeriodEnd"
+      | "resultsPeriodStart"
+    >
+  >,
+  throwOnError = true,
+): boolean {
+  const {
+    applicationPeriodStart,
+    applicationPeriodEnd,
+    votingPeriodStart,
+    votingPeriodEnd,
+    resultsPeriodStart,
+  } = schedule;
+
+  const applicationPeriodStartDate = applicationPeriodStart
+    ? new Date(applicationPeriodStart)
+    : undefined;
+  const applicationPeriodEndDate = applicationPeriodEnd
+    ? new Date(applicationPeriodEnd)
+    : undefined;
+  const votingPeriodStartDate = votingPeriodStart
+    ? new Date(votingPeriodStart)
+    : undefined;
+  const votingPeriodEndDate = votingPeriodEnd
+    ? new Date(votingPeriodEnd)
+    : undefined;
+  const resultsPeriodStartDate = resultsPeriodStart
+    ? new Date(resultsPeriodStart)
+    : undefined;
+
+  if (
+    applicationPeriodStart && applicationPeriodEnd &&
+    applicationPeriodStart >= applicationPeriodEnd
+  ) {
+    if (throwOnError) {
+      throw new BadRequestError(
+        "Application period start must be before end.",
+      );
+    }
+    return false;
+  }
+  if (
+    votingPeriodStart && votingPeriodEnd && votingPeriodStart >= votingPeriodEnd
+  ) {
+    if (throwOnError) {
+      throw new BadRequestError(
+        "Voting period start must be before end.",
+      );
+    }
+    return false;
+  }
+  if (
+    applicationPeriodEnd && votingPeriodStart &&
+    applicationPeriodEnd >= votingPeriodStart
+  ) {
+    if (throwOnError) {
+      throw new BadRequestError(
+        "Voting period must start after application period ends.",
+      );
+    }
+    return false;
+  }
+  if (
+    votingPeriodEnd && resultsPeriodStart &&
+    votingPeriodEnd >= resultsPeriodStart
+  ) {
+    if (throwOnError) {
+      throw new BadRequestError(
+        "Results period must start after voting period ends.",
+      );
+    }
+    return false;
+  }
+
+  // if any of the dates are in the past, throw an error
+  const now = new Date();
+
+  console.log({
+    applicationPeriodStartDate,
+    now,
+    isInPast: applicationPeriodStartDate && applicationPeriodStartDate < now
+  })
+
+  if (
+    (applicationPeriodStartDate && applicationPeriodStartDate < now) ||
+    (applicationPeriodEndDate && applicationPeriodEndDate < now) ||
+    (votingPeriodStartDate && votingPeriodStartDate < now) ||
+    (votingPeriodEndDate && votingPeriodEndDate < now) ||
+    (resultsPeriodStartDate && resultsPeriodStartDate < now)
+  ) {
+    if (throwOnError) {
+      throw new BadRequestError(
+        "All dates must be in the future.",
+      );
+    }
+    return false;
+  }
+
+  return true;
 }
 
 export async function patchRound(
   roundId: string,
   updates: PatchRoundDto,
 ): Promise<RoundAdminFields | null> {
+  validateSchedule(updates);
+
   const result = await db.transaction(async (tx) => {
     if (updates.urlSlug) {
       const isAvailable = await checkUrlSlugAvailability(
         updates.urlSlug,
         tx,
       );
-      
+
       if (!isAvailable) {
         throw new BadRequestError(
-          'URL slug already taken.',
+          "URL slug already taken.",
         );
       }
     }
 
+    // Todo: it should not be allowed to update the schedule anymore after the round has started
     const result = await tx.update(rounds)
       .set({
         name: updates.name,
@@ -430,10 +645,10 @@ export async function patchRound(
       await tx.delete(roundAdmins).where(
         eq(roundAdmins.roundId, roundId),
       );
-  
+
       for (const adminAddress of updates.adminWalletAddresses) {
         const adminUser = await createOrGetUser(tx, adminAddress);
-  
+
         await tx.insert(roundAdmins).values({
           roundId,
           roundDraftId: result[0].createdFromDraftId,
@@ -441,7 +656,7 @@ export async function patchRound(
         });
       }
     }
-  
+
     return result;
   });
 
@@ -457,7 +672,7 @@ export async function deleteRound(roundId: string): Promise<void> {
 }
 
 export function inferRoundState(
-  round: Omit<RoundPublicFields, "state">,
+  round: InferSelectModel<typeof rounds>,
 ): RoundState {
   const now = new Date();
 

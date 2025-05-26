@@ -1,0 +1,1 @@
+ALTER TABLE "round_drafts" RENAME COLUMN "voting_config" TO "draft";

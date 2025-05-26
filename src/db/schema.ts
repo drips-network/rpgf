@@ -69,23 +69,25 @@ export const rounds = pgTable("rounds", {
     uniqueIndex('url_slug_unique_index').on(lower(table.urlSlug)),
   ]
 ));
-export const roundsRelations = relations(rounds, ({ one }) => ({
+export const roundsRelations = relations(rounds, ({ one, many  }) => ({
   chain: one(chains, { fields: [rounds.chainId], references: [chains.id] }),
   createdBy: one(users, { fields: [rounds.createdByUserId], references: [users.id] }),
   createdFromDraft: one(roundDrafts, { fields: [rounds.createdFromDraftId], references: [roundDrafts.id] }),
+  admins: many(roundAdmins),
+  voters: many(roundVoters),
 }));
-
 
 export const roundDrafts = pgTable("round_drafts", {
   id: uuid("id").primaryKey().defaultRandom(),
   chainId: integer("chain_id").notNull().references(() => chains.id),
   publishedAsRoundId: uuid("published_as_round_id").references(() => rounds.id),
   createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
-  draft: jsonb("voting_config").notNull().$type<CreateRoundDraftDto>()
+  draft: jsonb("draft").notNull().$type<Omit<CreateRoundDraftDto, 'adminWalletAddresses'>>()
 });
-export const roundDraftsRelations = relations(roundDrafts, ({ one }) => ({
+export const roundDraftsRelations = relations(roundDrafts, ({ one, many }) => ({
   chain: one(chains, { fields: [roundDrafts.chainId], references: [chains.id] }),
   createdBy: one(users, { fields: [roundDrafts.createdByUserId], references: [users.id] }),
+  admins: many(roundAdmins),
   publishedAsRound: one(rounds, { fields: [roundDrafts.publishedAsRoundId], references: [rounds.id] }),
 }));
 

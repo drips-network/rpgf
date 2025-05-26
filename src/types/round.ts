@@ -157,6 +157,7 @@ export const roundPublicFieldsSchema = z.object({
   createdByUserId: z.string().uuid(),
   createdAt: z.date(),
   updatedAt: z.date(),
+  adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(), // Array of wallet addresses
 });
 export type RoundPublicFields = z.infer<typeof roundPublicFieldsSchema>;
 
@@ -166,7 +167,6 @@ export const roundAdminFieldsSchema = roundPublicFieldsSchema.extend({
     maxVotesPerProjectPerVoter: z.number().int().positive(),
     allowedVoters: z.array(z.string()).nonempty(),
   }),
-  adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(), // Array of wallet addresses
 });
 export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
 

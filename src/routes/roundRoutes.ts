@@ -7,6 +7,8 @@ const router = new Router();
 router.get("/api/rounds", roundController.getRoundsController);
 router.get("/api/rounds/:slug", roundController.getRoundController);
 
+router.get("/api/rounds/check-slug/:slug", roundController.checkSlugAvailabilityController);
+
 router.put("/api/round-drafts/", enforceAuthenticationMiddleware, roundController.createRoundDraftController);
 router.get("/api/round-drafts", enforceAuthenticationMiddleware, roundController.getRoundDraftsController);
 router.get("/api/round-drafts/:id", enforceAuthenticationMiddleware, roundController.getRoundDraftController);
