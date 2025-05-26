@@ -1,13 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { applications, ballots, roundVoters } from "../db/schema.ts";
 import { db } from "../db/postgres.ts";
-import { Ballot, SubmitBallotDto } from "../types/ballot.ts";
+import { Ballot, SubmitBallotDto, WrappedBallot } from "../types/ballot.ts";
 import { BadRequestError } from "../errors/generic.ts";
 import { EthereumAddress } from "../types/shared.ts";
 
 export async function isUserRoundVoter(
-  userId: number | undefined,
-  roundId: number,
+  userId: string | undefined,
+  roundId: string,
 ): Promise<boolean> {
   if (!userId) {
     return false;
@@ -24,9 +24,9 @@ export async function isUserRoundVoter(
 }
 
 export async function getBallot(
-  roundId: number,
-  userId: number,
-): Promise<Ballot | null> {
+  roundId: string,
+  userId: string,
+): Promise<WrappedBallot | null> {
   const result = await db.query.ballots.findFirst({
     where: and(
       eq(ballots.roundId, roundId),
@@ -38,10 +38,10 @@ export async function getBallot(
 }
 
 export async function submitBallot(
-  userId: number,
+  userId: string,
   ballotDto: SubmitBallotDto,
-): Promise<Ballot> {
-  const includedApplicationIds = Object.keys(ballotDto.ballot).map(Number);
+): Promise<WrappedBallot> {
+  const includedApplicationIds = Object.keys(ballotDto.ballot);
 
   const applicatons = await db.query.applications.findMany({
     where: and(
@@ -75,14 +75,13 @@ export async function submitBallot(
 }
 
 export async function getBallots(
-  roundId: number,
+  roundId: string,
   limit = 20,
   offset = 0,
   format: 'json' | 'csv' = 'json',
 ): Promise<{ voterWalletAddress: EthereumAddress; ballot: Ballot | null }[] | string> {
   const submittedBallots = await db.query.ballots.findMany({
     where: eq(ballots.roundId, roundId),
-
   });
 
   const voters = await db.query.roundVoters.findMany({

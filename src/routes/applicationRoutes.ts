@@ -4,9 +4,9 @@ import * as applicationController from "$app/controllers/applicationController.t
 
 const router = new Router();
 
-router.put("/api/rounds/:id/applications", enforceAuthenticationMiddleware, applicationController.createAppplicationController);
-router.get("/api/rounds/:id/applications", applicationController.getApplicationsForRoundController);
+router.put("/api/rounds/:slug/applications", enforceAuthenticationMiddleware, applicationController.createAppplicationController);
+router.get("/api/rounds/:slug/applications", applicationController.getApplicationsForRoundController);
 
-router.post("/api/rounds/:id/applications/review", enforceAuthenticationMiddleware, applicationController.submitApplicationReviewController);
+router.post("/api/rounds/:slug/applications/review", enforceAuthenticationMiddleware, applicationController.submitApplicationReviewController);
 
 export default router;

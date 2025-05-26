@@ -17,34 +17,39 @@ import {
   RoundPublicFields,
   roundPublicFieldsSchema,
   RoundState,
+  WrappedRound,
+  WrappedRoundDraft,
 } from "$app/types/round.ts";
 import { and, eq, InferSelectModel, isNull } from "drizzle-orm";
 import createOrGetUser from "./userService.ts";
 import ensureAtLeastOneArrayMember from "../utils/ensureAtLeastOneArrayMember.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import parseDto from "../utils/parseDto.ts";
-import isUuid from "../utils/isUuid.ts";
 
 export async function isUserRoundAdmin(
   userId: string | undefined,
-  roundIdOrSlug: string,
+  roundSlug: string,
 ): Promise<boolean> {
   if (!userId) {
     return false;
   }
 
-  const queryById = isUuid(roundIdOrSlug);
+  const roundId = await db.query.rounds.findFirst({
+    where: eq(lower(rounds.urlSlug), roundSlug.toLowerCase()),
+    columns: { id: true },
+  });
+  if (!roundId) {
+    return false;
+  }
 
-  const result = await db.query.roundAdmins.findFirst({
+  const matchingAdmin = await db.query.roundAdmins.findFirst({
     where: and(
       eq(roundAdmins.userId, userId),
-      queryById
-        ? eq(roundAdmins.roundId, roundIdOrSlug)
-        : eq(rounds.urlSlug, roundIdOrSlug),
+      eq(roundAdmins.roundId, roundId.id),
     ),
   });
 
-  return Boolean(result);
+  return Boolean(matchingAdmin);
 }
 
 export async function checkUrlSlugAvailability(
@@ -96,7 +101,7 @@ export async function getRounds(
   filter?: { chainId?: number },
   limit = 20,
   offset = 0,
-): Promise<RoundPublicFields[]> {
+): Promise<WrappedRound<RoundPublicFields>[]> {
   const results = await db.query.rounds.findMany({
     limit,
     offset,
@@ -114,22 +119,22 @@ export async function getRounds(
     const state = inferRoundState(round);
 
     return {
-      ...round,
-      adminWalletAddresses: mapVotersOrAdminsToAddresses(round.admins),
-      state,
+      id: round.id,
+      type: "round",
+      chainId: round.chainId,
+      round: {
+        ...round,
+        adminWalletAddresses: mapVotersOrAdminsToAddresses(round.admins),
+        state,
+        isAdmin: false,
+      }
     };
   });
 }
 
-export async function getRound(
-  roundSlug: string,
-  accessLevel: "public" | "admin",
-): Promise<
-  typeof accessLevel extends "admin" ? RoundAdminFields
-    : RoundPublicFields | null
-> {
+async function getRawWrappedRound(slug: string): Promise<WrappedRound<RoundAdminFields> | null> {
   const round = await db.query.rounds.findFirst({
-    where: eq(lower(rounds.urlSlug), roundSlug.toLowerCase()),
+    where: eq(lower(rounds.urlSlug), slug.toLowerCase()),
     with: {
       admins: {
         with: {
@@ -149,24 +154,58 @@ export async function getRound(
 
   const state = inferRoundState(round);
 
-  const mapped: RoundAdminFields = {
-    ...round,
-    state,
-    adminWalletAddresses: mapVotersOrAdminsToAddresses(round.admins),
-    votingConfig: {
-      ...round.votingConfig,
-      allowedVoters: mapVotersOrAdminsToAddresses(round.voters),
-    },
+  return {
+    id: round.id,
+    type: "round",
+    chainId: round.chainId,
+    round: {
+      ...round,
+      state,
+      adminWalletAddresses: mapVotersOrAdminsToAddresses(round.admins),
+      votingConfig: {
+        ...round.votingConfig,
+        allowedVoters: mapVotersOrAdminsToAddresses(round.voters),
+      },
+      isAdmin: true,
+    }
   };
+}
 
-  if (accessLevel === "public") {
-    const withoutAdminFields = roundPublicFieldsSchema.parse(mapped);
-
-    return withoutAdminFields;
+export async function getWrappedRoundPublic(
+  roundSlug: string,
+): Promise<WrappedRound<RoundPublicFields> | null> {
+  const round = await getRawWrappedRound(roundSlug);
+  if (!round) {
+    return null;
   }
 
-  // admin level access
-  return mapped;
+  const withoutAdminFields = roundPublicFieldsSchema.parse(round.round);
+
+  return {
+    id: round.id,
+    type: "round",
+    chainId: round.chainId,
+    round: {
+      ...withoutAdminFields,
+      isAdmin: false,
+    } as RoundPublicFields,
+  };
+}
+
+export async function getWrappedRoundAdmin(
+  roundSlug: string,
+): Promise<WrappedRound<RoundAdminFields> | null> {
+  const round = await getRawWrappedRound(roundSlug);
+  if (!round) {
+    return null;
+  }
+
+  return {
+    id: round.id,
+    type: "round",
+    chainId: round.chainId,
+    round: round.round as RoundAdminFields,
+  };
 }
 
 export async function createRoundDraft(
@@ -239,8 +278,7 @@ export async function createRoundDraft(
 export async function patchRoundDraft(
   roundDraftId: string,
   updates: CreateRoundDraftDto,
-) {
-
+): Promise<WrappedRoundDraft> {
   const result = await db.transaction(async (tx) => {
     const roundDraft = await tx.query.roundDrafts.findFirst({
       where: eq(roundDrafts.id, roundDraftId),
@@ -292,7 +330,7 @@ export async function patchRoundDraft(
       });
     }
 
-    const result = await tx.update(roundDrafts)
+    await tx.update(roundDrafts)
       .set({
         draft: updates,
       })
@@ -313,13 +351,10 @@ export async function patchRoundDraft(
       });
     }
 
-    return result;
+    return await getRoundDrafts({ id: roundDraftId }, 1, 0);
   });
 
-  return {
-    ...result[0],
-    validation: validateRoundDraft(result[0].draft),
-  };
+  return result[0]
 }
 
 export async function deleteRoundDraft(
@@ -379,7 +414,7 @@ export async function getRoundDrafts(
   filter?: { chainId?: number; creatorUserId?: string; id?: string },
   limit = 20,
   offset = 0,
-): Promise<InferSelectModel<typeof roundDrafts>[]> {
+): Promise<WrappedRoundDraft[]> {
   const results = await db.query.roundDrafts.findMany({
     limit,
     offset,
@@ -403,6 +438,7 @@ export async function getRoundDrafts(
   return results.map((draftWrapper) => {
     return {
       ...draftWrapper,
+      type: "round-draft",
       validation: validateRoundDraft(draftWrapper.draft),
       draft: {
         ...draftWrapper.draft,
@@ -414,7 +450,7 @@ export async function getRoundDrafts(
 
 export async function publishRoundDraft(
   roundDraftId: string,
-): Promise<RoundAdminFields> {
+): Promise<WrappedRound<RoundAdminFields>> {
   const result = await db.transaction(async (tx) => {
     const roundDraft = await tx.query.roundDrafts.findFirst({
       where: eq(roundDrafts.id, roundDraftId),
@@ -475,7 +511,7 @@ export async function publishRoundDraft(
       publishedAsRoundId: newRound.id,
     }).where(eq(roundDrafts.id, roundDraftId));
 
-    const fullRound = await getRound(newRound.urlSlug, "admin");
+    const fullRound = await getWrappedRoundAdmin("admin");
     if (!fullRound) {
       throw new Error("Failed to retrieve the newly created round.");
     }
@@ -483,7 +519,7 @@ export async function publishRoundDraft(
     return fullRound;
   });
 
-  return result as RoundAdminFields;
+  return result;
 }
 
 function validateSchedule(

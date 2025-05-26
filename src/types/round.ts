@@ -158,6 +158,7 @@ export const roundPublicFieldsSchema = z.object({
   createdAt: z.date(),
   updatedAt: z.date(),
   adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(), // Array of wallet addresses
+  isAdmin: z.literal<boolean>(false),
 });
 export type RoundPublicFields = z.infer<typeof roundPublicFieldsSchema>;
 
@@ -167,6 +168,7 @@ export const roundAdminFieldsSchema = roundPublicFieldsSchema.extend({
     maxVotesPerProjectPerVoter: z.number().int().positive(),
     allowedVoters: z.array(z.string()).nonempty(),
   }),
+  isAdmin: z.literal<boolean>(true),
 });
 export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
 
@@ -218,3 +220,21 @@ export type CreateRoundDraftDto = z.infer<typeof createRoundDraftDtoSchema>;
 
 export const patchRoundDtoSchema = createRoundDtoSchema.partial();
 export type PatchRoundDto = z.infer<typeof patchRoundDtoSchema>;
+
+export type WrappedRound<T extends RoundPublicFields | RoundAdminFields> = {
+  id: string;
+  type: "round";
+  chainId: number;
+  round: T;
+}
+
+export type WrappedRoundDraft = {
+  id: string;
+  chainId: number;
+  type: "round-draft";
+  draft: CreateRoundDraftDto;
+  validation: {
+    scheduleValid: boolean;
+    draftComplete: boolean;
+  }
+}

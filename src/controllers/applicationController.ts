@@ -2,7 +2,7 @@ import { RouteParams, RouterContext } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
 import { Application, applicationReviewDtoSchema, createApplicationDtoSchema } from "../types/application.ts";
-import { getRound, isUserRoundAdmin } from "../services/roundService.ts";
+import { getWrappedRoundPublic, isUserRoundAdmin } from "../services/roundService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
 applyApplicationReview,
@@ -14,16 +14,16 @@ import { UnauthorizedError } from "../errors/auth.ts";
 
 export async function createAppplicationController(
   ctx: RouterContext<
-    "/api/rounds/:id/applications",
-    RouteParams<"/api/rounds/:id/applications">,
+    "/api/rounds/:slug/applications",
+    RouteParams<"/api/rounds/:slug/applications">,
     AuthenticatedAppState
   >,
 ) {
-  const roundId = ctx.params.id;
+  const roundSlug = ctx.params.slug;
   const userId = ctx.state.user.userId;
   const userWalletAddress = ctx.state.user.walletAddress;
 
-  const round = await getRound(roundId, "public");
+  const round = (await getWrappedRoundPublic(roundSlug))?.round;
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -38,7 +38,7 @@ export async function createAppplicationController(
   );
 
   const application = await createApplication(
-    roundId,
+    roundSlug,
     userId,
     userWalletAddress,
     round.applicationFormat,
@@ -51,30 +51,30 @@ export async function createAppplicationController(
 
 export async function getApplicationsForRoundController(
   ctx: RouterContext<
-    "/api/rounds/:id/applications",
-    RouteParams<"/api/rounds/:id/applications">,
+    "/api/rounds/:slug/applications",
+    RouteParams<"/api/rounds/:slug/applications">,
     AppState
   >,
 ) {
-  const roundId = ctx.params.id;
+  const roundSlug = ctx.params.slug;
   const userId = ctx.state.user?.userId;
 
-  const isAdmin = await isUserRoundAdmin(userId, roundId);
+  const isAdmin = await isUserRoundAdmin(userId, roundSlug);
 
-  const round = await getRound(roundId, "public");
+  const round = (await getWrappedRoundPublic(roundSlug))?.round;
   if (!round) {
     throw new NotFoundError("Round not found");
   }
 
   if (isAdmin) {
     // admins can see all applications, always
-    return await getApplications(roundId, round.applicationFormat);
+    return await getApplications(roundSlug, round.applicationFormat);
   }
 
   // non-admins can see their own application plus all approved ones, but without private fields
 
   const approvedApplications = await getApplications(
-    roundId,
+    roundSlug,
     round.applicationFormat,
     false,
     {
@@ -83,7 +83,7 @@ export async function getApplicationsForRoundController(
   );
 
   const ownApplication = userId
-    ? (await getApplications(roundId, round.applicationFormat, true, {
+    ? (await getApplications(roundSlug, round.applicationFormat, true, {
       submitterUserId: userId,
     }))[0]
     : null;
@@ -101,22 +101,22 @@ export async function getApplicationsForRoundController(
 
 export async function submitApplicationReviewController(
   ctx: RouterContext<
-    "/api/rounds/:id/applications/review",
+    "/api/rounds/:slug/applications/review",
     RouteParams<
-      "/api/rounds/:id/applications/review"
+      "/api/rounds/:slug/applications/review"
     >,
     AuthenticatedAppState
   >,
 ) {
-  const roundId = ctx.params.id;
+  const roundSlug = ctx.params.slug;
   const userId = ctx.state.user.userId;
 
-  const isAdmin = await isUserRoundAdmin(userId, roundId);
+  const isAdmin = await isUserRoundAdmin(userId, roundSlug);
   if (!isAdmin) {
     throw new UnauthorizedError("You are not an admin of this round");
   }
 
-  const round = await getRound(roundId, "public");
+  const round = (await getWrappedRoundPublic(roundSlug))?.round;
   console.log({ round });
   if (!round) {
     throw new NotFoundError("Round not found");

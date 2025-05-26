@@ -5,7 +5,7 @@ import { UnauthorizedError } from "../errors/auth.ts";
 import parseDto from "../utils/parseDto.ts";
 import { Ballot, submitBallotDtoSchema } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
-import { getRound, isUserRoundAdmin } from "../services/roundService.ts";
+import { getWrappedRoundPublic, isUserRoundAdmin } from "../services/roundService.ts";
 
 function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
@@ -38,7 +38,7 @@ export async function submitBallotController(
   const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
-  const round = await getRound(Number(roundId), "public");
+  const round = (await getWrappedRoundPublic(roundId))?.round;
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -46,12 +46,12 @@ export async function submitBallotController(
     throw new BadRequestError("Round is not in voting state");
   }
 
-  const isVoter = await isUserRoundVoter(userId, Number(roundId));
+  const isVoter = await isUserRoundVoter(userId, roundId);
   if (!isVoter) {
     throw new UnauthorizedError("You are not authorized to submit a ballot for this round");
   }
 
-  const existingBallot = await getBallot(Number(roundId), userId);
+  const existingBallot = await getBallot(roundId, userId);
   if (existingBallot) {
     throw new BadRequestError("You have already submitted a ballot for this round");
   }
@@ -85,12 +85,12 @@ export async function getBallotsController(
     throw new BadRequestError("Invalid format. Possible: json, csv");
   }
 
-  const isAdmin = await isUserRoundAdmin(userId, Number(roundId));
+  const isAdmin = await isUserRoundAdmin(userId, roundId);
   if (!isAdmin) {
     throw new UnauthorizedError("You are not an admin of this round");
   }
 
-  const round = await getRound(Number(roundId), "public");
+  const round = (await getWrappedRoundPublic(roundId))?.round;
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -98,7 +98,7 @@ export async function getBallotsController(
     throw new BadRequestError("Round voting hasn't started yet");
   }
 
-  const ballots = await getBallots(Number(roundId), limit, offset, format);
+  const ballots = await getBallots(roundId, limit, offset, format);
 
   ctx.response.status = 200;
   ctx.response.body = ballots;

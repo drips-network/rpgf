@@ -10,9 +10,10 @@ import {
   createRoundDraft,
   deleteRound,
   deleteRoundDraft,
-  getRound,
   getRoundDrafts,
   getRounds,
+  getWrappedRoundAdmin,
+  getWrappedRoundPublic,
   isUserRoundAdmin,
   isUserRoundDraftAdmin,
   patchRound,
@@ -166,23 +167,23 @@ export async function publishRoundDraftController(
 
 export async function patchRoundController(
   ctx: RouterContext<
-    "/api/rounds/:id",
-    RouteParams<"/api/rounds/:id">,
+    "/api/rounds/:slug",
+    RouteParams<"/api/rounds/:slug">,
     AuthenticatedAppState
   >,
 ) {
-  const roundId = ctx.params.id;
+  const roundSlug = ctx.params.slug;
   const userId = ctx.state.user.userId;
 
   console.log("User ID:", userId);
 
-  if (!(await isUserRoundAdmin(userId, roundId))) {
+  if (!(await isUserRoundAdmin(userId, roundSlug))) {
     throw new UnauthorizedError("You are not authorized to modify this round");
   }
 
   const dto = await parseDto(patchRoundDtoSchema, ctx);
 
-  const round = await patchRound(roundId, dto);
+  const round = await patchRound(roundSlug, dto);
 
   ctx.response.status = 200;
   ctx.response.body = round;
@@ -199,7 +200,9 @@ export async function getRoundController(
   const userId = ctx.state.user?.userId;
 
   const isAdmin = await isUserRoundAdmin(userId, roundSlug);
-  const round = await getRound(roundSlug, isAdmin ? "admin" : "public");
+  const round = isAdmin
+    ? await getWrappedRoundAdmin(roundSlug)
+    : await getWrappedRoundPublic(roundSlug);
 
   if (!round) {
     throw new NotFoundError("Round not found");
@@ -222,19 +225,19 @@ export async function getRoundsController(ctx: Context<AppState>) {
 
 export async function deleteRoundController(
   ctx: RouterContext<
-    "/api/rounds/:id",
-    RouteParams<"/api/rounds/:id">,
+    "/api/rounds/:slug",
+    RouteParams<"/api/rounds/:slug">,
     AuthenticatedAppState
   >,
 ) {
-  const roundId = ctx.params.id;
+  const roundSlug = ctx.params.slug;
   const userId = ctx.state.user.userId;
 
-  if (!(await isUserRoundAdmin(userId, roundId))) {
+  if (!(await isUserRoundAdmin(userId, roundSlug))) {
     throw new UnauthorizedError("You are not authorized to delete this round");
   }
 
-  await deleteRound(roundId);
+  await deleteRound(roundSlug);
 
   ctx.response.status = 204; // No content
 }
