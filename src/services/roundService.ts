@@ -570,12 +570,6 @@ function validateSchedule(
   // if any of the dates are in the past, throw an error
   const now = new Date();
 
-  console.log({
-    applicationPeriodStartDate,
-    now,
-    isInPast: applicationPeriodStartDate && applicationPeriodStartDate < now
-  })
-
   if (
     (applicationPeriodStartDate && applicationPeriodStartDate < now) ||
     (applicationPeriodEndDate && applicationPeriodEndDate < now) ||
