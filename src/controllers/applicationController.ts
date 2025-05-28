@@ -7,6 +7,7 @@ import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
 applyApplicationReview,
   createApplication,
+  filterPrivateFields,
   getApplications,
 } from "../services/applicationService.ts";
 import deduplicateArray from "../utils/deduplicateArray.ts";
@@ -38,7 +39,7 @@ export async function createAppplicationController(
   );
 
   const application = await createApplication(
-    roundSlug,
+    round.id,
     userId,
     userWalletAddress,
     round.applicationFormat,
@@ -68,13 +69,16 @@ export async function getApplicationsForRoundController(
 
   if (isAdmin) {
     // admins can see all applications, always
-    return await getApplications(roundSlug, round.applicationFormat);
+
+    ctx.response.status = 200;
+    ctx.response.body = await getApplications(round.id, round.applicationFormat, true);
+    return;
   }
 
   // non-admins can see their own application plus all approved ones, but without private fields
 
   const approvedApplications = await getApplications(
-    roundSlug,
+    round.id,
     round.applicationFormat,
     false,
     {
@@ -83,7 +87,7 @@ export async function getApplicationsForRoundController(
   );
 
   const ownApplication = userId
-    ? (await getApplications(roundSlug, round.applicationFormat, true, {
+    ? (await getApplications(round.id, round.applicationFormat, true, {
       submitterUserId: userId,
     }))[0]
     : null;
@@ -97,6 +101,51 @@ export async function getApplicationsForRoundController(
   ctx.response.status = 200;
   ctx.response.body = deduplicateArray(result, 'id');
   return;
+}
+
+export async function getApplicationController(
+  ctx: RouterContext<
+    "/api/rounds/:slug/applications/:applicationId",
+    RouteParams<"/api/rounds/:slug/applications/:applicationId">,
+    AppState
+  >,
+) {
+  const roundSlug = ctx.params.slug;
+  const applicationId = ctx.params.applicationId;
+  const userId = ctx.state.user?.userId;
+
+  const round = (await getWrappedRoundPublic(roundSlug))?.round;
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
+  // initially get full application including private fields
+  const application = (await getApplications(
+    round.id,
+    round.applicationFormat,
+    true,
+  )).find((app) => app.id === applicationId);
+
+  if (!application) {
+    throw new NotFoundError("Application not found");
+  }
+
+  const isOwnApplication = userId === application.submitterUserId;
+  const isAdmin = await isUserRoundAdmin(userId, roundSlug);
+
+  // if the requester is not the submitter and not an admin, return only if the 
+  // application is approved, and without private fields
+  if (!isOwnApplication && !isAdmin) {
+    if (application.state !== "approved") {
+      throw new UnauthorizedError("You are not allowed to view this application");
+    }
+
+    // return without private fields
+    ctx.response.body = filterPrivateFields(round.applicationFormat, application);
+  }
+
+  ctx.response.status = 200;
+  ctx.response.body = application;
 }
 
 export async function submitApplicationReviewController(
