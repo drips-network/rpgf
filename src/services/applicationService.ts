@@ -23,19 +23,6 @@ export async function createApplication(
   // TODO: Validate an on-chain attestation for this application
 
   const result = await db.transaction(async (tx) => {
-    const existingApplication = await tx.query.applications.findFirst({
-      where: and(
-        eq(applications.roundId, roundId),
-        eq(applications.submitterUserId, submitterUserId),
-      ),
-    });
-
-    if (existingApplication) {
-      throw new BadRequestError(
-        "You have already submitted an application for this round",
-      );
-    }
-
     const round = await db.query.rounds.findFirst({
       where: eq(rounds.id, roundId),
       with: {
