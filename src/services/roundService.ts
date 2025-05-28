@@ -132,8 +132,8 @@ export async function getRounds(
   });
 }
 
-async function getRawWrappedRound(slug: string): Promise<WrappedRound<RoundAdminFields> | null> {
-  const round = await db.query.rounds.findFirst({
+async function getRawWrappedRound(slug: string, tx?: Transaction): Promise<WrappedRound<RoundAdminFields> | null> {
+  const round = await (tx ?? db).query.rounds.findFirst({
     where: eq(lower(rounds.urlSlug), slug.toLowerCase()),
     with: {
       admins: {
@@ -194,8 +194,9 @@ export async function getWrappedRoundPublic(
 
 export async function getWrappedRoundAdmin(
   roundSlug: string,
+  tx?: Transaction,
 ): Promise<WrappedRound<RoundAdminFields> | null> {
-  const round = await getRawWrappedRound(roundSlug);
+  const round = await getRawWrappedRound(roundSlug, tx);
   if (!round) {
     return null;
   }
@@ -511,7 +512,7 @@ export async function publishRoundDraft(
       publishedAsRoundId: newRound.id,
     }).where(eq(roundDrafts.id, roundDraftId));
 
-    const fullRound = await getWrappedRoundAdmin("admin");
+    const fullRound = await getWrappedRoundAdmin(newRound.urlSlug, tx);
     if (!fullRound) {
       throw new Error("Failed to retrieve the newly created round.");
     }
