@@ -179,7 +179,10 @@ export async function getWrappedRoundPublic(
     return null;
   }
 
-  const withoutAdminFields = roundPublicFieldsSchema.parse(round.round);
+  const withoutAdminFields = roundPublicFieldsSchema.parse({
+    ...round.round,
+    isAdmin: false,
+  });
 
   return {
     id: round.id,
@@ -187,8 +190,7 @@ export async function getWrappedRoundPublic(
     chainId: round.chainId,
     round: {
       ...withoutAdminFields,
-      isAdmin: false,
-    } as RoundPublicFields,
+    }
   };
 }
 
