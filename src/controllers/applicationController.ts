@@ -2,7 +2,7 @@ import { RouteParams, RouterContext } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
 import { Application, applicationReviewDtoSchema, createApplicationDtoSchema } from "../types/application.ts";
-import { getWrappedRoundPublic, isUserRoundAdmin } from "../services/roundService.ts";
+import { getWrappedRound } from "../services/roundService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
 applyApplicationReview,
@@ -24,7 +24,8 @@ export async function createAppplicationController(
   const userId = ctx.state.user.userId;
   const userWalletAddress = ctx.state.user.walletAddress;
 
-  const round = (await getWrappedRoundPublic(roundSlug))?.round;
+  const { round } = await getWrappedRound(roundSlug, userId) ?? {};
+  
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -60,9 +61,7 @@ export async function getApplicationsForRoundController(
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user?.userId;
 
-  const isAdmin = await isUserRoundAdmin(userId, roundSlug);
-
-  const round = (await getWrappedRoundPublic(roundSlug))?.round;
+  const { round, isAdmin } = await getWrappedRound(roundSlug, userId ?? null) ?? {};
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -114,7 +113,7 @@ export async function getApplicationController(
   const applicationId = ctx.params.applicationId;
   const userId = ctx.state.user?.userId;
 
-  const round = (await getWrappedRoundPublic(roundSlug))?.round;
+  const { round, isAdmin } = await getWrappedRound(roundSlug, userId ?? null) ?? {};
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -131,7 +130,6 @@ export async function getApplicationController(
   }
 
   const isOwnApplication = userId === application.submitterUserId;
-  const isAdmin = await isUserRoundAdmin(userId, roundSlug);
 
   // if the requester is not the submitter and not an admin, return only if the 
   // application is approved, and without private fields
@@ -160,14 +158,12 @@ export async function submitApplicationReviewController(
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user.userId;
 
-  const isAdmin = await isUserRoundAdmin(userId, roundSlug);
-  if (!isAdmin) {
-    throw new UnauthorizedError("You are not an admin of this round");
-  }
-
-  const round = (await getWrappedRoundPublic(roundSlug))?.round;
+  const { round, isAdmin } = await getWrappedRound(roundSlug, userId ?? null) ?? {};
   if (!round) {
     throw new NotFoundError("Round not found");
+  }
+  if (!isAdmin) {
+    throw new UnauthorizedError("You are not an admin of this round");
   }
 
   if (!(round.state === "intake" || round.state === "pending-voting")) {

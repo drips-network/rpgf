@@ -1,11 +1,11 @@
 import { RouteParams, RouterContext } from "oak";
 import { AuthenticatedAppState } from "../../main.ts";
-import { getBallot, getBallots, isUserRoundVoter, submitBallot } from "../services/ballotService.ts";
+import { getBallot, getBallots, submitBallot } from "../services/ballotService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import parseDto from "../utils/parseDto.ts";
 import { Ballot, submitBallotDtoSchema } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
-import { getWrappedRoundPublic, isUserRoundAdmin } from "../services/roundService.ts";
+import { getWrappedRound } from "../services/roundService.ts";
 
 function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
@@ -38,15 +38,15 @@ export async function submitBallotController(
   const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
-  const round = (await getWrappedRoundPublic(roundId))?.round;
+  const { round, isVoter } = await getWrappedRound(roundId, userId) ?? {};
   if (!round) {
     throw new NotFoundError("Round not found");
   }
+
   if (round.state !== "voting") {
     throw new BadRequestError("Round is not in voting state");
   }
 
-  const isVoter = await isUserRoundVoter(userId, roundId);
   if (!isVoter) {
     throw new UnauthorizedError("You are not authorized to submit a ballot for this round");
   }
@@ -85,15 +85,16 @@ export async function getBallotsController(
     throw new BadRequestError("Invalid format. Possible: json, csv");
   }
 
-  const isAdmin = await isUserRoundAdmin(userId, roundId);
+  const { round, isAdmin } = await getWrappedRound(roundId, userId) ?? {};
+
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
   if (!isAdmin) {
     throw new UnauthorizedError("You are not an admin of this round");
   }
 
-  const round = (await getWrappedRoundPublic(roundId))?.round;
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
   if (!(round.state === "voting" || round.state === "pending-results" || round.state === "results")) {
     throw new BadRequestError("Round voting hasn't started yet");
   }

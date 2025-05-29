@@ -1,7 +1,7 @@
 import { RouteParams, RouterContext } from "oak";
 import { AuthenticatedAppState } from "../../main.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
-import { getWrappedRoundPublic, isUserRoundAdmin } from "../services/roundService.ts";
+import { getWrappedRound } from "../services/roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { getResults } from "../services/resultsService.ts";
 
@@ -20,15 +20,16 @@ export async function getResultsController(
     throw new BadRequestError("Invalid format. Possible: json, csv");
   }
 
-  const isAdmin = await isUserRoundAdmin(userId, roundSlug);
+  const { round, isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
+
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
   if (!isAdmin) {
     throw new UnauthorizedError("You are not an admin of this round");
   }
 
-  const round = (await getWrappedRoundPublic(roundSlug))?.round;
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
   if (!(round.state === "results" || round.state === "pending-results")) {
     throw new BadRequestError("Round voting hasn't concluded yet");
   }

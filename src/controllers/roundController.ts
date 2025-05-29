@@ -12,9 +12,7 @@ import {
   deleteRoundDraft,
   getRoundDrafts,
   getRounds,
-  getWrappedRoundAdmin,
-  getWrappedRoundPublic,
-  isUserRoundAdmin,
+  getWrappedRound,
   isUserRoundDraftAdmin,
   patchRound,
   patchRoundDraft,
@@ -159,7 +157,7 @@ export async function publishRoundDraftController(
     );
   }
 
-  const roundDraft = await publishRoundDraft(roundDraftId);
+  const roundDraft = await publishRoundDraft(roundDraftId, userId);
 
   ctx.response.status = 200;
   ctx.response.body = roundDraft;
@@ -175,18 +173,20 @@ export async function patchRoundController(
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user.userId;
 
-  console.log("User ID:", userId);
-
-  if (!(await isUserRoundAdmin(userId, roundSlug))) {
-    throw new UnauthorizedError("You are not authorized to modify this round");
+  const { round, isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+  if (!isAdmin) {
+    throw new UnauthorizedError("You are not an admin of this round");
   }
 
   const dto = await parseDto(patchRoundDtoSchema, ctx);
 
-  const round = await patchRound(roundSlug, dto);
+  const patchedRound = await patchRound(roundSlug, userId, dto);
 
   ctx.response.status = 200;
-  ctx.response.body = round;
+  ctx.response.body = patchedRound;
 }
 
 export async function getRoundController(
@@ -199,11 +199,7 @@ export async function getRoundController(
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user?.userId;
 
-  const isAdmin = await isUserRoundAdmin(userId, roundSlug);
-  const round = isAdmin
-    ? await getWrappedRoundAdmin(roundSlug)
-    : await getWrappedRoundPublic(roundSlug);
-
+  const round = await getWrappedRound(roundSlug, userId ?? null);
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -213,11 +209,12 @@ export async function getRoundController(
 }
 
 export async function getRoundsController(ctx: Context<AppState>) {
+  const userId = ctx.state.user?.userId;
   const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
   const offset = Number(ctx.request.url.searchParams.get("offset")) || 0;
   const chainId = Number(ctx.request.url.searchParams.get("chainId"));
 
-  const rounds = await getRounds({ chainId }, limit, offset);
+  const rounds = await getRounds(userId ?? null, { chainId }, limit, offset);
 
   ctx.response.status = 200;
   ctx.response.body = rounds;
@@ -233,8 +230,9 @@ export async function deleteRoundController(
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user.userId;
 
-  if (!(await isUserRoundAdmin(userId, roundSlug))) {
-    throw new UnauthorizedError("You are not authorized to delete this round");
+  const { isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
+  if (!isAdmin) {
+    throw new UnauthorizedError("You are not an admin of this round");
   }
 
   await deleteRound(roundSlug);

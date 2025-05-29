@@ -13,9 +13,7 @@ import {
   createRoundDtoSchema,
   type PatchRoundDto,
   type RoundAdminFields,
-  roundAdminFieldsSchema,
   RoundPublicFields,
-  roundPublicFieldsSchema,
   RoundState,
   WrappedRound,
   WrappedRoundDraft,
@@ -25,32 +23,6 @@ import createOrGetUser from "./userService.ts";
 import ensureAtLeastOneArrayMember from "../utils/ensureAtLeastOneArrayMember.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import parseDto from "../utils/parseDto.ts";
-
-export async function isUserRoundAdmin(
-  userId: string | undefined,
-  roundSlug: string,
-): Promise<boolean> {
-  if (!userId) {
-    return false;
-  }
-
-  const roundId = await db.query.rounds.findFirst({
-    where: eq(lower(rounds.urlSlug), roundSlug.toLowerCase()),
-    columns: { id: true },
-  });
-  if (!roundId) {
-    return false;
-  }
-
-  const matchingAdmin = await db.query.roundAdmins.findFirst({
-    where: and(
-      eq(roundAdmins.userId, userId),
-      eq(roundAdmins.roundId, roundId.id),
-    ),
-  });
-
-  return Boolean(matchingAdmin);
-}
 
 export async function checkUrlSlugAvailability(
   urlSlug: string,
@@ -97,7 +69,64 @@ function mapVotersOrAdminsToAddresses(
   }
 }
 
+type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
+  admins: { user: { id: string, walletAddress: string } }[];
+  voters: { user: { id: string, walletAddress: string } }[];
+};
+
+function mapDbRoundToWrappedRound(
+  requestingUserId: string | null,
+  roundSelectModel: RoundSelectModelWithRelations,
+): WrappedRound<RoundPublicFields | RoundAdminFields> {
+  const state = inferRoundState(roundSelectModel);
+
+  const isAdmin = roundSelectModel.admins.some(
+    (admin) => admin.user.id === requestingUserId,
+  );
+
+  const isVoter = roundSelectModel.voters.some(
+    (voter) => voter.user.id === requestingUserId,
+  );
+
+  return {
+    id: roundSelectModel.id,
+    type: "round",
+    chainId: roundSelectModel.chainId,
+    round: {
+      id: roundSelectModel.id,
+      chainId: roundSelectModel.chainId,
+      urlSlug: roundSelectModel.urlSlug,
+      state,
+      name: roundSelectModel.name,
+      emoji: roundSelectModel.emoji,
+      color: roundSelectModel.color,
+      description: roundSelectModel.description,
+      applicationPeriodStart: roundSelectModel.applicationPeriodStart,
+      applicationPeriodEnd: roundSelectModel.applicationPeriodEnd,
+      votingPeriodStart: roundSelectModel.votingPeriodStart,
+      votingPeriodEnd: roundSelectModel.votingPeriodEnd,
+      resultsPeriodStart: roundSelectModel.resultsPeriodStart,
+      applicationFormat: roundSelectModel.applicationFormat,
+      votingConfig: isAdmin ? {
+        ...roundSelectModel.votingConfig,
+        allowedVoters: mapVotersOrAdminsToAddresses(roundSelectModel.voters),
+      } : {
+        maxVotesPerVoter: roundSelectModel.votingConfig.maxVotesPerVoter,
+        maxVotesPerProjectPerVoter: roundSelectModel.votingConfig.maxVotesPerProjectPerVoter,
+      },
+      createdByUserId: roundSelectModel.createdByUserId,
+      createdAt: roundSelectModel.createdAt,
+      updatedAt: roundSelectModel.updatedAt,
+      adminWalletAddresses: mapVotersOrAdminsToAddresses(roundSelectModel.admins),
+      isAdmin,
+    },
+    isAdmin,
+    isVoter,
+  } as WrappedRound<RoundPublicFields | RoundAdminFields>;
+};
+
 export async function getRounds(
+  requestingUserId: string | null,
   filter?: { chainId?: number },
   limit = 20,
   offset = 0,
@@ -112,28 +141,22 @@ export async function getRounds(
           user: true,
         },
       },
+      voters: {
+        with: {
+          user: true,
+        },
+      },
     },
   });
 
-  return results.map((round) => {
-    const state = inferRoundState(round);
-
-    return {
-      id: round.id,
-      type: "round",
-      chainId: round.chainId,
-      round: {
-        ...round,
-        adminWalletAddresses: mapVotersOrAdminsToAddresses(round.admins),
-        state,
-        isAdmin: false,
-      }
-    };
-  });
+  return results.map((r) => mapDbRoundToWrappedRound(requestingUserId, r));
 }
 
-async function getRawWrappedRound(slug: string, tx?: Transaction): Promise<WrappedRound<RoundAdminFields> | null> {
-  const round = await (tx ?? db).query.rounds.findFirst({
+async function getRawRound(
+  slug: string,
+  tx?: Transaction,
+): Promise<RoundSelectModelWithRelations | null> {
+  return await (tx ?? db).query.rounds.findFirst({
     where: eq(lower(rounds.urlSlug), slug.toLowerCase()),
     with: {
       admins: {
@@ -147,68 +170,24 @@ async function getRawWrappedRound(slug: string, tx?: Transaction): Promise<Wrapp
         },
       },
     },
-  });
-  if (!round) {
-    return null;
-  }
-
-  const state = inferRoundState(round);
-
-  return {
-    id: round.id,
-    type: "round",
-    chainId: round.chainId,
-    round: {
-      ...round,
-      state,
-      adminWalletAddresses: mapVotersOrAdminsToAddresses(round.admins),
-      votingConfig: {
-        ...round.votingConfig,
-        allowedVoters: mapVotersOrAdminsToAddresses(round.voters),
-      },
-      isAdmin: true,
-    }
-  };
+  }) ?? null;
 }
 
-export async function getWrappedRoundPublic(
-  roundSlug: string,
-): Promise<WrappedRound<RoundPublicFields> | null> {
-  const round = await getRawWrappedRound(roundSlug);
-  if (!round) {
-    return null;
-  }
-
-  const withoutAdminFields = roundPublicFieldsSchema.parse({
-    ...round.round,
-    isAdmin: false,
-  });
-
-  return {
-    id: round.id,
-    type: "round",
-    chainId: round.chainId,
-    round: {
-      ...withoutAdminFields,
-    }
-  };
-}
-
-export async function getWrappedRoundAdmin(
-  roundSlug: string,
+export async function getWrappedRound(
+  slug: string,
+  requestingUserId: string | null,
   tx?: Transaction,
-): Promise<WrappedRound<RoundAdminFields> | null> {
-  const round = await getRawWrappedRound(roundSlug, tx);
-  if (!round) {
+): Promise<WrappedRound<RoundAdminFields | RoundPublicFields> | null> {
+  const rawRound = await getRawRound(slug, tx);
+
+  if (!rawRound) {
     return null;
   }
 
-  return {
-    id: round.id,
-    type: "round",
-    chainId: round.chainId,
-    round: round.round as RoundAdminFields,
-  };
+  return mapDbRoundToWrappedRound(
+    requestingUserId,
+    rawRound,
+  );
 }
 
 export async function createRoundDraft(
@@ -298,14 +277,15 @@ export async function patchRoundDraft(
     }
 
     // Compare the current draft with the updates to determine which fields have changed
-    const changedFields = (Object.keys(updates) as (keyof CreateRoundDraftDto)[]).filter((key) => {
-      // Skip the adminWalletAddresses field, as it will be handled separately
-      if (key === "adminWalletAddresses") {
-        return false;
-      }
-      // Check if the value has changed
-      return roundDraft.draft[key] !== updates[key];
-    });
+    const changedFields =
+      (Object.keys(updates) as (keyof CreateRoundDraftDto)[]).filter((key) => {
+        // Skip the adminWalletAddresses field, as it will be handled separately
+        if (key === "adminWalletAddresses") {
+          return false;
+        }
+        // Check if the value has changed
+        return roundDraft.draft[key] !== updates[key];
+      });
 
     // If the URL slug has changed and is provided, check its availability
     if (changedFields.includes("urlSlug") && updates.urlSlug) {
@@ -323,7 +303,13 @@ export async function patchRoundDraft(
 
     // If some schedule-related fields have changed, validate the new schedule
     if (
-      ["applicationPeriodStart", "applicationPeriodEnd", "votingPeriodStart", "votingPeriodEnd", "resultsPeriodStart"].some(
+      [
+        "applicationPeriodStart",
+        "applicationPeriodEnd",
+        "votingPeriodStart",
+        "votingPeriodEnd",
+        "resultsPeriodStart",
+      ].some(
         (key) => changedFields.includes(key as keyof CreateRoundDraftDto),
       )
     ) {
@@ -357,7 +343,7 @@ export async function patchRoundDraft(
     return await getRoundDrafts({ id: roundDraftId }, 1, 0);
   });
 
-  return result[0]
+  return result[0];
 }
 
 export async function deleteRoundDraft(
@@ -394,7 +380,8 @@ function validateRoundDraft(
   let scheduleValid = true;
   let draftComplete = true;
 
-  if (roundDraft.applicationPeriodStart &&
+  if (
+    roundDraft.applicationPeriodStart &&
     roundDraft.applicationPeriodEnd &&
     roundDraft.votingPeriodStart &&
     roundDraft.votingPeriodEnd &&
@@ -410,7 +397,7 @@ function validateRoundDraft(
   return {
     scheduleValid,
     draftComplete,
-  }
+  };
 }
 
 export async function getRoundDrafts(
@@ -453,6 +440,7 @@ export async function getRoundDrafts(
 
 export async function publishRoundDraft(
   roundDraftId: string,
+  publishedByUserId: string,
 ): Promise<WrappedRound<RoundAdminFields>> {
   const result = await db.transaction(async (tx) => {
     const roundDraft = await tx.query.roundDrafts.findFirst({
@@ -514,7 +502,7 @@ export async function publishRoundDraft(
       publishedAsRoundId: newRound.id,
     }).where(eq(roundDrafts.id, roundDraftId));
 
-    const fullRound = await getWrappedRoundAdmin(newRound.urlSlug, tx);
+    const fullRound = await getWrappedRound(newRound.urlSlug, publishedByUserId, tx);
     if (!fullRound) {
       throw new Error("Failed to retrieve the newly created round.");
     }
@@ -522,7 +510,7 @@ export async function publishRoundDraft(
     return fullRound;
   });
 
-  return result;
+  return result as WrappedRound<RoundAdminFields>;
 }
 
 function validateSchedule(
@@ -629,8 +617,9 @@ function validateSchedule(
 
 export async function patchRound(
   roundId: string,
+  patchingUserId: string,
   updates: PatchRoundDto,
-): Promise<RoundAdminFields | null> {
+): Promise<WrappedRound<RoundAdminFields> | null> {
   validateSchedule(updates);
 
   const result = await db.transaction(async (tx) => {
@@ -690,10 +679,14 @@ export async function patchRound(
       }
     }
 
-    return result;
+    return await getWrappedRound(
+      result[0].urlSlug,
+      patchingUserId,
+      tx,
+    );
   });
 
-  return roundAdminFieldsSchema.parse(result[0]);
+  return result as WrappedRound<RoundAdminFields>;
 }
 
 export async function deleteRound(roundId: string): Promise<void> {

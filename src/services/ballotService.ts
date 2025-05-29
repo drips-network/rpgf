@@ -5,24 +5,6 @@ import { Ballot, SubmitBallotDto, WrappedBallot } from "../types/ballot.ts";
 import { BadRequestError } from "../errors/generic.ts";
 import { EthereumAddress } from "../types/shared.ts";
 
-export async function isUserRoundVoter(
-  userId: string | undefined,
-  roundId: string,
-): Promise<boolean> {
-  if (!userId) {
-    return false;
-  }
-
-  const result = await db.query.roundVoters.findFirst({
-    where: and(
-      eq(roundVoters.roundId, roundId),
-      eq(roundVoters.userId, userId),
-    ),
-  });
-
-  return !!result;
-}
-
 export async function getBallot(
   roundId: string,
   userId: string,

@@ -226,6 +226,8 @@ export type WrappedRound<T extends RoundPublicFields | RoundAdminFields> = {
   type: "round";
   chainId: number;
   round: T;
+  isVoter: boolean;
+  isAdmin: boolean;
 }
 
 export type WrappedRoundDraft = {
