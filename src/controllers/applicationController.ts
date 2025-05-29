@@ -141,7 +141,7 @@ export async function getApplicationController(
     }
 
     // return without private fields
-    ctx.response.body = filterPrivateFields(round.applicationFormat, application);
+    return ctx.response.body = filterPrivateFields(round.applicationFormat, application);
   }
 
   ctx.response.status = 200;
@@ -166,7 +166,6 @@ export async function submitApplicationReviewController(
   }
 
   const round = (await getWrappedRoundPublic(roundSlug))?.round;
-  console.log({ round });
   if (!round) {
     throw new NotFoundError("Round not found");
   }
