@@ -38,12 +38,12 @@ export async function createAppplicationController(
     createApplicationDtoSchema(round.applicationFormat),
     ctx,
   );
+  console.log({dto})
 
   const application = await createApplication(
     round.id,
     userId,
     userWalletAddress,
-    round.applicationFormat,
     dto,
   );
 
@@ -85,16 +85,16 @@ export async function getApplicationsForRoundController(
     },
   );
 
-  const ownApplication = userId
+  const ownApplications = userId
     ? (await getApplications(round.id, round.applicationFormat, true, {
       submitterUserId: userId,
-    }))[0]
+    }))
     : null;
 
   const result: Application[] = approvedApplications;
 
-  if (ownApplication) {
-    result.push(ownApplication);
+  if (ownApplications) {
+    result.push(...ownApplications);
   }
 
   ctx.response.status = 200;

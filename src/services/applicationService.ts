@@ -5,7 +5,6 @@ import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
   Application,
   ApplicationReviewDto,
-  applicationSchema,
   ApplicationState,
   CreateApplicationDto,
 } from "../types/application.ts";
@@ -17,7 +16,6 @@ export async function createApplication(
   roundId: string,
   submitterUserId: string,
   submitterWalletAddress: string,
-  applicationFormat: ApplicationFormat,
   applicationDto: CreateApplicationDto,
 ): Promise<Application> {
   // TODO: Validate an on-chain attestation for this application
@@ -60,7 +58,7 @@ export async function createApplication(
     return newApplications[0];
   });
 
-  return applicationSchema(applicationFormat).parse(result);
+  return result;
 }
 
 export async function getApplications(
