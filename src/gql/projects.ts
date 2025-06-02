@@ -49,7 +49,5 @@ export async function getProject(accountId: string, chainGqlName: string) {
     }).nullable(),
   }).parse(res);
 
-  console.log({ accountId, chainGqlName, owner: parsed.projectById?.chainData[0]?.owner });
-
   return parsed.projectById?.chainData[0] ?? null;
 }

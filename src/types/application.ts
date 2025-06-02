@@ -6,11 +6,13 @@ import { projectChainDataSchema } from "../gql/projects.ts";
 export const applicationStateSchema = z.enum(["pending", "approved", "rejected"]);
 export type ApplicationState = z.infer<typeof applicationStateSchema>;
 
-function buildDynamicApplicatonFieldSchema(applicationFormat: ApplicationFormat) {
+function buildDynamicApplicatonFieldSchema(applicationFormat: ApplicationFormat, withPrivateFields = true) {
   const fillableFields = applicationFormat.filter((f) => 'slug' in f);
 
   const fields = Object.fromEntries(mapFilterUndefined(fillableFields, (field) => {
     let fieldSchema;
+    
+    if (!withPrivateFields && field.private) return undefined;
 
     switch (field.type) {
       case "text":
@@ -45,10 +47,11 @@ function buildDynamicApplicatonFieldSchema(applicationFormat: ApplicationFormat)
   return z.object(fields);
 }
 
-export const createApplicationDtoSchema = (applicationFormat: ApplicationFormat) => z.object({
+export const createApplicationDtoSchema = (applicationFormat: ApplicationFormat, withPrivateFields = true) => z.object({
   projectName: z.string().min(1).max(255),
   dripsAccountId: z.string().min(1).max(255),
-  fields: buildDynamicApplicatonFieldSchema(applicationFormat),
+  attestationUID: z.string().min(1).max(255).optional(),
+  fields: buildDynamicApplicatonFieldSchema(applicationFormat, withPrivateFields),
 });
 export type CreateApplicationDto = z.infer<ReturnType<typeof createApplicationDtoSchema>>;
 

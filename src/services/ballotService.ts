@@ -75,8 +75,6 @@ export async function getBallots(
     offset,
   });
 
-  console.log({ limit, offset, submittedBallots, voters });
-
   const result = voters.map((voter) => {
     const ballot = submittedBallots.find(
       (b) => b.voterUserId === voter.userId,

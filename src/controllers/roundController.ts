@@ -198,9 +198,10 @@ export async function getRoundController(
   >,
 ) {
   const roundSlug = ctx.params.slug;
+  const chainId = Number(ctx.request.url.searchParams.get("chainId")) || undefined;
   const userId = ctx.state.user?.userId;
 
-  const round = await getWrappedRound(roundSlug, userId ?? null);
+  const round = await getWrappedRound(roundSlug, userId ?? null, undefined, chainId);
   if (!round) {
     throw new NotFoundError("Round not found");
   }

@@ -30,10 +30,18 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
+type EasConfig = {
+  easAddress: string;
+  applicationAttestationSchemaUID: string;
+  applicationReviewAttestationSchemaUID: string;
+}
+
 export const chains = pgTable("chains", {
   id: serial("id").primaryKey(),
   chainId: integer("chain_id").notNull(),
   gqlName: varchar("gql_name", { length: 255 }).notNull(),
+  attestationSetup: jsonb("attestation_setup").$type<EasConfig>(), // if null, attestations not required on given chain
+  rpcUrl: varchar("rpc_url", { length: 255 }).notNull(),
 });
 
 export const rounds = pgTable("rounds", {
@@ -124,6 +132,7 @@ export const applications = pgTable("applications", {
   id: uuid("id").primaryKey().defaultRandom(),
   state: varchar("state", { length: 255 }).notNull().default("pending").$type<ApplicationState>(),
   projectName: varchar("project_name", { length: 255 }).notNull(),
+  easAttestationUID: varchar("attestation_uid", { length: 255 }),
   dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
   dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectChainData>().notNull(),
   submitterUserId: uuid("submitter").notNull().references(() => users.id),

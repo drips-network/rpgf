@@ -162,9 +162,21 @@ export async function getRounds(
 async function getRawRound(
   slug: string,
   tx?: Transaction,
+  chainId?: number,
 ): Promise<RoundSelectModelWithRelations | null> {
+  let chain: InferSelectModel<typeof chains> | undefined;
+
+  if (chainId) {
+    chain = await db.query.chains.findFirst({
+      where: eq(chains.chainId, chainId),
+    });
+  }
+
   return await (tx ?? db).query.rounds.findFirst({
-    where: eq(lower(rounds.urlSlug), slug.toLowerCase()),
+    where: and(
+      chain ? eq(rounds.chainId, chain.id) : undefined,
+      eq(lower(rounds.urlSlug), slug.toLowerCase()),
+    ),
     with: {
       admins: {
         with: {
@@ -184,8 +196,9 @@ export async function getWrappedRound(
   slug: string,
   requestingUserId: string | null,
   tx?: Transaction,
+  chainId?: number,
 ): Promise<WrappedRound<RoundAdminFields | RoundPublicFields> | null> {
-  const rawRound = await getRawRound(slug, tx);
+  const rawRound = await getRawRound(slug, tx, chainId);
 
   if (!rawRound) {
     return null;

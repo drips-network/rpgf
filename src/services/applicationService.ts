@@ -7,10 +7,98 @@ import {
   ApplicationReviewDto,
   ApplicationState,
   CreateApplicationDto,
+  createApplicationDtoSchema,
 } from "../types/application.ts";
 import { ApplicationFormat } from "../types/round.ts";
 import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
 import { getProject } from "../gql/projects.ts";
+import { type Provider, JsonRpcProvider } from "ethers";
+import { EAS, SchemaEncoder } from "@ethereum-attestation-service/eas-sdk";
+import * as ipfs from "../ipfs/ipfs.ts";
+import z from "zod";
+
+async function validateEasAttestation(
+  applicationDto: CreateApplicationDto,
+  applicationFormat: ApplicationFormat,
+  submitterWalletAddress: string,
+  easContractAddress: string,
+  provider: Provider,
+) {
+  const { attestationUID: uid, projectName, dripsAccountId, fields } = applicationDto;
+  if (!uid) {
+    throw new BadRequestError("EAS UID is required for attestation validation");
+  }
+
+  const eas = new EAS(easContractAddress);
+  eas.connect(provider);
+
+  const attestation = await eas.getAttestation(uid);
+  if (!attestation) {
+    throw new BadRequestError("EAS attestation not found");
+  }
+
+  if (attestation.attester.toLowerCase() !== submitterWalletAddress.toLowerCase()) {
+    throw new BadRequestError("EAS attestation does not match the submitter's wallet address");
+  }
+
+  const schemaEncoder = new SchemaEncoder(
+    "string applicationDataIpfs,string roundSlug",
+  );
+  const decoded = schemaEncoder.decodeData(attestation.data);
+
+  const ipfsHashParse = z.string().safeParse(decoded.find((v) => v.name === "applicationDataIpfs")?.value.value);
+  if (!ipfsHashParse.success) {
+    throw new BadRequestError("EAS attestation does not contain applicationDataIpfs, or is invalid");
+  }
+
+  const ipfsData = await ipfs.getIpfsFile(ipfsHashParse.data);
+
+  const attestedApplicationDtoParse = createApplicationDtoSchema(applicationFormat, false).safeParse(JSON.parse(ipfsData));
+  if (!attestedApplicationDtoParse.success) {
+    throw new BadRequestError("EAS attestation data is not a valid application DTO for this round");
+  }
+
+  const attestedApplicationDto = attestedApplicationDtoParse.data;
+  
+  if (attestedApplicationDto.projectName !== projectName) {
+    throw new BadRequestError("EAS attestation project name does not match the submitted application");
+  }
+
+  if (attestedApplicationDto.dripsAccountId !== dripsAccountId) {
+    throw new BadRequestError("EAS attestation drips account ID does not match the submitted application");
+  }
+
+  const attestedFields = attestedApplicationDto.fields;
+
+  for (const [key, value] of Object.entries(fields)) {
+    const fillableFields = applicationFormat.filter((f) => 'slug' in f);
+    const field = fillableFields.find((f) => f.slug === key);
+    if (!field) {
+      throw new Error(`Field ${key} is not part of the application format`);
+    }
+
+    // the field must be present in the attested fields IF IT IS NOT PRIVATE.
+    // if it's present, it must match the value in the submitted application
+
+    if (field.private) {
+      continue;
+    }
+
+    if (!(key in attestedFields)) {
+      throw new BadRequestError(`EAS attestation is missing field ${key}`);
+    }
+
+    const attestedValue = attestedFields[key];
+
+    if (typeof attestedValue !== typeof value) {
+      throw new BadRequestError(`EAS attestation field ${key} type does not match the submitted application`);
+    }
+
+    if (JSON.stringify(attestedValue) !== JSON.stringify(value)) {
+      throw new BadRequestError(`EAS attestation field ${key} value does not match the submitted application`);
+    }
+  }
+}
 
 export async function createApplication(
   roundId: string,
@@ -18,8 +106,6 @@ export async function createApplication(
   submitterWalletAddress: string,
   applicationDto: CreateApplicationDto,
 ): Promise<Application> {
-  // TODO: Validate an on-chain attestation for this application
-
   const result = await db.transaction(async (tx) => {
     const round = await db.query.rounds.findFirst({
       where: eq(rounds.id, roundId),
@@ -31,21 +117,32 @@ export async function createApplication(
       throw new NotFoundError("Round not found");
     }
 
-    const { gqlName: chainGqlName } = round?.chain;
+    const { gqlName: chainGqlName, attestationSetup } = round.chain;
 
-    // TODO: Validate that the submitterUserId is the owner of the dripsAccountId
+    const provider = new JsonRpcProvider(round.chain.rpcUrl);
+
+    if (attestationSetup) {
+      await validateEasAttestation(
+        applicationDto,
+        round.applicationFormat,
+        submitterWalletAddress,
+        attestationSetup.easAddress,
+        provider,
+      );
+    }
+
     const onChainProject = await getProject(applicationDto.dripsAccountId, chainGqlName);
     if (!onChainProject) {
       throw new BadRequestError("Drips Account ID is not for a valid, claimed project");
     }
     if (onChainProject.owner.address.toLowerCase() !== submitterWalletAddress.toLowerCase()) {
-      console.log({ onChainProject, submitterWalletAddress });
       throw new BadRequestError("Drips Account ID is pointing at a project not currently owned by the submitter");
     }
 
     const newApplications = await tx.insert(applications).values({
       projectName: applicationDto.projectName,
       dripsProjectDataSnapshot: onChainProject,
+      easAttestationUID: applicationDto.attestationUID,
       dripsAccountId: applicationDto.dripsAccountId,
       fields: applicationDto.fields,
       submitterUserId,

@@ -38,7 +38,6 @@ export async function createAppplicationController(
     createApplicationDtoSchema(round.applicationFormat),
     ctx,
   );
-  console.log({dto})
 
   const application = await createApplication(
     round.id,

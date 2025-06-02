@@ -1,0 +1,1 @@
+ALTER TABLE "chains" ADD COLUMN "attestation_setup" jsonb;
