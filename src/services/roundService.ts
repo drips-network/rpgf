@@ -136,7 +136,7 @@ export async function getRounds(
       where: eq(chains.chainId, filter.chainId),
     })
     : undefined;
-  if (!chain) throw new BadRequestError("Unsupported chain ID.");
+  if (filter?.chainId && !chain) throw new BadRequestError("Unsupported chain ID.");
 
   const results = await db.query.rounds.findMany({
     limit,
@@ -417,7 +417,7 @@ export async function getRoundDrafts(
       where: eq(chains.chainId, filter.chainId),
     })
     : undefined;
-  if (!chain) throw new BadRequestError("Unsupported chain ID.");
+  if (filter?.chainId && !chain) throw new BadRequestError("Unsupported chain ID.");
 
   const results = await db.query.roundDrafts.findMany({
     limit,
