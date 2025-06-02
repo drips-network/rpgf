@@ -33,6 +33,7 @@ export async function createApplication(
 
     const { gqlName: chainGqlName } = round?.chain;
 
+    // TODO: Validate that the submitterUserId is the owner of the dripsAccountId
     const onChainProject = await getProject(applicationDto.dripsAccountId, chainGqlName);
     if (!onChainProject) {
       throw new BadRequestError("Drips Account ID is not for a valid, claimed project");
