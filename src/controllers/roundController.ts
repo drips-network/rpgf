@@ -76,11 +76,12 @@ export async function getRoundDraftsController(
 ) {
   const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
   const offset = Number(ctx.request.url.searchParams.get("offset")) || 0;
+  const chainId = Number(ctx.request.url.searchParams.get("chainId")) || undefined;
   const userId = ctx.state.user.userId;
 
   // You can only see your own drafts
   const roundDrafts = await getRoundDrafts(
-    { creatorUserId: userId },
+    { creatorUserId: userId, chainId },
     limit,
     offset,
   );

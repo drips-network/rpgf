@@ -131,10 +131,17 @@ export async function getRounds(
   limit = 20,
   offset = 0,
 ): Promise<WrappedRound<RoundPublicFields>[]> {
+  const chain = filter?.chainId
+    ? await db.query.chains.findFirst({
+      where: eq(chains.chainId, filter.chainId),
+    })
+    : undefined;
+  if (!chain) throw new BadRequestError("Unsupported chain ID.");
+
   const results = await db.query.rounds.findMany({
     limit,
     offset,
-    where: filter?.chainId ? eq(rounds.chainId, filter.chainId) : undefined,
+    where: chain ? eq(rounds.chainId, chain.id) : undefined,
     with: {
       admins: {
         with: {
@@ -405,11 +412,18 @@ export async function getRoundDrafts(
   limit = 20,
   offset = 0,
 ): Promise<WrappedRoundDraft[]> {
+  const chain = filter?.chainId
+    ? await db.query.chains.findFirst({
+      where: eq(chains.chainId, filter.chainId),
+    })
+    : undefined;
+  if (!chain) throw new BadRequestError("Unsupported chain ID.");
+
   const results = await db.query.roundDrafts.findMany({
     limit,
     offset,
     where: and(
-      filter?.chainId ? eq(roundDrafts, filter.chainId) : undefined,
+      chain ? eq(roundDrafts.chainId, chain.id) : undefined,
       filter?.creatorUserId
         ? eq(roundDrafts.createdByUserId, filter.creatorUserId)
         : undefined,
