@@ -1,81 +1,87 @@
 import { RouteParams, RouterContext } from "oak";
 import { AuthenticatedAppState } from "../../main.ts";
-import { getBallot, getBallots, submitBallot } from "../services/ballotService.ts";
+import { getBallot, getBallots, patchBallot, submitBallot } from "../services/ballotService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import parseDto from "../utils/parseDto.ts";
-import { Ballot, submitBallotDtoSchema } from "../types/ballot.ts";
+import { submitBallotDtoSchema } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { getWrappedRound } from "../services/roundService.ts";
 
-function validateBallot(ballot: Ballot, votingConfig: {
-  maxVotesPerVoter: number;
-  maxVotesPerProjectPerVoter: number;
-}) {
-  const totalVotes = Object.values(ballot).reduce((acc, voteCount) => acc + voteCount, 0);
-  if (totalVotes > votingConfig.maxVotesPerVoter) {
-    throw new BadRequestError(`Total votes exceed the maximum allowed (${votingConfig.maxVotesPerVoter})`);
-  }
-
-  const projectVoteCounts = Object.entries(ballot).reduce((acc, [applicationId, voteCount]) => {
-    acc[Number(applicationId)] = (acc[Number(applicationId)] || 0) + voteCount;
-    return acc;
-  }, {} as Record<number, number>);
-
-  for (const projectId in projectVoteCounts) {
-    if (projectVoteCounts[projectId] > votingConfig.maxVotesPerProjectPerVoter) {
-      throw new BadRequestError(`Votes for project ${projectId} exceed the maximum allowed (${votingConfig.maxVotesPerProjectPerVoter})`);
-    }
-  }
-}
-
 export async function submitBallotController(
   ctx: RouterContext<
-      "/api/rounds/:id/ballots",
-      RouteParams<"/api/rounds/:id/ballots">,
+      "/api/rounds/:slug/ballots",
+      RouteParams<"/api/rounds/:slug/ballots">,
       AuthenticatedAppState
     >,
 ) {
-  const roundId = ctx.params.id;
+  const slug = ctx.params.slug;
   const userId = ctx.state.user.userId;
 
-  const { round, isVoter } = await getWrappedRound(roundId, userId) ?? {};
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
-
-  if (round.state !== "voting") {
-    throw new BadRequestError("Round is not in voting state");
-  }
-
-  if (!isVoter) {
-    throw new UnauthorizedError("You are not authorized to submit a ballot for this round");
-  }
-
-  const existingBallot = await getBallot(roundId, userId);
-  if (existingBallot) {
-    throw new BadRequestError("You have already submitted a ballot for this round");
-  }
-
   const dto = await parseDto(submitBallotDtoSchema, ctx);
-
-  const { votingConfig } = round;
-
-  validateBallot(dto['ballot'], votingConfig);
-
-  const result = await submitBallot(userId, dto);
+  const result = await submitBallot(userId, slug, dto);
 
   ctx.response.status = 200;
   ctx.response.body = result;
 }
 
-export async function getBallotsController(
+export async function patchBallotController(
   ctx: RouterContext<
-      "/api/rounds/:id/ballots",
-      RouteParams<"/api/rounds/:id/ballots">,
+      "/api/rounds/:slug/ballots/own",
+      RouteParams<"/api/rounds/:slug/ballots/own">,
       AuthenticatedAppState
     >,
 ) {
-  const roundId = ctx.params.id;
+  const slug = ctx.params.slug;
+  const userId = ctx.state.user.userId;
+
+  const dto = await parseDto(submitBallotDtoSchema, ctx);
+  const result = await patchBallot(userId, slug, dto);
+
+  ctx.response.status = 200;
+  ctx.response.body = result;
+}
+
+export async function getOwnBallotController(
+  ctx: RouterContext<
+      "/api/rounds/:slug/ballots/own",
+      RouteParams<"/api/rounds/:slug/ballots/own">,
+      AuthenticatedAppState
+    >,
+) {
+  const slug = ctx.params.slug;
+  const userId = ctx.state.user.userId;
+
+  const { round, isVoter } = await getWrappedRound(slug, userId) ?? {};
+
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
+  if (!isVoter) {
+    throw new UnauthorizedError("You are not a voter for this round");
+  }
+
+  if (round.state !== "voting") {
+    throw new BadRequestError("You can only view your ballot during the voting phase");
+  }
+
+  const ballot = await getBallot(slug, userId);
+  if (!ballot) {
+    throw new NotFoundError("You haven't submitted a ballot yet");
+  }
+
+  ctx.response.status = 200;
+  ctx.response.body = ballot;
+}
+
+export async function getBallotsController(
+  ctx: RouterContext<
+      "/api/rounds/:slug/ballots",
+      RouteParams<"/api/rounds/:slug/ballots">,
+      AuthenticatedAppState
+    >,
+) {
+  const slug = ctx.params.slug;
   const userId = ctx.state.user.userId;
   const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
   const offset = Number(ctx.request.url.searchParams.get("page")) || 0;
@@ -85,7 +91,7 @@ export async function getBallotsController(
     throw new BadRequestError("Invalid format. Possible: json, csv");
   }
 
-  const { round, isAdmin } = await getWrappedRound(roundId, userId) ?? {};
+  const { round, isAdmin } = await getWrappedRound(slug, userId) ?? {};
 
   if (!round) {
     throw new NotFoundError("Round not found");
@@ -99,7 +105,7 @@ export async function getBallotsController(
     throw new BadRequestError("Round voting hasn't started yet");
   }
 
-  const ballots = await getBallots(roundId, limit, offset, format);
+  const ballots = await getBallots(slug, limit, offset, format);
 
   ctx.response.status = 200;
   ctx.response.body = ballots;

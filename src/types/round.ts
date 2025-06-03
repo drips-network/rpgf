@@ -228,6 +228,10 @@ export type WrappedRound<T extends RoundPublicFields | RoundAdminFields> = {
   round: T;
   isVoter: boolean;
   isAdmin: boolean;
+  createdBy: {
+    id: string;
+    walletAddress: string;
+  }
 }
 
 export type WrappedRoundDraft = {
@@ -239,4 +243,9 @@ export type WrappedRoundDraft = {
     scheduleValid: boolean;
     draftComplete: boolean;
   }
+  createdBy: {
+    id: string;
+    walletAddress: string;
+  }
+  isAdmin: true,
 }

@@ -72,6 +72,7 @@ function mapVotersOrAdminsToAddresses(
 type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
   admins: { user: { id: string, walletAddress: string } }[];
   voters: { user: { id: string, walletAddress: string } }[];
+  createdBy: { id: string, walletAddress: string };
 };
 
 function mapDbRoundToWrappedRound(
@@ -122,8 +123,38 @@ function mapDbRoundToWrappedRound(
     },
     isAdmin,
     isVoter,
+    createdBy: {
+      id: roundSelectModel.createdBy.id,
+      walletAddress: roundSelectModel.createdBy.walletAddress,
+    }
   } as WrappedRound<RoundPublicFields | RoundAdminFields>;
 };
+
+type RoundDraftSelectModelWithRelations = InferSelectModel<typeof roundDrafts> & {
+  admins: { user: { id: string, walletAddress: string } }[];
+  createdBy: { id: string, walletAddress: string };
+};
+
+function mapDbDraftToWrappedRoundDraft(
+  roundDraftSelectModel: RoundDraftSelectModelWithRelations,
+): WrappedRoundDraft {
+  return {
+    id: roundDraftSelectModel.id,
+    chainId: roundDraftSelectModel.chainId,
+    type: "round-draft",
+    draft: {
+      ...roundDraftSelectModel.draft,
+      adminWalletAddresses: mapVotersOrAdminsToAddresses(roundDraftSelectModel.admins),
+    },
+    validation: validateRoundDraft(roundDraftSelectModel.draft),
+    createdBy: {
+      id: roundDraftSelectModel.createdBy.id,
+      walletAddress: roundDraftSelectModel.createdBy.walletAddress,
+    },
+    // only admins can see drafts
+    isAdmin: true,
+  };
+}
 
 export async function getRounds(
   requestingUserId: string | null,
@@ -153,6 +184,7 @@ export async function getRounds(
           user: true,
         },
       },
+      createdBy: true,
     },
   });
 
@@ -188,6 +220,7 @@ async function getRawRound(
           user: true,
         },
       },
+      createdBy: true,
     },
   }) ?? null;
 }
@@ -213,10 +246,10 @@ export async function getWrappedRound(
 export async function createRoundDraft(
   roundDraftDto: CreateRoundDraftDto,
   creatorUserId: string,
-) {
+): Promise<WrappedRoundDraft> {
   const result = await db.transaction(async (tx) => {
     const chain = await tx.query.chains.findFirst({
-      where: eq(chains.id, roundDraftDto.chainId),
+      where: eq(chains.chainId, roundDraftDto.chainId),
     });
     if (!chain) {
       throw new BadRequestError(
@@ -238,7 +271,7 @@ export async function createRoundDraft(
     }
 
     const { insertedId } = (await tx.insert(roundDrafts).values({
-      chainId: roundDraftDto.chainId,
+      chainId: chain.id,
       createdByUserId: creatorUserId,
       draft: roundDraftDto,
     }).returning({ insertedId: roundDrafts.id }))[0];
@@ -260,21 +293,17 @@ export async function createRoundDraft(
             user: true,
           },
         },
+        createdBy: true,
       },
     });
     if (!newRoundDraft) {
       throw new Error("Failed to create round draft.");
     }
 
-    return {
-      ...newRoundDraft.draft,
-      adminWalletAddresses: mapVotersOrAdminsToAddresses(
-        newRoundDraft.admins,
-      ),
-    };
+    return newRoundDraft;
   });
 
-  return result;
+  return mapDbDraftToWrappedRoundDraft(result);
 }
 
 export async function patchRoundDraft(
@@ -449,20 +478,11 @@ export async function getRoundDrafts(
           user: true,
         },
       },
+      createdBy: true,
     },
   });
 
-  return results.map((draftWrapper) => {
-    return {
-      ...draftWrapper,
-      type: "round-draft",
-      validation: validateRoundDraft(draftWrapper.draft),
-      draft: {
-        ...draftWrapper.draft,
-        adminWalletAddresses: mapVotersOrAdminsToAddresses(draftWrapper.admins),
-      },
-    };
-  });
+  return results.map((draftWrapper) => mapDbDraftToWrappedRoundDraft(draftWrapper));
 }
 
 export async function publishRoundDraft(
