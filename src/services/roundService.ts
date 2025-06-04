@@ -527,7 +527,7 @@ export async function publishRoundDraft(
       name: roundDto.name,
       emoji: roundDto.emoji,
       color: roundDto.color,
-      chainId: realChain.chainId,
+      chainId: realChain.id,
       description: roundDto.description,
       applicationPeriodStart: new Date(roundDto.applicationPeriodStart),
       applicationPeriodEnd: new Date(roundDto.applicationPeriodEnd),
