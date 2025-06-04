@@ -3,7 +3,7 @@
 ## Don't use this for building public images
 
 # Use an official Deno image.
-FROM denoland/deno:1.40.3
+FROM denoland/deno:2.3.5
 
 # Embed env vars into image (required for Railway)
 ARG DB_CONNECTION_STRING
