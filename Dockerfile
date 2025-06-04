@@ -1,3 +1,7 @@
+## WARNING: This Dockerfile is ONLY FOR DEPLOYMENT ON RAILWAY and WILL EMBED
+## SECRET API TOKENS IN THE IMAGE.
+## Don't use this for building public images
+
 # Use an official Deno image.
 FROM denoland/deno:1.40.3
 
@@ -18,4 +22,4 @@ EXPOSE 8000
 # Command to run the application
 # Deno uses deno.json automatically for import maps.
 # Permissions are still needed.
-CMD ["run", "--allow-net", "--allow-env", "--allow-read", "main.ts"]
+CMD ["deno", "task", "start"]
