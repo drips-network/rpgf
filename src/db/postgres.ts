@@ -3,18 +3,7 @@ import * as schema from "$app/db/schema.ts";
 import { PgTransaction } from "drizzle-orm/pg-core/session";
 import { ExtractTablesWithRelations } from "drizzle-orm";
 
-const DB_HOST = Deno.env.get("DB_HOST") || "localhost";
-const DB_PORT = parseInt(Deno.env.get("DB_PORT") || "5432");
-const DB_USER = Deno.env.get("DB_USER") || "rpgf_user";
-const DB_PASSWORD = Deno.env.get("DB_PASSWORD") || "rpgf_password";
-const DB_NAME = Deno.env.get("DB_NAME") || "rpgf_db";
-// const DB_POOL_SIZE = parseInt(Deno.env.get("DB_POOL_SIZE") || "5"); // postgres.js handles pooling
-
-const connectionString = `postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
-
-console.log(
-  `Setting up Drizzle with PostgreSQL: user=${DB_USER} host=${DB_HOST} port=${DB_PORT} dbname=${DB_NAME}`,
-);
+const connectionString = Deno.env.get("DB_CONNECTION_STRING");
 
 // Initialize Drizzle ORM with the postgres.js client and schema
 // The schema import gives Drizzle access to your table definitions.
