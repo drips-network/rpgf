@@ -15,14 +15,11 @@ ARG JWT_EXPIRATION_MINUTES
 
 # Set the working directory in the container
 WORKDIR /app
+COPY . .
 
 # Cache dependencies. Deno will use deno.json automatically.
 # Copy deno.json first so this layer is cached if only source files change.
-COPY deno.json .
-RUN deno install
-
-# Bundle the application source (after caching, to leverage Docker layer caching)
-COPY . .
+RUN deno cache main.ts
 
 # Expose the port the app runs on
 EXPOSE 8000
