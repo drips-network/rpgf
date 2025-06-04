@@ -27,4 +27,4 @@ EXPOSE 8000
 # Command to run the application
 # Deno uses deno.json automatically for import maps.
 # Permissions are still needed.
-CMD ["deno", "task", "start"]
+CMD ["deno", "run", "--node-modules-dir", "--allow-net", "--allow-env", "--allow-read", "main.ts"]
