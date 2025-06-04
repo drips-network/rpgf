@@ -5,6 +5,14 @@
 # Use an official Deno image.
 FROM denoland/deno:1.40.3
 
+# Embed env vars into image (required for Railway)
+ARG DB_CONNECTION_STRING
+ARG DRIPS_GQL_API_URL
+ARG DRIPS_GQL_API_KEY
+
+ARG JWT_SECRET
+ARG JWT_EXPIRATION_MINUTES
+
 # Set the working directory in the container
 WORKDIR /app
 
