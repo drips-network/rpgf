@@ -62,7 +62,7 @@ export async function getOwnBallotController(
   }
 
   if (round.state !== "voting") {
-    throw new BadRequestError("You can only view your ballot during the voting phase");
+    throw new NotFoundError();
   }
 
   const ballot = await getBallot(slug, userId);
