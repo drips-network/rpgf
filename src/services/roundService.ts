@@ -510,13 +510,24 @@ export async function publishRoundDraft(
 
     validateSchedule(roundDto);
 
+    // Ugly, but drafts currently contain the canonical chain ID, but for rounds we store
+    // the ID of the chain in the `chains` table.
+    const realChain = await db.query.chains.findFirst({
+      where: eq(chains.chainId, roundDto.chainId),
+    });
+    if (!realChain) {
+      throw new BadRequestError(
+        `Chain with ID ${roundDto.chainId} is unsupported.`,
+      );
+    }
+
     const newRounds = await tx.insert(rounds).values({
       urlSlug: roundDto.urlSlug,
       createdFromDraftId: roundDraft.id,
       name: roundDto.name,
       emoji: roundDto.emoji,
       color: roundDto.color,
-      chainId: roundDto.chainId,
+      chainId: realChain.chainId,
       description: roundDto.description,
       applicationPeriodStart: new Date(roundDto.applicationPeriodStart),
       applicationPeriodEnd: new Date(roundDto.applicationPeriodEnd),
