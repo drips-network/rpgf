@@ -19,7 +19,7 @@ WORKDIR /app
 # Cache dependencies. Deno will use deno.json automatically.
 # Copy deno.json first so this layer is cached if only source files change.
 COPY deno.json .
-RUN deno cache main.ts
+RUN deno install
 
 # Bundle the application source (after caching, to leverage Docker layer caching)
 COPY . .
