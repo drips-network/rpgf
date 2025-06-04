@@ -4,6 +4,7 @@ import roundRoutes from "$app/routes/roundRoutes.ts";
 import applicationRoutes from "$app/routes/applicationRoutes.ts";
 import ballotRoutes from "$app/routes/ballotRoutes.ts";
 import resultRoutes from "$app/routes/resultRoutes.ts";
+import healthRoutes from "$app/routes/healthRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
@@ -50,6 +51,9 @@ app.use(async (ctx, next) => {
     }
   }
 });
+
+app.use(healthRoutes.routes());
+app.use(healthRoutes.allowedMethods());
 
 app.use(authMiddleware);
 
