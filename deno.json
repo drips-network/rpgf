@@ -33,7 +33,7 @@
   "tasks": {
     "start": "deno run --node-modules-dir --allow-net --allow-env --env-file --allow-read main.ts",
     "dev": "deno run --node-modules-dir --watch --allow-net --allow-env --env-file --allow-read main.ts",
-    "db:generate": "deno run -A --node-modules-dir  npm:drizzle-kit generate",
+    "db:generate": "deno run -A --node-modules-dir npm:drizzle-kit generate",
     "db:migrate": "deno run -A --node-modules-dir npm:drizzle-kit migrate",
     "db:studio": "deno run -A --node-modules-dir npm:drizzle-kit studio"
   }
