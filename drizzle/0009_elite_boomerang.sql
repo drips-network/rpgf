@@ -1,0 +1,1 @@
+ALTER TABLE "rounds" ADD COLUMN "voter_guidelines_link" varchar(255);

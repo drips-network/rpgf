@@ -70,6 +70,7 @@ export const rounds = pgTable("rounds", {
   }).notNull(),
   applicationFormat: jsonb("application_format").notNull().$type<ApplicationFormat>(),
   votingConfig: jsonb("voting_config").notNull().$type<CreateRoundDto['votingConfig']>(),
+  voterGuidelinesLink: varchar("voter_guidelines_link", { length: 255 }),
   createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),

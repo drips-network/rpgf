@@ -64,6 +64,13 @@
       "when": 1748879107042,
       "tag": "0008_free_cerebro",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1749472250575,
+      "tag": "0009_elite_boomerang",
+      "breakpoints": true
     }
   ]
 }

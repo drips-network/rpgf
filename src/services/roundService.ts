@@ -109,6 +109,7 @@ function mapDbRoundToWrappedRound(
       votingPeriodEnd: roundSelectModel.votingPeriodEnd,
       resultsPeriodStart: roundSelectModel.resultsPeriodStart,
       applicationFormat: roundSelectModel.applicationFormat,
+      voterGuidelinesLink: roundSelectModel.voterGuidelinesLink,
       votingConfig: isAdmin ? {
         ...roundSelectModel.votingConfig,
         allowedVoters: mapVotersOrAdminsToAddresses(roundSelectModel.voters),
@@ -535,6 +536,7 @@ export async function publishRoundDraft(
       votingPeriodStart: new Date(roundDto.votingPeriodStart),
       votingPeriodEnd: new Date(roundDto.votingPeriodEnd),
       resultsPeriodStart: new Date(roundDto.resultsPeriodStart),
+      voterGuidelinesLink: roundDto.voterGuidelinesLink,
       applicationFormat: roundDto.applicationFormat,
       votingConfig: roundDto.votingConfig,
       createdByUserId: roundDraft.createdByUserId,
@@ -694,6 +696,7 @@ export async function patchRound(
         votingConfig: updates.votingConfig,
         color: updates.color,
         emoji: updates.emoji,
+        voterGuidelinesLink: updates.voterGuidelinesLink,
       })
       .where(eq(rounds.urlSlug, roundSlug))
       .returning();

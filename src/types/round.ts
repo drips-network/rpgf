@@ -154,6 +154,7 @@ export const roundPublicFieldsSchema = z.object({
     maxVotesPerVoter: z.number().int().positive(),
     maxVotesPerProjectPerVoter: z.number().int().positive(),
   }),
+  voterGuidelinesLink: z.string().url().max(255).nullish(),
   createdByUserId: z.string().uuid(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -206,6 +207,7 @@ export const createRoundDtoSchema = z.object({
     maxVotesPerProjectPerVoter: z.number().int().positive(),
     allowedVoters: z.array(ethereumAddressSchema).nonempty(),
   }),
+  voterGuidelinesLink: z.string().url().max(255).nullish(),
   adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(), // Array of wallet addresses
 });
 export type CreateRoundDto = z.infer<typeof createRoundDtoSchema>;
