@@ -218,7 +218,17 @@ export const createRoundDraftDtoSchema = createRoundDtoSchema.partial().extend({
 });
 export type CreateRoundDraftDto = z.infer<typeof createRoundDraftDtoSchema>;
 
-export const patchRoundDtoSchema = createRoundDtoSchema.partial();
+export const patchRoundDtoSchema = createRoundDtoSchema.partial().omit({
+  // omit all the fields that are not allowed to be patched
+  urlSlug: true,
+  chainId: true,
+  applicationPeriodStart: true,
+  applicationPeriodEnd: true,
+  votingPeriodStart: true,
+  votingPeriodEnd: true,
+  resultsPeriodStart: true,
+  applicationFormat: true,
+});
 export type PatchRoundDto = z.infer<typeof patchRoundDtoSchema>;
 
 export type WrappedRound<T extends RoundPublicFields | RoundAdminFields> = {

@@ -1,5 +1,6 @@
 import { db, Transaction } from "$app/db/postgres.ts";
 import {
+ballots,
   chains,
   lower,
   roundAdmins,
@@ -674,65 +675,103 @@ function validateSchedule(
 }
 
 export async function patchRound(
-  roundId: string,
+  roundSlug: string,
   patchingUserId: string,
   updates: PatchRoundDto,
 ): Promise<WrappedRound<RoundAdminFields> | null> {
-  validateSchedule(updates);
-
   const result = await db.transaction(async (tx) => {
-    if (updates.urlSlug) {
-      const isAvailable = await checkUrlSlugAvailability(
-        updates.urlSlug,
-        tx,
-      );
-
-      if (!isAvailable) {
-        throw new BadRequestError(
-          "URL slug already taken.",
-        );
-      }
+    const existingRound = await getRawRound(roundSlug, tx);
+    if (!existingRound) {
+      throw new NotFoundError(`Round with slug ${roundSlug} not found.`);
     }
 
-    // Todo: it should not be allowed to update the schedule anymore after the round has started
+    const state = inferRoundState(existingRound);
+
     const result = await tx.update(rounds)
       .set({
         name: updates.name,
         description: updates.description,
-        applicationPeriodStart: updates.applicationPeriodStart
-          ? new Date(updates.applicationPeriodStart)
-          : undefined,
-        applicationPeriodEnd: updates.applicationPeriodEnd
-          ? new Date(updates.applicationPeriodEnd)
-          : undefined,
-        votingPeriodStart: updates.votingPeriodStart
-          ? new Date(updates.votingPeriodStart)
-          : undefined,
-        votingPeriodEnd: updates.votingPeriodEnd
-          ? new Date(updates.votingPeriodEnd)
-          : undefined,
-        resultsPeriodStart: updates.resultsPeriodStart
-          ? new Date(updates.resultsPeriodStart)
-          : undefined,
-        applicationFormat: updates.applicationFormat,
         votingConfig: updates.votingConfig,
+        color: updates.color,
+        emoji: updates.emoji,
       })
-      .where(eq(rounds.id, roundId))
+      .where(eq(rounds.urlSlug, roundSlug))
       .returning();
 
+    const newRound = result[0];
+    if (!newRound) {
+      throw new Error("Failed to update round.");
+    }
+
     if (updates.adminWalletAddresses) {
+      if (!ensureAtLeastOneArrayMember(updates.adminWalletAddresses)) {
+        throw new BadRequestError("At least one admin wallet address is required.");
+      }
+
       // Remove all existing admins
       await tx.delete(roundAdmins).where(
-        eq(roundAdmins.roundId, roundId),
+        eq(roundAdmins.roundId, newRound.id),
       );
 
       for (const adminAddress of updates.adminWalletAddresses) {
         const adminUser = await createOrGetUser(tx, adminAddress);
 
         await tx.insert(roundAdmins).values({
-          roundId,
+          roundId: newRound.id,
           roundDraftId: result[0].createdFromDraftId,
           userId: adminUser,
+        });
+      }
+    }
+
+    const canUpdateVotingConfigInStates = [
+      'pending-intake',
+      'intake',
+      'pending-voting',
+      'voting',
+    ];
+
+    if (updates.votingConfig && canUpdateVotingConfigInStates.includes(state)) {
+      // update voters for the round.
+      // previously-existing voters may be removed, but only if they have not submitted a ballot yet.
+      // new voters will be added.
+
+      const existingVoterAddresses = new Set(
+        existingRound.voters.map((voter) => voter.user.walletAddress),
+      );
+      const newVoterAddresses = new Set(updates.votingConfig.allowedVoters);
+      const votersToRemove = existingRound.voters
+        .filter((voter) => !newVoterAddresses.has(voter.user.walletAddress))
+        .map((voter) => voter.user.id);
+
+      const votersToAdd = updates.votingConfig.allowedVoters
+        .filter((address) => !existingVoterAddresses.has(address));
+
+      for (const voterId of votersToRemove) {
+        // Only remove voters who have not submitted a ballot yet
+        const hasSubmittedBallot = await tx.query.ballots.findFirst({
+          where: and(
+            eq(ballots.roundId, newRound.id),
+            eq(ballots.voterUserId, voterId),
+          ),
+        });
+
+        if (!hasSubmittedBallot) {
+          await tx.delete(roundVoters).where(
+            and(
+              eq(roundVoters.roundId, newRound.id),
+              eq(roundVoters.userId, voterId),
+            ),
+          );
+        }
+      }
+
+      for (const voterAddress of votersToAdd) {
+        const voterUser = await createOrGetUser(tx, voterAddress);
+
+        await tx.insert(roundVoters).values({
+          roundId: newRound.id,
+          userId: voterUser,
         });
       }
     }
