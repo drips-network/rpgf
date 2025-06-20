@@ -1,5 +1,5 @@
-import { and, eq, InferSelectModel } from "drizzle-orm";
-import { applications, ballots, rounds, users } from "../db/schema.ts";
+import { and, count, eq, InferSelectModel } from "drizzle-orm";
+import { applications, ballots, rounds, roundVoters, users } from "../db/schema.ts";
 import { db, Transaction } from "../db/postgres.ts";
 import { Ballot, SubmitBallotDto, WrappedBallot } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
@@ -201,7 +201,7 @@ function _generateCsvRowsForVoter(
 
     result += `"${voterUser.walletAddress}","${application.id}","${
       application.projectName.replaceAll(/"/g, '""')
-    }","${voteCount}"\n`;
+    }","${voteCount}","${ballot?.createdAt}","${ballot?.updatedAt}"\n`;
   }
 
   return result;
@@ -240,7 +240,7 @@ export async function getBallots(
 
   if (format === "csv") {
     let csv =
-      `"Voter Wallet Address","Application ID","Project Name","Assigned votes"\n`;
+      `"Voter Wallet Address","Application ID","Project Name","Assigned votes","Submitted at","Updated at"\n`;
 
     csv += round.voters.map((voter) => {
       const voterUser = voter.user;
@@ -255,4 +255,35 @@ export async function getBallots(
   }
 
   return submittedBallots;
+}
+
+export async function getBallotStats(
+  roundSlug: string,
+) {
+  const round = await db.query.rounds.findFirst({
+    where: eq(rounds.urlSlug, roundSlug),
+  });
+
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
+  const numberOfVoters = (await db
+    .select({
+      count: count(),
+    })
+    .from(roundVoters)
+    .where(eq(roundVoters.roundId, round.id)))[0]?.count || 0;
+
+  const numberOfBallots = (await db
+    .select({
+      count: count(),
+    })
+    .from(ballots)
+    .where(eq(ballots.roundId, round.id)))[0]?.count || 0;
+
+  return {
+    numberOfVoters,
+    numberOfBallots,
+  };
 }

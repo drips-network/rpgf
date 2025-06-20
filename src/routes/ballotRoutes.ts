@@ -9,5 +9,6 @@ router.patch('/api/rounds/:slug/ballots/own', enforceAuthenticationMiddleware, b
 
 router.get('/api/rounds/:slug/ballots/own', enforceAuthenticationMiddleware, ballotController.getOwnBallotController);
 router.get('/api/rounds/:slug/ballots', enforceAuthenticationMiddleware, ballotController.getBallotsController);
+router.get('/api/rounds/:slug/ballots/stats', enforceAuthenticationMiddleware, ballotController.getBallotStatsController);
 
 export default router;

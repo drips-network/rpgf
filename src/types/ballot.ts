@@ -15,4 +15,6 @@ export type WrappedBallot = {
     walletAddress: string;
   } 
   ballot: Ballot;
+  createdAt: Date;
+  updatedAt: Date;
 }

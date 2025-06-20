@@ -85,6 +85,7 @@ export const roundsRelations = relations(rounds, ({ one, many  }) => ({
   applications: many(applications),
   admins: many(roundAdmins),
   voters: many(roundVoters),
+  ballots: many(ballots),
 }));
 
 export const roundDrafts = pgTable("round_drafts", {

@@ -1,6 +1,6 @@
 import { RouteParams, RouterContext } from "oak";
 import { AuthenticatedAppState } from "../../main.ts";
-import { getBallot, getBallots, patchBallot, submitBallot } from "../services/ballotService.ts";
+import { getBallot, getBallots, getBallotStats, patchBallot, submitBallot } from "../services/ballotService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import parseDto from "../utils/parseDto.ts";
 import { submitBallotDtoSchema } from "../types/ballot.ts";
@@ -109,4 +109,30 @@ export async function getBallotsController(
 
   ctx.response.status = 200;
   ctx.response.body = ballots;
+}
+
+export async function getBallotStatsController(
+  ctx: RouterContext<
+      "/api/rounds/:slug/ballots/stats",
+      RouteParams<"/api/rounds/:slug/ballots/stats">,
+      AuthenticatedAppState
+    >,
+) {
+  const slug = ctx.params.slug;
+  const userId = ctx.state.user.userId;
+
+  const { round, isAdmin } = await getWrappedRound(slug, userId) ?? {};
+
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
+  if (!isAdmin) {
+    throw new UnauthorizedError("You are not an admin of this round");
+  }
+
+  const stats = await getBallotStats(slug);
+
+  ctx.response.status = 200;
+  ctx.response.body = stats;
 }
