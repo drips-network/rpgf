@@ -82,6 +82,7 @@ export const roundsRelations = relations(rounds, ({ one, many  }) => ({
   chain: one(chains, { fields: [rounds.chainId], references: [chains.id] }),
   createdBy: one(users, { fields: [rounds.createdByUserId], references: [users.id] }),
   createdFromDraft: one(roundDrafts, { fields: [rounds.createdFromDraftId], references: [roundDrafts.id] }),
+  applications: many(applications),
   admins: many(roundAdmins),
   voters: many(roundVoters),
 }));

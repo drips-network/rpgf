@@ -1,24 +1,36 @@
-import { and, eq } from "drizzle-orm";
-import { applications, ballots, rounds } from "../db/schema.ts";
+import { and, eq, InferSelectModel } from "drizzle-orm";
+import { applications, ballots, rounds, users } from "../db/schema.ts";
 import { db, Transaction } from "../db/postgres.ts";
 import { Ballot, SubmitBallotDto, WrappedBallot } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { getWrappedRound } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
-import { RoundAdminFields, RoundPublicFields, WrappedRound } from "../types/round.ts";
+import {
+  RoundAdminFields,
+  RoundPublicFields,
+  WrappedRound,
+} from "../types/round.ts";
+import { Application } from "../types/application.ts";
 
 function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
   maxVotesPerProjectPerVoter: number;
 }) {
-  const totalVotes = Object.values(ballot).reduce((acc, voteCount) => acc + voteCount, 0);
+  const totalVotes = Object.values(ballot).reduce(
+    (acc, voteCount) => acc + voteCount,
+    0,
+  );
   if (totalVotes > votingConfig.maxVotesPerVoter) {
-    throw new BadRequestError(`Total votes exceed the maximum allowed (${votingConfig.maxVotesPerVoter})`);
+    throw new BadRequestError(
+      `Total votes exceed the maximum allowed (${votingConfig.maxVotesPerVoter})`,
+    );
   }
 
   for (const projectId in Object.keys(ballot)) {
     if (ballot[projectId] > votingConfig.maxVotesPerProjectPerVoter) {
-      throw new BadRequestError(`Votes for project ${projectId} exceed the maximum allowed (${votingConfig.maxVotesPerProjectPerVoter})`);
+      throw new BadRequestError(
+        `Votes for project ${projectId} exceed the maximum allowed (${votingConfig.maxVotesPerProjectPerVoter})`,
+      );
     }
   }
 }
@@ -45,7 +57,7 @@ export async function getBallot(
     ),
     with: {
       voter: true,
-    }
+    },
   });
 
   return result ?? null;
@@ -80,7 +92,7 @@ async function createBallot(
   await tx.insert(ballots).values({
     roundId: round.id,
     voterUserId: userId,
-    ballot: ballotDto.ballot
+    ballot: ballotDto.ballot,
   });
 
   const ballot = await getBallot(round.round.urlSlug, userId, tx);
@@ -90,7 +102,6 @@ async function createBallot(
 
   return ballot;
 }
-
 
 export async function submitBallot(
   userId: string,
@@ -102,15 +113,19 @@ export async function submitBallot(
     throw new NotFoundError("Round not found");
   }
   if (!round.isVoter) {
-    throw new UnauthorizedError("You are not authorized to submit a ballot for this round");
+    throw new UnauthorizedError(
+      "You are not authorized to submit a ballot for this round",
+    );
   }
-  if (round.round.state !== 'voting') {
+  if (round.round.state !== "voting") {
     throw new BadRequestError("Round is not in voting state");
   }
 
   const existingBallot = await getBallot(roundSlug, userId);
   if (existingBallot) {
-    throw new BadRequestError("You have already submitted a ballot for this round");
+    throw new BadRequestError(
+      "You have already submitted a ballot for this round",
+    );
   }
 
   validateBallot(ballotDto.ballot, round.round.votingConfig);
@@ -135,11 +150,11 @@ export async function patchBallot(
     if (!round.isVoter) {
       throw new UnauthorizedError("You are not a voter for this round");
     }
-    if (round.round.state !== 'voting') {
+    if (round.round.state !== "voting") {
       throw new BadRequestError("Round is not in voting state");
     }
 
-    console.log(ballotDto)
+    console.log(ballotDto);
 
     validateBallot(ballotDto.ballot, round.round.votingConfig);
 
@@ -165,14 +180,57 @@ export async function patchBallot(
   return result;
 }
 
+function _generateCsvRowsForVoter(
+  voterUser: InferSelectModel<typeof users>,
+  submittedBallots: WrappedBallot[],
+  applications: Application[],
+): string {
+  const ballot = submittedBallots.find((b) => b.voter.id === voterUser.id);
+
+  let result: string = "";
+
+  for (
+    const [applicationId, voteCount] of Object.entries(ballot?.ballot || {})
+  ) {
+    const application = applications.find((app) => app.id === applicationId);
+    if (!application) {
+      throw new Error(
+        `Application with ID ${applicationId} not found for voter ${voterUser.id}`,
+      );
+    }
+
+    result += `"${voterUser.walletAddress}","${application.id}","${
+      application.projectName.replaceAll(/"/g, '""')
+    }","${voteCount}"\n`;
+  }
+
+  return result;
+}
+
 export async function getBallots(
-  roundId: string,
-  limit = 20,
+  roundSlug: string,
+  limit = 0,
   offset = 0,
-  format: 'json' | 'csv' = 'json',
+  format: "json" | "csv" = "json",
 ): Promise<WrappedBallot[] | string> {
+  const round = await db.query.rounds.findFirst({
+    where: eq(rounds.urlSlug, roundSlug),
+    with: {
+      voters: {
+        with: {
+          user: true,
+        },
+      },
+      applications: true,
+    },
+  });
+
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
   const submittedBallots = await db.query.ballots.findMany({
-    where: eq(ballots.roundId, roundId),
+    where: eq(ballots.roundId, round.id),
     with: {
       voter: true,
     },
@@ -180,10 +238,19 @@ export async function getBallots(
     offset,
   });
 
-  if (format === 'csv') {
-    const csv = submittedBallots.map((r) => {
-      return `${r.voter.walletAddress},${JSON.stringify(r.ballot)}`;
-    }).join("\n");
+  if (format === "csv") {
+    let csv =
+      `"Voter Wallet Address","Application ID","Project Name","Assigned votes"\n`;
+
+    csv += round.voters.map((voter) => {
+      const voterUser = voter.user;
+      return _generateCsvRowsForVoter(
+        voterUser,
+        submittedBallots,
+        round.applications,
+      );
+    }).join("");
+
     return csv;
   }
 
