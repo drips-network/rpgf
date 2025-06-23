@@ -21,7 +21,7 @@ This is the backend service for handling Retroactive Public Goods Funding (RPGF)
 
 ## Getting Started
 
-### 1. Set up environment variables
+### Set up environment variables
 
 Copy the example environment file and update it with your configuration:
 
@@ -37,22 +37,7 @@ You will need to configure at least the following:
 If you are using the provided `docker-compose.yml`, the `DATABASE_URL` will be:
 `postgresql://rpgf_user:rpgf_password@localhost:5432/rpgf_db`
 
-### 2. Running with Docker Compose (Recommended)
-
-This is the easiest way to get the application and database running.
-
-```bash
-docker-compose up -d
-```
-
-This command will:
-*   Build the Deno application Docker image (if not already built).
-*   Start a PostgreSQL container.
-*   Start the Deno application container.
-
-The application will be accessible at `http://localhost:8000` (or the port specified in your `.env` file).
-
-### 3. Running locally with Deno
+### Running locally with Deno
 
 If you prefer to run the application directly with Deno:
 
