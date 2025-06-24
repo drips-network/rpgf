@@ -261,3 +261,7 @@ export type WrappedRoundDraft = {
   }
   isAdmin: true,
 }
+
+export const linkDripListToRoundDtoSchema = z.object({
+  dripListAccountId: z.string(),
+});

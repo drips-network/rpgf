@@ -2,6 +2,7 @@ import { db, Transaction } from "$app/db/postgres.ts";
 import {
 ballots,
   chains,
+  linkedDripLists,
   lower,
   roundAdmins,
   roundDrafts,
@@ -815,4 +816,28 @@ export function inferRoundState(
   } else {
     return "results";
   }
+}
+
+export async function linkDripListToRound(
+  roundSlug: string,
+  dripListAccountId: string,
+): Promise<void> {
+  // TODO: Ideally verify that the Drip Lists exists, is valid, and is two-way linked
+  // to the round
+
+  void await db.transaction(async (tx) => {
+    const round = await tx.query.rounds.findFirst({
+      where: (rounds, { eq }) => eq(rounds.urlSlug, roundSlug),
+    });
+    if (!round) {
+      throw new NotFoundError(
+        `Round with slug ${roundSlug} not found`,
+      );
+    }
+
+    await tx.insert(linkedDripLists).values({
+      roundId: round.id,
+      dripListAccountId: dripListAccountId,
+    });
+  });
 }

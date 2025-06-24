@@ -102,7 +102,6 @@ export const roundDraftsRelations = relations(roundDrafts, ({ one, many }) => ({
   publishedAsRound: one(rounds, { fields: [roundDrafts.publishedAsRoundId], references: [rounds.id] }),
 }));
 
-// Round Admins table (join table for many-to-many relationship)
 export const roundAdmins = pgTable("round_admins", {
   roundId: uuid("round_id").references(() => rounds.id),
   roundDraftId: uuid("round_draft_id").notNull(),
@@ -161,4 +160,15 @@ export const ballots = pgTable("ballots", {
 export const votesRelations = relations(ballots, ({ one }) => ({
   round: one(rounds, { fields: [ballots.roundId], references: [rounds.id] }),
   voter: one(users, { fields: [ballots.voterUserId], references: [users.id] }),
+}));
+
+export const linkedDripLists = pgTable("linked_drip_lists", {
+  roundId: uuid("round_id").notNull().references(() => rounds.id),
+  dripListAccountId: varchar("drip_list_id", { length: 255 }).notNull(),
+}, (table) => [
+    primaryKey({ columns: [table.roundId, table.dripListAccountId] }),
+  ]
+);
+export const linkedDripListsRelations = relations(linkedDripLists, ({ one }) => ({
+  round: one(rounds, { fields: [linkedDripLists.roundId], references: [rounds.id] }),
 }));
