@@ -1,6 +1,6 @@
 import { db, Transaction } from "$app/db/postgres.ts";
 import {
-ballots,
+  ballots,
   chains,
   linkedDripLists,
   lower,

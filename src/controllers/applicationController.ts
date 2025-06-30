@@ -13,6 +13,7 @@ applyApplicationReview,
 } from "../services/applicationService.ts";
 import deduplicateArray from "../utils/deduplicateArray.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
+import { parseSortParam, sortArray } from "../utils/sort.ts";
 
 export async function createAppplicationController(
   ctx: RouterContext<
@@ -61,6 +62,7 @@ export async function getApplicationsForRoundController(
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user?.userId;
   const format = ctx.request.url.searchParams.get("format") ?? "json";
+  const sortConfig = parseSortParam(ctx);
 
   if (!(format === "json" || format === "csv")) {
     throw new BadRequestError("Invalid format, only 'json' and 'csv' are supported");
@@ -76,7 +78,7 @@ export async function getApplicationsForRoundController(
     
     ctx.response.status = 200;
     ctx.response.body = format === 'json'
-      ? await getApplications(round.id, round.applicationFormat, true)
+      ? sortArray(await getApplications(round.id, round.applicationFormat, true), sortConfig, 'projectName')
       : await getApplicationsCsv(round.id, round.applicationFormat);
     return;
   }
@@ -109,7 +111,7 @@ export async function getApplicationsForRoundController(
   }
 
   ctx.response.status = 200;
-  ctx.response.body = deduplicateArray(result, 'id');
+  ctx.response.body = sortArray(deduplicateArray(result, 'id'), sortConfig, 'projectName');
   return;
 }
 
