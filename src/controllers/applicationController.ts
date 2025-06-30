@@ -53,6 +53,7 @@ export async function createAppplicationController(
   ctx.response.body = application;
 }
 
+// TODO: Return a more minimal response for listing, without custom fields
 export async function getApplicationsForRoundController(
   ctx: RouterContext<
     "/api/rounds/:slug/applications",
