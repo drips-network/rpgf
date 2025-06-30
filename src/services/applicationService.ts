@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, asc, desc, eq, or } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
 import { applications, rounds } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
@@ -17,6 +17,7 @@ import { EAS, SchemaEncoder } from "@ethereum-attestation-service/eas-sdk";
 import * as ipfs from "../ipfs/ipfs.ts";
 import z from "zod";
 import { escapeCsvValue } from "../utils/csv.ts";
+import { SortConfig } from "../utils/sort.ts";
 
 async function validateEasAttestation(
   applicationDto: CreateApplicationDto,
@@ -164,15 +165,16 @@ export async function getApplications(
   roundId: string,
   applicationFormat: ApplicationFormat,
   includePrivateFields = false,
-  filter?: { state?: ApplicationState; submitterUserId?: string },
+  filterConfig: { state?: ApplicationState; submitterUserId?: string } | null = null,
+  sortConfig: SortConfig | null = null,
   limit = 20,
   offset = 0,
 ): Promise<(Application & { submitter: { walletAddress: string }})[]> {
   const result = (await db.query.applications.findMany({
     where: and(
       eq(applications.roundId, roundId),
-      filter?.state ? eq(applications.state, filter.state) : undefined,
-      filter?.submitterUserId ? eq(applications.submitterUserId, filter.submitterUserId) : undefined,
+      filterConfig?.state ? eq(applications.state, filterConfig.state) : undefined,
+      filterConfig?.submitterUserId ? eq(applications.submitterUserId, filterConfig.submitterUserId) : undefined,
     ),
     limit,
     offset,
@@ -182,12 +184,32 @@ export async function getApplications(
           walletAddress: true,
         }
       }
-    }
+    },
+    orderBy: (() => {
+      if (!sortConfig) return undefined;
+
+      const direction = sortConfig.direction === "asc" ? asc : desc;
+
+      switch (sortConfig.field) {
+        case 'random':
+          // Scrambling later
+          return undefined;
+        case 'name':
+          return [direction(applications.projectName)];
+        case 'createdAt':
+          return [direction(applications.createdAt)];
+      }
+    })()
   })).map((application) => {
     if (includePrivateFields) return application;
 
     return filterPrivateFields(applicationFormat, application);
   });
+
+  // apply random sort if requested
+  if (sortConfig?.field === 'random') {
+    return result.sort(() => Math.random() - 0.5);
+  }
 
   return result;
 }
@@ -196,7 +218,7 @@ export async function getApplicationsCsv(
   roundId: string,
   applicationFormat: ApplicationFormat,
 ) {
-  const applications = await getApplications(roundId, applicationFormat, true, undefined, 100000, 0);
+  const applications = await getApplications(roundId, applicationFormat, true, undefined, undefined, 100000, 0);
 
   const applicationFieldSlugs = Object.keys(applications[0]?.fields ?? {});
   const applicationFieldHeaders = applicationFieldSlugs.map((slug) => `"${slug}"`).join(",");

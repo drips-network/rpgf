@@ -2,7 +2,7 @@ import { Context } from "oak";
 import { z } from "zod";
 import { BadRequestError } from "../errors/generic.ts";
 
-type SortConfig = {
+export type SortConfig = {
   field: 'random' | 'createdAt' | 'name';
   direction: 'asc' | 'desc';
 }

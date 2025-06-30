@@ -11,9 +11,10 @@ applyApplicationReview,
   getApplications,
   getApplicationsCsv,
 } from "../services/applicationService.ts";
-import deduplicateArray from "../utils/deduplicateArray.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
-import { parseSortParam, sortArray } from "../utils/sort.ts";
+import { parseSortParam } from "../utils/sort.ts";
+import { parseFilterParams } from "../utils/filter.ts";
+import { z } from "zod";
 
 export async function createAppplicationController(
   ctx: RouterContext<
@@ -62,7 +63,13 @@ export async function getApplicationsForRoundController(
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user?.userId;
   const format = ctx.request.url.searchParams.get("format") ?? "json";
+  const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
+  const offset = Number(ctx.request.url.searchParams.get("offset")) || 0;
   const sortConfig = parseSortParam(ctx);
+  const filterConfig = parseFilterParams(ctx, {
+    state: z.enum(["approved", "rejected", "pending"]),
+    submitterUserId: z.string().optional(),
+  })
 
   if (!(format === "json" || format === "csv")) {
     throw new BadRequestError("Invalid format, only 'json' and 'csv' are supported");
@@ -78,7 +85,7 @@ export async function getApplicationsForRoundController(
     
     ctx.response.status = 200;
     ctx.response.body = format === 'json'
-      ? sortArray(await getApplications(round.id, round.applicationFormat, true), sortConfig, 'projectName')
+      ? await getApplications(round.id, round.applicationFormat, true, filterConfig, sortConfig, limit, offset)
       : await getApplicationsCsv(round.id, round.applicationFormat);
     return;
   }
@@ -87,31 +94,26 @@ export async function getApplicationsForRoundController(
     throw new BadRequestError("Non-admins cannot download applications in CSV format");
   }
 
-  // non-admins can see their own application plus all approved ones, but without private fields
-
   const approvedApplications = await getApplications(
     round.id,
     round.applicationFormat,
     false,
-    {
-      state: "approved",
-    },
+    filterConfig,
+    sortConfig,
+    limit,
+    offset,
   );
 
-  const ownApplications = userId
-    ? (await getApplications(round.id, round.applicationFormat, true, {
-      submitterUserId: userId,
-    }))
-    : null;
+  // Filter out any applications that are not approved AND NOT submitted by the user
+  const isOwnApplication = (app: Application) => app.submitterUserId === userId;
 
-  const result: Application[] = approvedApplications;
-
-  if (ownApplications) {
-    result.push(...ownApplications);
+  if (!isAdmin && userId) {
+    ctx.response.body = approvedApplications.filter((app) => app.state === "approved" || isOwnApplication(app));
+  } else {
+    ctx.response.body = approvedApplications.filter((app) => app.state === "approved");
   }
 
   ctx.response.status = 200;
-  ctx.response.body = sortArray(deduplicateArray(result, 'id'), sortConfig, 'projectName');
   return;
 }
 
