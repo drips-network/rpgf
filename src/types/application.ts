@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { ApplicationFormat } from "./round.ts";
 import mapFilterUndefined from "../utils/mapFilterUndefined.ts";
-import { projectChainDataSchema } from "../gql/projects.ts";
+import { InferSelectModel } from "drizzle-orm/table";
+import { applications } from "../db/schema.ts";
 
 export const applicationStateSchema = z.enum(["pending", "approved", "rejected"]);
 export type ApplicationState = z.infer<typeof applicationStateSchema>;
@@ -55,22 +56,10 @@ export const createApplicationDtoSchema = (applicationFormat: ApplicationFormat,
 });
 export type CreateApplicationDto = z.infer<ReturnType<typeof createApplicationDtoSchema>>;
 
-export const applicationSchema = (applicationFormat: ApplicationFormat) => z.object({
-  id: z.string(),
-  state: applicationStateSchema,
-  projectName: z.string().min(1).max(255),
-  dripsProjectDataSnapshot: projectChainDataSchema,
-  dripsAccountId: z.string().min(1).max(255),
-  submitterUserId: z.string(),
-  roundId: z.string(),
-  fields: buildDynamicApplicatonFieldSchema(applicationFormat),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
-export type Application = z.infer<ReturnType<typeof applicationSchema>>;
-
 export const applicationReviewDtoSchema = z.array(z.object({
   applicationId: z.string(),
   decision: z.enum(["approve", "reject"]),
 }));
 export type ApplicationReviewDto = z.infer<typeof applicationReviewDtoSchema>;
+
+export type Application = InferSelectModel<typeof applications>;

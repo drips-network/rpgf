@@ -18,7 +18,11 @@ export const projectChainDataSchema = z.object({
 });
 export type ProjectChainData = z.infer<typeof projectChainDataSchema>;
 
-export async function getProject(accountId: string, chainGqlName: string) {
+export type ProjectData = ProjectChainData & {
+  gitHubUrl: string;
+};
+
+export async function getProject(accountId: string, chainGqlName: string): Promise<ProjectData | null> {
   const projectQuery = gql`
     query Project {
       projectById(id: "${accountId}", chains: [${chainGqlName}]) {
@@ -38,6 +42,9 @@ export async function getProject(accountId: string, chainGqlName: string) {
             }
           }
         }
+        source {
+          url
+        }
       }
     }`;
 
@@ -46,8 +53,24 @@ export async function getProject(accountId: string, chainGqlName: string) {
   const parsed = z.object({
     projectById: z.object({
       chainData: z.array(projectChainDataSchema),
+      source: z.object({
+        url: z.string().url(),
+      }),
     }).nullable(),
   }).parse(res);
 
-  return parsed.projectById?.chainData[0] ?? null;
+  const chainData = parsed.projectById?.chainData[0];
+  if (!chainData) {
+    return null;
+  }
+
+  const gitHubUrl = parsed.projectById?.source.url;
+  if (!gitHubUrl) {
+    return null;
+  }
+
+  return {
+    ...chainData,
+    gitHubUrl,
+  }
 }

@@ -16,6 +16,7 @@ import { type Provider, JsonRpcProvider } from "ethers";
 import { EAS, SchemaEncoder } from "@ethereum-attestation-service/eas-sdk";
 import * as ipfs from "../ipfs/ipfs.ts";
 import z from "zod";
+import { escapeCsvValue } from "../utils/csv.ts";
 
 async function validateEasAttestation(
   applicationDto: CreateApplicationDto,
@@ -166,7 +167,7 @@ export async function getApplications(
   filter?: { state?: ApplicationState; submitterUserId?: string },
   limit = 20,
   offset = 0,
-): Promise<Application[]> {
+): Promise<(Application & { submitter: { walletAddress: string }})[]> {
   const result = (await db.query.applications.findMany({
     where: and(
       eq(applications.roundId, roundId),
@@ -175,6 +176,13 @@ export async function getApplications(
     ),
     limit,
     offset,
+    with: {
+      submitter: {
+        columns: {
+          walletAddress: true,
+        }
+      }
+    }
   })).map((application) => {
     if (includePrivateFields) return application;
 
@@ -184,10 +192,48 @@ export async function getApplications(
   return result;
 }
 
-export function filterPrivateFields(
+export async function getApplicationsCsv(
+  roundId: string,
   applicationFormat: ApplicationFormat,
-  application: Application,
-): Application {
+) {
+  const applications = await getApplications(roundId, applicationFormat, true, undefined, 100000, 0);
+
+  const applicationFieldSlugs = Object.keys(applications[0]?.fields ?? {});
+  const applicationFieldHeaders = applicationFieldSlugs.map((slug) => `"${slug}"`).join(",");
+
+  const header = `"ID","Project Name","GitHub URL","Drips Account ID","Submitter Wallet Address",${applicationFieldHeaders},"Created At"`;
+
+  const rows = applications.map((application) => {
+    const fields: string[] = applicationFieldSlugs.map((slug) => {
+      const value = application.fields[slug];
+
+      if (typeof value === "string") {
+        return value;
+      } else if (typeof value === "object" || Array.isArray(value)) {
+        return JSON.stringify(value);
+      } else {
+        return "Unknown";
+      }
+    });
+
+    return `"${[
+      application.id,
+      application.projectName,
+      application.dripsProjectDataSnapshot.gitHubUrl ?? "Unknown",
+      application.dripsAccountId,
+      application.submitter.walletAddress,
+      ...fields,
+      application.createdAt.toISOString(),
+    ].map(escapeCsvValue).join('","')}"`;
+  });
+
+  return [header, ...rows].join("\n");
+}
+
+export function filterPrivateFields<T extends Application>(
+  applicationFormat: ApplicationFormat,
+  application: T,
+): T {
   const fieldSlugsToReturn = mapFilterUndefined(applicationFormat, (field) => {
     if (!('slug' in field)) {
       return undefined;
@@ -209,7 +255,6 @@ export function filterPrivateFields(
   };
 }
 
-// submit application reviews
 export async function setApplicationsState(
   tx: Transaction,
   applicationIds: string[],

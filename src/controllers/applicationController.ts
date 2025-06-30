@@ -9,6 +9,7 @@ applyApplicationReview,
   createApplication,
   filterPrivateFields,
   getApplications,
+  getApplicationsCsv,
 } from "../services/applicationService.ts";
 import deduplicateArray from "../utils/deduplicateArray.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
@@ -59,6 +60,11 @@ export async function getApplicationsForRoundController(
 ) {
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user?.userId;
+  const format = ctx.request.url.searchParams.get("format") ?? "json";
+
+  if (!(format === "json" || format === "csv")) {
+    throw new BadRequestError("Invalid format, only 'json' and 'csv' are supported");
+  }
 
   const { round, isAdmin } = await getWrappedRound(roundSlug, userId ?? null) ?? {};
   if (!round) {
@@ -67,10 +73,16 @@ export async function getApplicationsForRoundController(
 
   if (isAdmin) {
     // admins can see all applications, always
-
+    
     ctx.response.status = 200;
-    ctx.response.body = await getApplications(round.id, round.applicationFormat, true);
+    ctx.response.body = format === 'json'
+      ? await getApplications(round.id, round.applicationFormat, true)
+      : await getApplicationsCsv(round.id, round.applicationFormat);
     return;
+  }
+
+  if (format === "csv") {
+    throw new BadRequestError("Non-admins cannot download applications in CSV format");
   }
 
   // non-admins can see their own application plus all approved ones, but without private fields

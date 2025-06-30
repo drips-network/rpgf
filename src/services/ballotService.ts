@@ -1,5 +1,5 @@
 import { and, count, eq, InferSelectModel } from "drizzle-orm";
-import { applications, ballots, rounds, roundVoters, users } from "../db/schema.ts";
+import { applications as applicationsModel, ballots, rounds, roundVoters, users } from "../db/schema.ts";
 import { db, Transaction } from "../db/postgres.ts";
 import { Ballot, SubmitBallotDto, WrappedBallot } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
@@ -10,7 +10,7 @@ import {
   RoundPublicFields,
   WrappedRound,
 } from "../types/round.ts";
-import { Application } from "../types/application.ts";
+import { escapeCsvValue } from "../utils/csv.ts";
 
 function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
@@ -73,8 +73,8 @@ async function createBallot(
 
   const applicationsForRound = await tx.query.applications.findMany({
     where: and(
-      eq(applications.roundId, round.id),
-      eq(applications.state, "approved"),
+      eq(applicationsModel.roundId, round.id),
+      eq(applicationsModel.state, "approved"),
     ),
   });
 
@@ -183,7 +183,7 @@ export async function patchBallot(
 function _generateCsvRowsForVoter(
   voterUser: InferSelectModel<typeof users>,
   submittedBallots: WrappedBallot[],
-  applications: Application[],
+  applications: InferSelectModel<typeof applicationsModel>[],
 ): string {
   const ballot = submittedBallots.find((b) => b.voter.id === voterUser.id);
 
@@ -199,9 +199,17 @@ function _generateCsvRowsForVoter(
       );
     }
 
-    result += `"${voterUser.walletAddress}","${application.id}","${
-      application.projectName.replaceAll(/"/g, '""')
-    }","${voteCount}","${ballot?.createdAt}","${ballot?.updatedAt}"\n`;
+    const values = [
+      voterUser.walletAddress,
+      application.id,
+      application.projectName,
+      application.dripsProjectDataSnapshot.gitHubUrl ?? "Unknown",
+      voteCount.toString(),
+      ballot?.createdAt.toString() ?? "",
+      ballot?.updatedAt.toString() ?? "",
+    ].map(escapeCsvValue).join('","');
+
+    result += `"${values}"\n`;
   }
 
   return result;
@@ -240,7 +248,7 @@ export async function getBallots(
 
   if (format === "csv") {
     let csv =
-      `"Voter Wallet Address","Application ID","Project Name","Assigned votes","Submitted at","Updated at"\n`;
+      `"Voter Wallet Address","Application ID","Project Name","GitHub URL","Assigned votes","Submitted at","Updated at"\n`;
 
     csv += round.voters.map((voter) => {
       const voterUser = voter.user;

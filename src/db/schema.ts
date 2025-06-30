@@ -16,7 +16,7 @@ import type { ApplicationState } from "$app/types/application.ts";
 import { relations, SQL, sql } from "drizzle-orm";
 import { CreateApplicationDto } from "../types/application.ts";
 import { SubmitBallotDto } from "../types/ballot.ts";
-import { ProjectChainData } from "../gql/projects.ts";
+import { ProjectData } from "../gql/projects.ts";
 
 // custom lower function
 export function lower(email: AnyPgColumn): SQL {
@@ -136,7 +136,7 @@ export const applications = pgTable("applications", {
   projectName: varchar("project_name", { length: 255 }).notNull(),
   easAttestationUID: varchar("attestation_uid", { length: 255 }),
   dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
-  dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectChainData>().notNull(),
+  dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectData>().notNull(),
   submitterUserId: uuid("submitter").notNull().references(() => users.id),
   fields: jsonb("fields").notNull().$type<CreateApplicationDto['fields']>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
