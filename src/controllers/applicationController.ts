@@ -106,6 +106,7 @@ export async function getApplicationsForRoundController(
     sortConfig,
     limit,
     offset,
+    round.resultsPublished, // Only include results if they've been published by admins
   );
 
   // Filter out any applications that are not approved AND NOT submitted by the user
