@@ -123,6 +123,8 @@ function mapDbRoundToWrappedRound(
       updatedAt: roundSelectModel.updatedAt,
       adminWalletAddresses: mapVotersOrAdminsToAddresses(roundSelectModel.admins),
       isAdmin,
+      resultsCalculated: roundSelectModel.resultsCalculated,
+      resultsPublished: roundSelectModel.resultsPublished,
     },
     isAdmin,
     isVoter,

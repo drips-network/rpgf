@@ -10,6 +10,7 @@ import {
   uuid,
   uniqueIndex,
   AnyPgColumn,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { PossibleColor, type ApplicationFormat, type CreateRoundDraftDto, type CreateRoundDto } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
@@ -74,6 +75,8 @@ export const rounds = pgTable("rounds", {
   createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  resultsCalculated: boolean("results_calculated").notNull().default(false),
+  resultsPublished: boolean("results_published").notNull().default(false),
 }, (table => [
     uniqueIndex('url_slug_unique_index').on(lower(table.urlSlug)),
   ]
@@ -143,10 +146,10 @@ export const applications = pgTable("applications", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
   roundId: uuid("round_id").notNull().references(() => rounds.id),
 });
-
 export const applicationsRelations = relations(applications, ({ one }) => ({
   round: one(rounds, { fields: [applications.roundId], references: [rounds.id] }),
   submitter: one(users, { fields: [applications.submitterUserId], references: [users.id] }),
+  result: one(results),
 }));
 
 export const ballots = pgTable("ballots", {
@@ -171,4 +174,20 @@ export const linkedDripLists = pgTable("linked_drip_lists", {
 );
 export const linkedDripListsRelations = relations(linkedDripLists, ({ one }) => ({
   round: one(rounds, { fields: [linkedDripLists.roundId], references: [rounds.id] }),
+}));
+
+// After voting is closed, admins can calculate results using different methods. The resulting allocations are
+// stored in this table for later retrieval and analysis.
+export const results = pgTable("results", {
+  roundId: uuid("round_id").notNull().references(() => rounds.id),
+  applicationId: uuid("application_id").notNull().references(() => applications.id),
+  method: varchar("method", { length: 255 }).notNull().$type<'median' | 'avg' | 'sum'>(),
+  result: integer("result").notNull(),
+  calculatedAt: timestamp("calculated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table => [
+    primaryKey({ columns: [table.roundId, table.applicationId] }),
+]));
+export const resultsRelations = relations(results, ({ one }) => ({
+  round: one(rounds, { fields: [results.roundId], references: [rounds.id] }),
+  application: one(applications, { fields: [results.applicationId], references: [applications.id] }),
 }));

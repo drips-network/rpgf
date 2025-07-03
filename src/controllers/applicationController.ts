@@ -54,6 +54,7 @@ export async function createAppplicationController(
 }
 
 // TODO: Return a more minimal response for listing, without custom fields
+// TODO: Start returning results with applications if present & admins have published them
 export async function getApplicationsForRoundController(
   ctx: RouterContext<
     "/api/rounds/:slug/applications",
@@ -66,11 +67,11 @@ export async function getApplicationsForRoundController(
   const format = ctx.request.url.searchParams.get("format") ?? "json";
   const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
   const offset = Number(ctx.request.url.searchParams.get("offset")) || 0;
-  const sortConfig = parseSortParam(ctx);
+  const sortConfig = parseSortParam(ctx, ["name", "createdAt", "random", "allocation"] as const);
   const filterConfig = parseFilterParams(ctx, {
     state: z.enum(["approved", "rejected", "pending"]),
     submitterUserId: z.string().optional(),
-  })
+  });
 
   if (!(format === "json" || format === "csv")) {
     throw new BadRequestError("Invalid format, only 'json' and 'csv' are supported");
@@ -86,8 +87,9 @@ export async function getApplicationsForRoundController(
     
     ctx.response.status = 200;
     ctx.response.body = format === 'json'
-      ? await getApplications(round.id, round.applicationFormat, true, filterConfig, sortConfig, limit, offset)
+      ? await getApplications(round.id, round.applicationFormat, true, filterConfig, sortConfig, limit, offset, true)
       : await getApplicationsCsv(round.id, round.applicationFormat);
+
     return;
   }
 
@@ -95,6 +97,7 @@ export async function getApplicationsForRoundController(
     throw new BadRequestError("Non-admins cannot download applications in CSV format");
   }
 
+  // Fetch applications WITHOUT private fields for non-admins
   const approvedApplications = await getApplications(
     round.id,
     round.applicationFormat,
@@ -106,9 +109,10 @@ export async function getApplicationsForRoundController(
   );
 
   // Filter out any applications that are not approved AND NOT submitted by the user
+
   const isOwnApplication = (app: Application) => app.submitterUserId === userId;
 
-  if (!isAdmin && userId) {
+  if (userId) {
     ctx.response.body = approvedApplications.filter((app) => app.state === "approved" || isOwnApplication(app));
   } else {
     ctx.response.body = approvedApplications.filter((app) => app.state === "approved");

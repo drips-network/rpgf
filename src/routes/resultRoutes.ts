@@ -4,6 +4,7 @@ import * as resolutController from "$app/controllers/resultController.ts";
 
 const router = new Router();
 
-router.get('/api/rounds/:slug/results', enforceAuthenticationMiddleware, resolutController.getResultsController);
+router.post('/api/rounds/:slug/results/recalculate', enforceAuthenticationMiddleware, resolutController.recalculateResultsController);
+router.post('/api/rounds/:slug/results/publish', enforceAuthenticationMiddleware, resolutController.publishResultsController);
 
 export default router;

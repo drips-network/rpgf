@@ -160,6 +160,8 @@ export const roundPublicFieldsSchema = z.object({
   updatedAt: z.date(),
   adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(), // Array of wallet addresses
   isAdmin: z.literal<boolean>(false),
+  resultsCalculated: z.boolean(),
+  resultsPublished: z.boolean(),
 });
 export type RoundPublicFields = z.infer<typeof roundPublicFieldsSchema>;
 
