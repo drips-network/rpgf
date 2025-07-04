@@ -3,7 +3,7 @@ import { AuthenticatedAppState } from "../../main.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { getWrappedRound } from "../services/roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
-import { isValidResultsCalculationMethod, publishResults, recalculateResultsForRound } from "../services/resultsService.ts";
+import { calculateDripListWeights, isValidResultsCalculationMethod, publishResults, recalculateResultsForRound } from "../services/resultsService.ts";
 
 export async function recalculateResultsController(
   ctx: RouterContext<
@@ -62,4 +62,30 @@ export async function publishResultsController(
   await publishResults(roundSlug);
 
   ctx.response.status = 200;
+}
+
+export async function getDripListWeightsController(
+  ctx: RouterContext<
+      "/api/rounds/:slug/results/drip-list-weights",
+      RouteParams<"/api/rounds/:slug/drip-list-weights">,
+      AuthenticatedAppState
+    >,
+) {
+  const roundSlug = ctx.params.slug;
+  const userId = ctx.state.user.userId;
+
+  const { round, isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
+
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
+  if (!isAdmin) {
+    throw new UnauthorizedError("You are not an admin of this round");
+  }
+
+  const dripListWeights = await calculateDripListWeights(round.urlSlug);
+
+  ctx.response.status = 200;
+  ctx.response.body = dripListWeights;
 }

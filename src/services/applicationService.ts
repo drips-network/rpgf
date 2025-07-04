@@ -274,6 +274,7 @@ export async function getApplicationsCsv(
     undefined,
     100000,
     0,
+    true,
   );
 
   const applicationFieldSlugs = Object.keys(applications[0]?.fields ?? {});
@@ -282,7 +283,7 @@ export async function getApplicationsCsv(
   ).join(",");
 
   const header =
-    `"ID","Project Name","GitHub URL","Drips Account ID","Submitter Wallet Address",${applicationFieldHeaders},"Created At"`;
+    `"ID","Project Name","GitHub URL","Drips Account ID","Submitter Wallet Address",${applicationFieldHeaders},"Created At","Vote result"`;
 
   const rows = applications.map((application) => {
     const fields: string[] = applicationFieldSlugs.map((slug) => {
@@ -306,6 +307,7 @@ export async function getApplicationsCsv(
         application.submitter.walletAddress,
         ...fields,
         application.createdAt.toISOString(),
+        application.result !== null ? application.result.toString() : "Results not yet calculated",
       ].map(escapeCsvValue).join('","')
     }"`;
   });

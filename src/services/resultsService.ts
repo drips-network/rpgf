@@ -4,10 +4,8 @@
 
 import { db } from "../db/postgres.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
-import { applications, results as resultsTable, rounds } from "../db/schema.ts";
-import { asc, desc, eq } from "drizzle-orm";
-import { Application } from "../types/application.ts";
-import { SortConfig } from "../utils/sort.ts";
+import { results as resultsTable, rounds } from "../db/schema.ts";
+import { eq } from "drizzle-orm";
 
 export enum ResultCalculationMethod {
   MEDIAN = "median",
@@ -143,4 +141,82 @@ export async function publishResults(
     .update(rounds)
     .set({ resultsPublished: true })
     .where(eq(rounds.id, round.id));
+}
+
+// Equal to 100% for a Drips split receiver.
+// Weights on a Drip List must add up exactly to this value.
+const MAX_WEIGHT = 1_000_000;
+
+export async function calculateDripListWeights(
+  roundSlug: string,
+): Promise<{ [gitHubUrl: string]: number}> {
+  const round = await db.query.rounds.findFirst({
+    where: (rounds, { eq }) => eq(rounds.urlSlug, roundSlug),
+    columns: {
+      id: true,
+      resultsCalculated: true,
+    },
+  });
+
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+  if (!round.resultsCalculated) {
+    throw new BadRequestError("Results have not been calculated for this round");
+  }
+
+  // get the results for the round
+  const results = await db.query.results.findMany({
+    where: (results, { eq }) => eq(results.roundId, round.id),
+    columns: {
+      applicationId: true,
+      result: true,
+    },
+    with: {
+      application: {
+        columns: {
+          dripsProjectDataSnapshot: true,
+        }
+      }
+    }
+  });
+
+  // calculate an object where the key is the github URL, and the number is the percentage (as weight) of the total
+  // votes allocated
+
+  const totalVotes = results.reduce((acc, result) => acc + result.result, 0);
+  if (totalVotes === 0) {
+    throw new BadRequestError("No votes allocated in this round");
+  }
+
+  const weights: { [gitHubUrl: string]: number } = {};
+
+  for (const result of results) {
+    const gitHubUrl = result.application.dripsProjectDataSnapshot?.gitHubUrl;
+    if (!gitHubUrl) {
+      throw new Error(`Application ${result.applicationId} does not have a GitHub URL`);
+    }
+
+    const weight = Math.round((result.result / totalVotes) * MAX_WEIGHT);
+
+    weights[gitHubUrl] = (weights[gitHubUrl] || 0) + weight;
+  }
+
+  // If all the weights don't add up exactly to 100%, we need to handle it by
+  // slightly bumping weights until they do.
+
+  const totalWeights = Object.values(weights).reduce((acc, weight) => acc + weight, 0);
+
+  if (totalWeights !== MAX_WEIGHT) {
+    const diff = MAX_WEIGHT - totalWeights;
+    const sortedGitHubUrls = Object.keys(weights).sort((a, b) => weights[b] - weights[a]);
+    
+    // Distribute the difference evenly among the top receipients
+    for (let i = 0; i < Math.abs(diff); i++) {
+      const url = sortedGitHubUrls[i % sortedGitHubUrls.length];
+      weights[url] += diff > 0 ? 1 : -1;
+    }
+  }
+
+  return weights;
 }
