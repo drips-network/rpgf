@@ -248,6 +248,20 @@ export async function getWrappedRound(
   );
 }
 
+function validateApplicationFormatSlugs(
+  applicationFormat: CreateRoundDto["applicationFormat"],
+): void {
+  const slugs = applicationFormat
+    .map((field) => 'slug' in field ? field.slug.toLowerCase() : null)
+    .filter(v => v !== null) as string[];
+
+  const uniqueSlugs = new Set(slugs);
+
+  if (uniqueSlugs.size !== slugs.length) {
+    throw new BadRequestError("Application format fields must have unique slugs.");
+  }
+}
+
 export async function createRoundDraft(
   roundDraftDto: CreateRoundDraftDto,
   creatorUserId: string,
@@ -273,6 +287,10 @@ export async function createRoundDraft(
           "URL slug already taken.",
         );
       }
+    }
+
+    if (roundDraftDto.applicationFormat) {
+      validateApplicationFormatSlugs(roundDraftDto.applicationFormat);
     }
 
     const { insertedId } = (await tx.insert(roundDrafts).values({
@@ -353,6 +371,10 @@ export async function patchRoundDraft(
           "URL slug already taken.",
         );
       }
+    }
+
+    if (updates.applicationFormat) {
+      validateApplicationFormatSlugs(updates.applicationFormat);
     }
 
     // If some schedule-related fields have changed, validate the new schedule
