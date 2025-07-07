@@ -44,9 +44,9 @@ export function calculateResultsForApplications(
       } else {
         result = result[mid]; // Middle value
       }
-    } else if (ResultCalculationMethod.AVG) {
+    } else if (method === ResultCalculationMethod.AVG) {
       result = votes.reduce((acc, vote) => acc + vote, 0) / votes.length;
-    } else if (ResultCalculationMethod.SUM) {
+    } else if (method === ResultCalculationMethod.SUM) {
       result = votes.reduce((acc, vote) => acc + vote, 0);
     }
 
