@@ -74,6 +74,7 @@ function mapVotersOrAdminsToAddresses(
 type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
   admins: { user: { id: string, walletAddress: string } }[];
   voters: { user: { id: string, walletAddress: string } }[];
+  linkedDripLists: { dripListAccountId: string }[];
   createdBy: { id: string, walletAddress: string };
 };
 
@@ -125,6 +126,7 @@ function mapDbRoundToWrappedRound(
       isAdmin,
       resultsCalculated: roundSelectModel.resultsCalculated,
       resultsPublished: roundSelectModel.resultsPublished,
+      linkedDripLists: roundSelectModel.linkedDripLists.map((item) => item.dripListAccountId),
     },
     isAdmin,
     isVoter,
@@ -189,6 +191,11 @@ export async function getRounds(
           user: true,
         },
       },
+      linkedDripLists: {
+        columns: {
+          dripListAccountId: true,
+        },
+      },
       createdBy: true,
     },
   });
@@ -223,6 +230,11 @@ async function getRawRound(
       voters: {
         with: {
           user: true,
+        },
+      },
+      linkedDripLists: {
+        columns: {
+          dripListAccountId: true,
         },
       },
       createdBy: true,
@@ -842,11 +854,11 @@ export function inferRoundState(
   }
 }
 
-export async function linkDripListToRound(
+export async function linkDripListsToRound(
   roundSlug: string,
-  dripListAccountId: string,
+  dripListAccountIds: string[],
 ): Promise<void> {
-  // TODO: Ideally verify that the Drip Lists exists, is valid, and is two-way linked
+  // TODO: Ideally verify that the Drip Lists exist, are valid, and are two-way linked
   // to the round
 
   void await db.transaction(async (tx) => {
@@ -859,9 +871,19 @@ export async function linkDripListToRound(
       );
     }
 
-    await tx.insert(linkedDripLists).values({
+    // replace any existing linked drip lists for this round with the new ones
+
+    await tx.delete(linkedDripLists).where(
+      eq(linkedDripLists.roundId, round.id),
+    );
+
+    if (dripListAccountIds.length === 0) {
+      return;
+    }
+
+    await tx.insert(linkedDripLists).values(dripListAccountIds.map((accountId) => ({
       roundId: round.id,
-      dripListAccountId: dripListAccountId,
-    });
+      dripListAccountId: accountId,
+    })));
   });
 }

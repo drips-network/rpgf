@@ -162,6 +162,7 @@ export const roundPublicFieldsSchema = z.object({
   isAdmin: z.literal<boolean>(false),
   resultsCalculated: z.boolean(),
   resultsPublished: z.boolean(),
+  linkedDripLists: z.array(z.string()),
 });
 export type RoundPublicFields = z.infer<typeof roundPublicFieldsSchema>;
 
@@ -264,6 +265,6 @@ export type WrappedRoundDraft = {
   isAdmin: true,
 }
 
-export const linkDripListToRoundDtoSchema = z.object({
-  dripListAccountId: z.string(),
+export const linkDripListsToRoundDtoSchema = z.object({
+  dripListAccountIds: z.string().array(),
 });

@@ -21,6 +21,6 @@ router.post("/api/round-drafts/:id/publish", enforceAuthenticationMiddleware, ro
 router.patch("/api/rounds/:slug", enforceAuthenticationMiddleware, roundController.patchRoundController);
 router.delete("/api/rounds/:slug", enforceAuthenticationMiddleware, roundController.deleteRoundController);
 
-router.post("/api/rounds/:slug/link-drip-list", enforceAuthenticationMiddleware, roundController.linkDripListToRoundController);
+router.patch("/api/rounds/:slug/drip-lists", enforceAuthenticationMiddleware, roundController.linkDripListToRoundController);
 
 export default router;

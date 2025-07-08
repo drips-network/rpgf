@@ -3,7 +3,7 @@ import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
 import {
   createRoundDraftDtoSchema,
-  linkDripListToRoundDtoSchema,
+  linkDripListsToRoundDtoSchema,
   patchRoundDtoSchema,
 } from "../types/round.ts";
 import {
@@ -15,7 +15,7 @@ import {
   getRounds,
   getWrappedRound,
   isUserRoundDraftAdmin,
-  linkDripListToRound,
+  linkDripListsToRound,
   patchRound,
   patchRoundDraft,
   publishRoundDraft,
@@ -274,14 +274,14 @@ export async function checkSlugAvailabilityController(
 
 export async function linkDripListToRoundController(
   ctx: RouterContext<
-    "/api/rounds/:slug/link-drip-list",
-    RouteParams<"/api/rounds/check-slug/:slug">,
+    "/api/rounds/:slug/drip-lists",
+    RouteParams<"/api/rounds/:slug/drip-lists">,
     AuthenticatedAppState
   >,
 ) {
   const slug = ctx.params.slug;
   const userId = ctx.state.user.userId;
-  const dto = await parseDto(linkDripListToRoundDtoSchema, ctx);
+  const dto = await parseDto(linkDripListsToRoundDtoSchema, ctx);
 
   const { round, isAdmin } = await getWrappedRound(slug, userId) ?? {};
 
@@ -293,13 +293,13 @@ export async function linkDripListToRoundController(
     throw new UnauthorizedError("You are not an admin of this round");
   }
 
-  await linkDripListToRound(
+  await linkDripListsToRound(
     round.urlSlug,
-    dto.dripListAccountId,
+    dto.dripListAccountIds,
   );
 
   ctx.response.status = 200;
   ctx.response.body = {
-    message: "Drip List linked successfully",
+    message: "Drip Lists linked successfully",
   };
 }
