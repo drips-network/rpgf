@@ -8,7 +8,7 @@ import healthRoutes from "$app/routes/healthRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
-import { AuthError } from "$app/errors/auth.ts";
+import { AuthError, ExpiredJwtError } from "$app/errors/auth.ts";
 
 export interface UnauthenticatedAppState {
   user: undefined;
@@ -44,6 +44,9 @@ app.use(async (ctx, next) => {
     } else if (e instanceof NotFoundError) {
       ctx.response.status = 404;
       ctx.response.body = { error: e.message };
+    } else if (e instanceof ExpiredJwtError) {
+      ctx.response.status = 401;
+      ctx.response.body = { error: "Token expired" };
     } else {
       ctx.response.status = 500;
       ctx.response.body = { error: "Internal Server Error" };

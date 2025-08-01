@@ -6,7 +6,14 @@ export interface SiweVerifyRequest {
   signature: string;
 }
 
-export interface AppJwtPayload extends DjwtPayload {
+export interface RefreshTokenJwtPayload extends DjwtPayload {
+  type: "refresh";
+  walletAddress: string;
+  userId: string;
+}
+
+export interface AccessTokenJwtPayload extends DjwtPayload {
+  type: "access";
   walletAddress: string;
   userId: string;
 }

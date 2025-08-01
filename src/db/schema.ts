@@ -31,6 +31,19 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => sql`(CURRENT_TIMESTAMP)`).notNull(),
 });
 
+export const nonces = pgTable("nonces", {
+  nonce: varchar("nonce", { length: 255 }).primaryKey(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  token: varchar("token", { length: 510 }).notNull().unique(), 
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  revoked: boolean("revoked").notNull().default(false),
+});
+
 type EasConfig = {
   easAddress: string;
   applicationAttestationSchemaUID: string;
