@@ -6,7 +6,7 @@ const router = new Router();
 
 router.get("/api/auth/nonce", authController.getNonceController);
 router.post("/api/auth/login", authController.logInController);
-router.post("/api/auth/refresh-access-token", enforceAuthenticationMiddleware, authController.refreshAccessTokenController);
+router.post("/api/auth/refresh-access-token", authController.refreshAccessTokenController);
 router.post("/api/auth/logout", enforceAuthenticationMiddleware, authController.logoutController);
 
 export default router;
