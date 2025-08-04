@@ -278,38 +278,28 @@ export async function getApplicationsCsv(
   );
 
   const applicationFieldSlugs = Object.keys(applications[0]?.fields ?? {});
-  const applicationFieldHeaders = applicationFieldSlugs.map((slug) =>
-    `"${slug}"`
-  ).join(",");
+  const applicationFieldHeaders = applicationFieldSlugs.map(escapeCsvValue)
+    .join(",");
 
   const header =
-    `"ID","Project Name","GitHub URL","Drips Account ID","Submitter Wallet Address",${applicationFieldHeaders},"Created At","Vote result"`;
+    `ID,Project Name,GitHub URL,Drips Account ID,Submitter Wallet Address,${applicationFieldHeaders},Created At,Vote result`;
 
   const rows = applications.map((application) => {
     const fields: string[] = applicationFieldSlugs.map((slug) => {
       const value = application.fields[slug];
-
-      if (typeof value === "string") {
-        return value;
-      } else if (typeof value === "object" || Array.isArray(value)) {
-        return JSON.stringify(value);
-      } else {
-        return "Unknown";
-      }
+      return escapeCsvValue(value);
     });
 
-    return `"${
-      [
-        application.id,
-        application.projectName,
-        application.dripsProjectDataSnapshot.gitHubUrl ?? "Unknown",
-        application.dripsAccountId,
-        application.submitter.walletAddress,
-        ...fields,
-        application.createdAt.toISOString(),
-        application.result !== null ? application.result.toString() : "Results not yet calculated",
-      ].map(escapeCsvValue).join('","')
-    }"`;
+    return [
+      escapeCsvValue(application.id),
+      escapeCsvValue(application.projectName),
+      escapeCsvValue(application.dripsProjectDataSnapshot.gitHubUrl ?? "Unknown"),
+      escapeCsvValue(application.dripsAccountId),
+      escapeCsvValue(application.submitter.walletAddress),
+      ...fields,
+      escapeCsvValue(application.createdAt.toISOString()),
+      escapeCsvValue(application.result !== null ? application.result.toString() : "Results not yet calculated"),
+    ].join(',');
   });
 
   return [header, ...rows].join("\n");

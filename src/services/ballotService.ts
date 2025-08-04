@@ -200,16 +200,16 @@ function _generateCsvRowsForVoter(
     }
 
     const values = [
-      voterUser.walletAddress,
-      application.id,
-      application.projectName,
-      application.dripsProjectDataSnapshot.gitHubUrl ?? "Unknown",
-      voteCount.toString(),
-      ballot?.createdAt.toString() ?? "",
-      ballot?.updatedAt.toString() ?? "",
-    ].map(escapeCsvValue).join('","');
+      escapeCsvValue(voterUser.walletAddress),
+      escapeCsvValue(application.id),
+      escapeCsvValue(application.projectName),
+      escapeCsvValue(application.dripsProjectDataSnapshot.gitHubUrl ?? "Unknown"),
+      escapeCsvValue(voteCount.toString()),
+      escapeCsvValue(ballot?.createdAt.toString() ?? ""),
+      escapeCsvValue(ballot?.updatedAt.toString() ?? ""),
+    ].join(',');
 
-    result += `"${values}"\n`;
+    result += `${values}\n`;
   }
 
   return result;
@@ -248,7 +248,7 @@ export async function getBallots(
 
   if (format === "csv") {
     let csv =
-      `"Voter Wallet Address","Application ID","Project Name","GitHub URL","Assigned votes","Submitted at","Updated at"\n`;
+      `Voter Wallet Address,Application ID,Project Name,GitHub URL,Assigned votes,Submitted at,Updated at\n`;
 
     csv += round.voters.map((voter) => {
       const voterUser = voter.user;
