@@ -168,7 +168,7 @@ export async function createAccessToken(
     type: 'access',
     walletAddress: walletAddress,
     userId: userId,
-    exp: getNumericDate(1 * 60), // Expires in 15 minutes
+    exp: getNumericDate(15 * 60), // Expires in 15 minutes
     iat: getNumericDate(0), // Issued at now
   };
 

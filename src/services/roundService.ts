@@ -21,7 +21,7 @@ import {
   WrappedRoundDraft,
 } from "$app/types/round.ts";
 import { and, eq, InferSelectModel, isNull } from "drizzle-orm";
-import createOrGetUser from "./userService.ts";
+import { createOrGetUser } from "./userService.ts";
 import ensureAtLeastOneArrayMember from "../utils/ensureAtLeastOneArrayMember.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import parseDto from "../utils/parseDto.ts";
@@ -316,7 +316,7 @@ export async function createRoundDraft(
 
       await tx.insert(roundAdmins).values({
         roundDraftId: insertedId,
-        userId: adminUser,
+        userId: adminUser.id,
       });
     }
 
@@ -424,7 +424,7 @@ export async function patchRoundDraft(
 
       await tx.insert(roundAdmins).values({
         roundDraftId: roundDraftId,
-        userId: adminUser,
+        userId: adminUser.id,
       });
     }
 
@@ -592,7 +592,7 @@ export async function publishRoundDraft(
 
       await tx.insert(roundVoters).values({
         roundId: newRound.id,
-        userId: voterUser,
+        userId: voterUser.id,
       });
     }
 
@@ -759,7 +759,7 @@ export async function patchRound(
         await tx.insert(roundAdmins).values({
           roundId: newRound.id,
           roundDraftId: result[0].createdFromDraftId,
-          userId: adminUser,
+          userId: adminUser.id,
         });
       }
     }
@@ -811,7 +811,7 @@ export async function patchRound(
 
         await tx.insert(roundVoters).values({
           roundId: newRound.id,
-          userId: voterUser,
+          userId: voterUser.id,
         });
       }
     }

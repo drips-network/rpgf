@@ -19,7 +19,6 @@ import { CreateApplicationDto } from "../types/application.ts";
 import { SubmitBallotDto } from "../types/ballot.ts";
 import { ProjectData } from "../gql/projects.ts";
 
-// custom lower function
 export function lower(email: AnyPgColumn): SQL {
   return sql`lower(${email})`;
 }
@@ -27,6 +26,8 @@ export function lower(email: AnyPgColumn): SQL {
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   walletAddress: varchar("wallet_address", { length: 42 }).notNull().unique(),
+  /** Whether the user is whitelisted for creating new round drafts, required if REQUIRE_WHITELIST_FOR_CREATING_ROUNDS in env is true */
+  whitelisted: boolean("whitelisted").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => sql`(CURRENT_TIMESTAMP)`).notNull(),
 });

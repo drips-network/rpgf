@@ -31,6 +31,19 @@ export async function createRoundDraftController(
 ) {
   const dto = await parseDto(createRoundDraftDtoSchema, ctx);
 
+  const user = await db.query.users.findFirst({
+    where: (users, { eq }) => eq(users.id, ctx.state.user.userId),
+    columns: {
+      whitelisted: true,
+    },
+  });
+
+  if (Deno.env.get("REQUIRE_WHITELIST_FOR_CREATING_ROUNDS") === "true" && !user?.whitelisted) {
+    throw new UnauthorizedError(
+      "You must be whitelisted to create a round draft",
+    );
+  }
+
   const adminAddresses = dto.adminWalletAddresses.map((a) => a.toLowerCase());
   if (!adminAddresses.includes(ctx.state.user.walletAddress.toLowerCase())) {
     throw new BadRequestError(
