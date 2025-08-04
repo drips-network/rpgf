@@ -13,6 +13,13 @@ export async function getUser(id: string) {
       whitelisted: true,
     },
   });
+  
+  if (Deno.env.get("REQUIRE_WHITELIST_FOR_CREATING_ROUNDS") !== "true") {
+    return {
+      ...user,
+      whitelisted: true, // Everyone is whitelisted if the environment variable is false
+    }
+  }
 
   return user;
 }
