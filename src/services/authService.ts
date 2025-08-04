@@ -179,9 +179,16 @@ export async function createAccessToken(
 
 export async function rotateRefreshToken(
   oldRefreshToken: string,
-): Promise<string> {
+): Promise<string | null> {
   const jwtSecretKey = await getJwtSecret();
-  const payload = await verify(oldRefreshToken, jwtSecretKey) as RefreshTokenJwtPayload;
+
+  let payload: RefreshTokenJwtPayload | null = null;
+  try {
+    payload = await verify(oldRefreshToken, jwtSecretKey) as RefreshTokenJwtPayload;
+  } catch {
+    // If verification fails, payload will remain null
+    payload = null;
+  }
 
   if (!payload || payload.type !== 'refresh') {
     throw new UnauthorizedError("Invalid refresh token");

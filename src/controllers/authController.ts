@@ -46,8 +46,14 @@ export async function refreshAccessTokenController(ctx: Context) {
     ctx.response.body = { message: "No valid refresh token provided." };
     return;
   }
-  
+
   const newRefreshToken = await authService.rotateRefreshToken(refreshToken);
+
+  if (!newRefreshToken) {
+    // The originally provided refresh token is invalid or expired
+    throw new UnauthorizedError("Invalid or expired refresh token.");
+  }
+
   const accessToken = await authService.createAccessToken(newRefreshToken);
 
   ctx.cookies.set('refreshToken', newRefreshToken);
