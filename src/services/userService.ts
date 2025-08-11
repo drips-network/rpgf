@@ -1,10 +1,22 @@
 import { eq } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
-import { users } from "../db/schema.ts";
+import { chains, users } from "../db/schema.ts";
+import { BadRequestError } from "../errors/generic.ts";
 
 const USER_FIELDS = { id: users.id, walletAddress: users.walletAddress, whitelisted: users.whitelisted };
 
-export async function getUser(id: string) {
+export async function getUser(id: string, chainId: number) {
+  const chain = await db.query.chains.findFirst({
+    where: eq(chains.chainId, chainId),
+    columns: {
+      whitelistMode: true,
+    },
+  });
+
+  if (!chain) {
+    throw new BadRequestError(`Chain with ID ${chainId} not supported.`);
+  }
+
   const user = await db.query.users.findFirst({
     where: eq(users.id, id),
     columns: {
@@ -18,10 +30,10 @@ export async function getUser(id: string) {
     return null;
   }
   
-  if (Deno.env.get("REQUIRE_WHITELIST_FOR_CREATING_ROUNDS") !== "true") {
+  if (!chain.whitelistMode) {
     return {
       ...user,
-      whitelisted: true, // Everyone is whitelisted if the environment variable is false
+      whitelisted: true, // Everyone is whitelisted if whitelist mode is off
     }
   }
 

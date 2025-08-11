@@ -1,7 +1,7 @@
 import { RouteParams, RouterContext } from "oak";
 import { AuthenticatedAppState } from "../../main.ts";
 import { getUser } from "../services/userService.ts";
-import { NotFoundError } from "../errors/generic.ts";
+import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 
 export async function getOwnUserDataController(
   ctx: RouterContext<
@@ -10,7 +10,13 @@ export async function getOwnUserDataController(
     AuthenticatedAppState
   >
 ) {
-  const user = await getUser(ctx.state.user.userId);
+  const chainId = Number(ctx.request.url.searchParams.get("chainId")) || null;
+
+  if (!chainId) {
+    throw new BadRequestError("chainId query parameter is required.");
+  }
+
+  const user = await getUser(ctx.state.user.userId, chainId);
 
   if (!user) {
     throw new NotFoundError();
