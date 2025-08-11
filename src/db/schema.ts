@@ -56,6 +56,7 @@ export const chains = pgTable("chains", {
   chainId: integer("chain_id").notNull(),
   gqlName: varchar("gql_name", { length: 255 }).notNull(),
   attestationSetup: jsonb("attestation_setup").$type<EasConfig>(), // if null, attestations not required on given chain
+  whitelistMode: boolean("whitelist_mode").notNull().default(true),
   rpcUrl: varchar("rpc_url", { length: 255 }).notNull(),
 });
 

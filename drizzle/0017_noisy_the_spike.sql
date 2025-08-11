@@ -1,0 +1,1 @@
+ALTER TABLE "chains" ADD COLUMN "whitelist_mode" boolean DEFAULT true NOT NULL;

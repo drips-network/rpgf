@@ -8,6 +8,7 @@ import {
   roundDrafts,
   rounds,
   roundVoters,
+  users,
 } from "$app/db/schema.ts";
 import {
   CreateRoundDraftDto,
@@ -25,6 +26,7 @@ import { createOrGetUser } from "./userService.ts";
 import ensureAtLeastOneArrayMember from "../utils/ensureAtLeastOneArrayMember.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import parseDto from "../utils/parseDto.ts";
+import { UnauthorizedError } from "../errors/auth.ts";
 
 export async function checkUrlSlugAvailability(
   urlSlug: string,
@@ -286,6 +288,20 @@ export async function createRoundDraft(
       throw new BadRequestError(
         `Chain with ID ${roundDraftDto.chainId} is unsupported.`,
       );
+    }
+
+    const { whitelistMode } = chain;
+
+    if (whitelistMode) {
+      const user = await tx.query.users.findFirst({
+        where: eq(users.id, creatorUserId),
+      });
+
+      if (!user?.whitelisted) {
+        throw new UnauthorizedError(
+          "You are not whitelisted to create rounds on this chain.",
+        )
+      }
     }
 
     if (roundDraftDto.urlSlug) {
