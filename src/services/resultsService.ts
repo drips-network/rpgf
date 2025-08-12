@@ -22,7 +22,10 @@ export function isValidResultsCalculationMethod(
   return true;
 }
 
-/** Calculate the results for a set of applications based on the provided ballots and calculation method. */ 
+/**
+ * Calculate the results for a set of applications based on the provided ballots
+ * and calculation method, ensuring integer outputs.
+ */
 export function calculateResultsForApplications(
   applicationIds: string[],
   ballots: { [key: string]: number }[],
@@ -33,24 +36,37 @@ export function calculateResultsForApplications(
       ballot[applicationId] || 0
     );
 
-    let result;
+    let result: number;
 
     if (method === ResultCalculationMethod.MEDIAN) {
-      result = votes
-        .sort((a, b) => a - b);
-      const mid = Math.floor(result.length / 2);
-      if (result.length % 2 === 0) {
-        result = (result[mid - 1] + result[mid]) / 2; // Average of two middle values
+      const sortedVotes = votes.sort((a, b) => a - b);
+      const mid = Math.floor(sortedVotes.length / 2);
+
+      if (sortedVotes.length === 0) {
+        result = 0;
+      } else if (sortedVotes.length % 2 === 0) {
+        // Average of two middle values, rounded to the nearest integer
+        result = Math.round((sortedVotes[mid - 1] + sortedVotes[mid]) / 2);
       } else {
-        result = result[mid]; // Middle value
+        // Middle value is already an integer
+        result = sortedVotes[mid];
       }
     } else if (method === ResultCalculationMethod.AVG) {
-      result = votes.reduce((acc, vote) => acc + vote, 0) / votes.length;
+      if (votes.length === 0) {
+        result = 0;
+      } else {
+        const sum = votes.reduce((acc, vote) => acc + vote, 0);
+        // Round the average to the nearest integer
+        result = Math.round(sum / votes.length);
+      }
     } else if (method === ResultCalculationMethod.SUM) {
+      // Sum is already an integer
       result = votes.reduce((acc, vote) => acc + vote, 0);
+    } else {
+      result = 0; // Default case
     }
 
-    return [applicationId, result ?? 0];
+    return [applicationId, result];
   }));
 
   return results;
