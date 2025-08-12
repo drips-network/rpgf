@@ -8,15 +8,17 @@ function getArgs() {
     chainId: Deno.args[0],
     gqlName: Deno.args[1],
     rpcUrl: Deno.args[2],
-    easAddress: Deno.args[3],
-    applicationAttestationSchemaUID: Deno.args[4],
-    applicationReviewAttestationSchemaUID: Deno.args[5],
+    whitelistMode: Deno.args[3],
+    easAddress: Deno.args[4],
+    applicationAttestationSchemaUID: Deno.args[5],
+    applicationReviewAttestationSchemaUID: Deno.args[6],
   }
 
   const schema = z.object({
     chainId: z.string().transform(Number),
     gqlName: z.string(),
     rpcUrl: z.string().url(),
+    whitelistMode: z.string().transform((val) => val === "true"),
     easAddress: ethereumAddressSchema.nullish(),
     applicationAttestationSchemaUID: z.string().nullish(),
     applicationReviewAttestationSchemaUID: z.string().nullish(),
@@ -25,7 +27,7 @@ function getArgs() {
   const parsedArgs = schema.safeParse(rawArgs);
   if (!parsedArgs.success) {
     console.error("Invalid arguments:", parsedArgs.error);
-    console.log("Usage: deno task configure-chain <chainId> <gqlName> <rpcUrl> <easAddress>? <applicationAttestationSchemaUID>? <applicationReviewAttestationSchemaUID>?. The last three EAS-related args are optional.");
+    console.log("Usage: deno task configure-chain <chainId> <gqlName> <rpcUrl> <whitelistMode (true or false)> <easAddress>? <applicationAttestationSchemaUID>? <applicationReviewAttestationSchemaUID>?. The last three EAS-related args are optional.");
     Deno.exit(1);
   }
 
@@ -38,6 +40,7 @@ async function main() {
     gqlName,
     rpcUrl,
     easAddress,
+    whitelistMode,
     applicationAttestationSchemaUID,
     applicationReviewAttestationSchemaUID,
   } = getArgs();
@@ -62,6 +65,7 @@ async function main() {
     chainId,
     gqlName,
     rpcUrl,
+    whitelistMode,
     attestationSetup,
   });
 
@@ -72,6 +76,7 @@ async function main() {
     GraphQL Name: ${gqlName}
     RPC URL: ${rpcUrl}
     EAS Address: ${easAddress ?? "Not provided"}
+    User whitelisting enabled: ${whitelistMode}
     Application Attestation Schema UID: ${applicationAttestationSchemaUID ?? "Not provided"}
     Application Review Attestation Schema UID: ${applicationReviewAttestationSchemaUID ?? "Not provided"}`);
 
