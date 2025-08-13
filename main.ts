@@ -6,6 +6,7 @@ import ballotRoutes from "$app/routes/ballotRoutes.ts";
 import resultRoutes from "$app/routes/resultRoutes.ts";
 import healthRoutes from "$app/routes/healthRoutes.ts";
 import userRoutes from "$app/routes/userRoutes.ts";
+import dangerousTestRoutes from "$app/routes/dangerousTestRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
@@ -78,6 +79,16 @@ app.use(resultRoutes.allowedMethods());
 
 app.use(userRoutes.routes());
 app.use(userRoutes.allowedMethods());
+
+if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
+  console.warn("----------------------------------------------------------------------")
+  console.warn("☠️⚠️☠️ DANGEROUS TEST ROUTES ENABLED! ☠️⚠️☠️");
+  console.warn("The ENABLE_DANGEROUS_TEST_ROUTES environment variable MUST be set to false in production environments.");
+  console.warn("----------------------------------------------------------------------")
+
+  app.use(dangerousTestRoutes.routes());
+  app.use(dangerousTestRoutes.allowedMethods());
+}
 
 const port = parseInt(Deno.env.get("PORT") || "8000");
 console.log(`Server listening on http://localhost:${port}`);
