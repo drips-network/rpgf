@@ -3,7 +3,7 @@
 
 import { eq } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
-import { rounds } from "../db/schema.ts";
+import { applications, ballots, results, roundAdmins, roundDrafts, rounds, roundVoters } from "../db/schema.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { roundStateSchema } from "../types/round.ts";
 import { UnauthenticatedAppState } from "../../main.ts";
@@ -122,5 +122,41 @@ export async function dangerouslyForceRoundStateController(
   ctx.response.status = 200;
   ctx.response.body = {
     message: `Round ${roundSlug} forced into state ${desiredState}`,
+  };
+}
+
+export async function dangerouslyForceDeleteRoundController(
+  ctx: Context<UnauthenticatedAppState>,
+) {
+  checkDangerousRoutesEnabled();
+
+  const { roundSlug } = await parseDto(z.object({
+    roundSlug: z.string(),
+  }), ctx);
+
+  await db.transaction(async (tx) => {
+    const { id } = await tx.query.rounds.findFirst({
+      where: eq(rounds.urlSlug, roundSlug),
+      columns: { id: true },
+    }) ?? {};
+    if (!id) {
+      ctx.response.status = 404;
+      ctx.response.body = { error: `Round with slug ${roundSlug} not found` };
+      return;
+    }
+
+    await tx.delete(results).where(eq(results.roundId, id));
+    await tx.delete(applications).where(eq(applications.roundId, id));
+    await tx.delete(ballots).where(eq(ballots.roundId, id));
+    await tx.delete(roundAdmins).where(eq(roundAdmins.roundId, id));
+    await tx.delete(roundVoters).where(eq(roundVoters.roundId, id));
+    await tx.delete(roundDrafts).where(eq(roundDrafts.publishedAsRoundId, id));
+
+    await tx.delete(rounds).where(eq(rounds.id, id));
+  });
+
+  ctx.response.status = 200;
+  ctx.response.body = {
+    message: `Round ${roundSlug} and all associated data have been deleted`,
   };
 }

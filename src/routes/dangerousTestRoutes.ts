@@ -4,7 +4,7 @@
  */
 
 import { Router } from "oak";
-import { dangerouslyForceRoundStateController } from "$app/controllers/testController.ts";
+import { dangerouslyForceRoundStateController, dangerouslyForceDeleteRoundController } from "$app/controllers/testController.ts";
 
 const router = new Router();
 
@@ -12,6 +12,11 @@ if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
   router.post(
     '/api/testing/force-round-state',
     dangerouslyForceRoundStateController,
+  );
+  
+  router.post(
+    '/api/testing/force-delete-round',
+    dangerouslyForceDeleteRoundController,
   );
 }
 
