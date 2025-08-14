@@ -95,6 +95,7 @@ async function createRefreshToken(
     userId,
     exp: getNumericDate(expirationMinutes * 60), // Expires in X minutes
     iat: getNumericDate(0), // Issued at now
+    jti: crypto.randomUUID(), // Unique identifier for the token
   };
 
   const jwt = await createJwt({ alg: "HS256", typ: "JWT" }, payload, jwtSecretKey);
