@@ -105,6 +105,7 @@ function mapDbRoundToWrappedRound(
       state,
       name: roundSelectModel.name,
       emoji: roundSelectModel.emoji,
+      customAvatarCid: roundSelectModel.customAvatarCid,
       color: roundSelectModel.color,
       description: roundSelectModel.description,
       applicationPeriodStart: roundSelectModel.applicationPeriodStart,
@@ -734,6 +735,7 @@ export async function patchRound(
   patchingUserId: string,
   updates: PatchRoundDto,
 ): Promise<WrappedRound<RoundAdminFields> | null> {
+  console.log("Patching round", roundSlug, "with updates", updates);
   const result = await db.transaction(async (tx) => {
     const existingRound = await getRawRound(roundSlug, tx);
     if (!existingRound) {
@@ -749,6 +751,7 @@ export async function patchRound(
         votingConfig: updates.votingConfig,
         color: updates.color,
         emoji: updates.emoji,
+        customAvatarCid: updates.customAvatarCid,
         voterGuidelinesLink: updates.voterGuidelinesLink,
       })
       .where(eq(rounds.urlSlug, roundSlug))

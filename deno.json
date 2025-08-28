@@ -14,7 +14,8 @@
     "pg": "npm:pg@^8.16.0",
     "drizzle-kit": "npm:drizzle-kit@^0.31.1",
     "$app/": "./src/",
-    "zod": "npm:zod@^3.24.4"
+    "zod": "npm:zod@^3.24.4",
+    "is-ipfs": "npm:is-ipfs@^8.0.4"
   },
   "fmt": {
     "options": {

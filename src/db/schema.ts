@@ -92,6 +92,7 @@ export const rounds = pgTable("rounds", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
   resultsCalculated: boolean("results_calculated").notNull().default(false),
   resultsPublished: boolean("results_published").notNull().default(false),
+  customAvatarCid: varchar("custom_avatar_cid", { length: 255 }),
 }, (table => [
     uniqueIndex('url_slug_unique_index').on(lower(table.urlSlug)),
   ]

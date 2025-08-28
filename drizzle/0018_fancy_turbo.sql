@@ -1,0 +1,1 @@
+ALTER TABLE "rounds" ADD COLUMN "custom_avatar_cid" varchar(255);
