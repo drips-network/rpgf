@@ -187,7 +187,10 @@ export async function createApplication(
       throw new Error("Failed to create application");
     }
 
-    return newApplications[0];
+    return {
+      ...newApplications[0],
+      submitter: { walletAddress: submitterWalletAddress },
+    };
   });
 
   return result;
