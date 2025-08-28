@@ -180,7 +180,7 @@ export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
 export const createRoundDtoSchema = z.object({
   name: z.string().min(1).max(255),
   emoji: z.string().emoji(),
-  customAvatarCid: z.custom(cid).nullable(),
+  customAvatarCid: z.custom<string>(cid).nullable(),
   color: possibleColorSchema,
   urlSlug: z.string().max(255).regex(
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
