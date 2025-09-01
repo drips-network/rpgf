@@ -2,46 +2,34 @@ import { Context, RouteParams, RouterContext } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
 import {
-  createRoundDraftDtoSchema,
+  createRoundDtoSchema,
   linkDripListsToRoundDtoSchema,
   patchRoundDtoSchema,
 } from "../types/round.ts";
 import {
-  checkUrlSlugAvailability,
-  createRoundDraft,
+  createRound,
   deleteRound,
-  deleteRoundDraft,
-  getRoundDrafts,
   getRounds,
-  getWrappedRound,
-  isUserRoundDraftAdmin,
   linkDripListsToRound,
   patchRound,
-  patchRoundDraft,
-  publishRoundDraft,
+  getRound,
+  getRoundsByUser,
+  publishRound,
+  isUrlSlugAvailable,
 } from "../services/roundService.ts";
-import { UnauthorizedError } from "../errors/auth.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import parseUrlParam from "../utils/parseUrlParam.ts";
 import { z } from "zod";
-import { db } from "../db/postgres.ts";
 
 export async function createRoundDraftController(
   ctx: Context<AuthenticatedAppState>,
 ) {
-  const dto = await parseDto(createRoundDraftDtoSchema, ctx);
+  const dto = await parseDto(createRoundDtoSchema, ctx);
 
-  const adminAddresses = dto.adminWalletAddresses.map((a) => a.toLowerCase());
-  if (!adminAddresses.includes(ctx.state.user.walletAddress.toLowerCase())) {
-    throw new BadRequestError(
-      "Round must include the creator's wallet address as an admin",
-    );
-  }
-
-  const roundDraft = await createRoundDraft(dto, ctx.state.user.userId);
+  const round = await createRound(dto, ctx.state.user.userId);
 
   ctx.response.status = 200;
-  ctx.response.body = roundDraft;
+  ctx.response.body = round;
 }
 
 export async function getRoundDraftController(
@@ -54,19 +42,17 @@ export async function getRoundDraftController(
   const roundDraftId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
-  if (!(await isUserRoundDraftAdmin(userId, roundDraftId))) {
-    throw new UnauthorizedError(
-      "You are not authorized to view this round draft",
-    );
-  }
-
-  const roundDraft = (await getRoundDrafts({ id: roundDraftId }))[0];
-  if (!roundDraft) {
+  const round = await getRound(roundDraftId, userId);
+  if (!round) {
     throw new NotFoundError("Round draft not found");
   }
 
+  if (round.published) {
+    return new NotFoundError("This round draft has already been published. Query the published round instead.");
+  }
+
   ctx.response.status = 200;
-  ctx.response.body = roundDraft;
+  ctx.response.body = round;
 }
 
 export async function getRoundDraftsController(
@@ -76,20 +62,13 @@ export async function getRoundDraftsController(
     AuthenticatedAppState
   >,
 ) {
-  const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
-  const offset = Number(ctx.request.url.searchParams.get("offset")) || 0;
   const chainId = Number(ctx.request.url.searchParams.get("chainId")) || undefined;
   const userId = ctx.state.user.userId;
 
-  // You can only see your own drafts
-  const roundDrafts = await getRoundDrafts(
-    { creatorUserId: userId, chainId },
-    limit,
-    offset,
-  );
+  const rounds = await getRoundsByUser(userId, { chainId, published: false });
 
   ctx.response.status = 200;
-  ctx.response.body = roundDrafts;
+  ctx.response.body = rounds;
 }
 
 export async function patchRoundDraftController(
@@ -99,25 +78,15 @@ export async function patchRoundDraftController(
     AuthenticatedAppState
   >,
 ) {
-  const roundDraftId = ctx.params.id;
+  const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
-  if (!(await isUserRoundDraftAdmin(userId, roundDraftId))) {
-    throw new UnauthorizedError(
-      "You are not authorized to modify this round draft",
-    );
-  }
+  const dto = await parseDto(patchRoundDtoSchema, ctx);
 
-  const dto = await parseDto(createRoundDraftDtoSchema, ctx);
-
-  const adminAddresses = dto.adminWalletAddresses.map((a) => a.toLowerCase());
-  if (!adminAddresses.includes(ctx.state.user.walletAddress.toLowerCase())) {
-    throw new BadRequestError(
-      "Round must include the creator's wallet address as an admin",
-    );
-  }
-
-  const roundDraft = await patchRoundDraft(roundDraftId, dto);
+  const roundDraft = await patchRound({
+    type: 'id',
+    value: roundId,
+  }, dto, userId);
 
   ctx.response.status = 200;
   ctx.response.body = roundDraft;
@@ -133,13 +102,7 @@ export async function deleteRoundDraftController(
   const roundDraftId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
-  if (!(await isUserRoundDraftAdmin(userId, roundDraftId))) {
-    throw new UnauthorizedError(
-      "You are not authorized to delete this round draft",
-    );
-  }
-
-  await deleteRoundDraft(roundDraftId, true);
+  await deleteRound(roundDraftId, userId);
 
   ctx.response.status = 204; // No content
 }
@@ -151,19 +114,13 @@ export async function publishRoundDraftController(
     AuthenticatedAppState
   >,
 ) {
-  const roundDraftId = parseUrlParam(ctx, "id", z.string().uuid());
+  const roundId = parseUrlParam(ctx, "id", z.string().uuid());
   const userId = ctx.state.user.userId;
 
-  if (!(await isUserRoundDraftAdmin(userId, roundDraftId))) {
-    throw new UnauthorizedError(
-      "You are not authorized to publish this round draft",
-    );
-  }
-
-  const roundDraft = await publishRoundDraft(roundDraftId, userId);
+  const round = await publishRound(roundId, userId);
 
   ctx.response.status = 200;
-  ctx.response.body = roundDraft;
+  ctx.response.body = round;
 }
 
 export async function patchRoundController(
@@ -176,20 +133,15 @@ export async function patchRoundController(
   const roundSlug = ctx.params.slug;
   const userId = ctx.state.user.userId;
 
-  const { round, isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
-  if (!isAdmin) {
-    throw new UnauthorizedError("You are not an admin of this round");
-  }
-
   const dto = await parseDto(patchRoundDtoSchema, ctx);
 
-  const patchedRound = await patchRound(roundSlug, userId, dto);
+  const roundDraft = await patchRound({
+    type: 'slug',
+    value: roundSlug,
+  }, dto, userId);
 
   ctx.response.status = 200;
-  ctx.response.body = patchedRound;
+  ctx.response.body = roundDraft;
 }
 
 export async function getRoundController(
@@ -203,9 +155,12 @@ export async function getRoundController(
   const chainId = Number(ctx.request.url.searchParams.get("chainId")) || undefined;
   const userId = ctx.state.user?.userId;
 
-  const round = await getWrappedRound(roundSlug, userId ?? null, undefined, chainId);
+  const round = await getRound(roundSlug, userId ?? null);
   if (!round) {
     throw new NotFoundError("Round not found");
+  }
+  if (chainId && round.chainId !== chainId) {
+    throw new NotFoundError("Round not found on the specified chain");
   }
 
   ctx.response.status = 200;
@@ -222,26 +177,6 @@ export async function getRoundsController(ctx: Context<AppState>) {
 
   ctx.response.status = 200;
   ctx.response.body = rounds;
-}
-
-export async function deleteRoundController(
-  ctx: RouterContext<
-    "/api/rounds/:slug",
-    RouteParams<"/api/rounds/:slug">,
-    AuthenticatedAppState
-  >,
-) {
-  const roundSlug = ctx.params.slug;
-  const userId = ctx.state.user.userId;
-
-  const { isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
-  if (!isAdmin) {
-    throw new UnauthorizedError("You are not an admin of this round");
-  }
-
-  await deleteRound(roundSlug);
-
-  ctx.response.status = 204; // No content
 }
 
 export async function checkSlugAvailabilityController(
@@ -262,9 +197,7 @@ export async function checkSlugAvailabilityController(
     "URL slug must be URL-safe",
   ).transform((val) => val.toLowerCase()).parse(slug);
 
-  const result = await db.transaction(async (tx) => {
-    return await checkUrlSlugAvailability(normalizedSlug, tx);
-  });
+  const result = await isUrlSlugAvailable(normalizedSlug);
 
   ctx.response.status = 200;
   ctx.response.body = {
@@ -283,18 +216,9 @@ export async function linkDripListToRoundController(
   const userId = ctx.state.user.userId;
   const dto = await parseDto(linkDripListsToRoundDtoSchema, ctx);
 
-  const { round, isAdmin } = await getWrappedRound(slug, userId) ?? {};
-
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
-
-  if (!isAdmin) {
-    throw new UnauthorizedError("You are not an admin of this round");
-  }
-
   await linkDripListsToRound(
-    round.urlSlug,
+    slug,
+    userId,
     dto.dripListAccountIds,
   );
 

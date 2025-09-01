@@ -15,11 +15,9 @@ router.get("/api/round-drafts/:id", enforceAuthenticationMiddleware, roundContro
 router.post("/api/round-drafts/:id/publish", enforceAuthenticationMiddleware, roundController.publishRoundDraftController);
 router.delete("/api/round-drafts/:id", enforceAuthenticationMiddleware, roundController.deleteRoundDraftController);
 router.patch("/api/round-drafts/:id", enforceAuthenticationMiddleware, roundController.patchRoundDraftController);
-
 router.post("/api/round-drafts/:id/publish", enforceAuthenticationMiddleware, roundController.publishRoundDraftController);
 
 router.patch("/api/rounds/:slug", enforceAuthenticationMiddleware, roundController.patchRoundController);
-router.delete("/api/rounds/:slug", enforceAuthenticationMiddleware, roundController.deleteRoundController);
 
 router.patch("/api/rounds/:slug/drip-lists", enforceAuthenticationMiddleware, roundController.linkDripListToRoundController);
 

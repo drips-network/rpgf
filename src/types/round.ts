@@ -1,5 +1,5 @@
 import z from "zod";
-import { ethereumAddressSchema } from "./shared.ts";
+import type { ApplicationCategory } from "./applicationCategory.ts";
 import { cid } from 'is-ipfs';
 
 export const roundStateSchema = z.union([
@@ -31,241 +31,82 @@ export const possibleColorSchema = z.union([
 ]);
 export type PossibleColor = z.infer<typeof possibleColorSchema>;
 
-// Simply just renders some markdown content in the application form
-export const applicationMarkdownFieldSchema = z.object({
-  type: z.literal("markdown"),
-  content: z.string().min(1).max(50000),
-});
-
-// Displays a horizontal line in the application form
-export const applicationDividerFieldSchema = z.object({
-  type: z.literal("divider"),
-});
-
-// Displays as a standard text field
-export const applicationTextFieldSchema = z.object({
-  type: z.literal("text"),
-  private: z.boolean(),
-  required: z.boolean(),
-  slug: z.string().min(1).max(255),
-  label: z.string().min(1).max(255),
-  descriptionMd: z.string().max(10000).optional(),
-});
-
-// Displays as a standard text area
-export const applicationTextAreaFieldSchema = z.object({
-  type: z.literal("textarea"),
-  private: z.boolean(),
-  required: z.boolean(),
-  slug: z.string().min(1).max(255),
-  label: z.string().min(1).max(255),
-  descriptionMd: z.string().max(10000).optional(),
-});
-
-// Displays as a text field that validates for a valid URL
-export const applicationUrlFieldSchema = z.object({
-  type: z.literal("url"),
-  private: z.boolean(),
-  required: z.boolean(),
-  slug: z.string().min(1).max(255),
-  label: z.string().min(1).max(255),
-  descriptionMd: z.string().max(10000).optional(),
-});
-
-// Displays as a text field that validates for a valid email
-export const applicationEmailFieldSchema = z.object({
-  type: z.literal("email"),
-  private: z.boolean(),
-  required: z.boolean(),
-  slug: z.string().min(1).max(255),
-  label: z.string().min(1).max(255),
-  descriptionMd: z.string().max(10000).optional(),
-});
-
-// Allows building a list of entries, where each entry has all the fields defined in entryFields
-export const applicationListFieldSchema = z.object({
-  type: z.literal("list"),
-  private: z.boolean(),
-  slug: z.string().min(1).max(255),
-  required: z.boolean(),
-  label: z.string().min(1).max(255),
-  descriptionMd: z.string().max(10000).optional(),
-  maxItems: z.number().int().positive(),
-  entryFields: z.array(z.union([
-    z.object({
-      type: z.literal("number"),
-      label: z.string().min(1).max(255),
-    }),
-    z.object({
-      type: z.literal("text"),
-      label: z.string().min(1).max(255),
-    }),
-    z.object({
-      type: z.literal("url"),
-      label: z.string().min(1).max(255),
-    }),
-  ])),
-});
-
-// Displays as a ListSelect component, either multi- or single-select
-export const applicationSelectFieldSchema = z.object({
-  type: z.literal("select"),
-  private: z.boolean(),
-  required: z.boolean(),
-  slug: z.string().min(1).max(255),
-  label: z.string().min(1).max(255),
-  descriptionMd: z.string().max(10000).optional(),
-  options: z.array(z.object({
-    label: z.string().min(1).max(255),
-    value: z.string().min(1).max(255),
-  })),
-  allowMultiple: z.boolean().optional(),
-});
-
-const applicationFieldSchema = z.union([
-  applicationMarkdownFieldSchema,
-  applicationDividerFieldSchema,
-  applicationTextFieldSchema,
-  applicationTextAreaFieldSchema,
-  applicationUrlFieldSchema,
-  applicationEmailFieldSchema,
-  applicationListFieldSchema,
-  applicationSelectFieldSchema,
-]);
-
-const applicationFormatSchema = z.array(applicationFieldSchema).max(50);
-export type ApplicationFormat = z.infer<typeof applicationFormatSchema>;
-
-export const roundPublicFieldsSchema = z.object({
-  id: z.string().uuid(),
-  chainId: z.number(),
-  emoji: z.string().emoji(),
-  color: possibleColorSchema,
-  urlSlug: z.string().transform((val) => val.toLowerCase()),
-  state: roundStateSchema,
-  name: z.string(),
-  description: z.string().nullable(),
-  applicationPeriodStart: z.date(),
-  applicationPeriodEnd: z.date(),
-  votingPeriodStart: z.date(),
-  votingPeriodEnd: z.date(),
-  resultsPeriodStart: z.date(),
-  applicationFormat: applicationFormatSchema,
-  votingConfig: z.object({
-    maxVotesPerVoter: z.number().int().positive(),
-    maxVotesPerProjectPerVoter: z.number().int().positive(),
-  }),
-  voterGuidelinesLink: z.string().url().max(255).nullish(),
-  createdByUserId: z.string().uuid(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(), // Array of wallet addresses
-  isAdmin: z.literal<boolean>(false),
-  resultsCalculated: z.boolean(),
-  resultsPublished: z.boolean(),
-  linkedDripLists: z.array(z.string()),
-});
-export type RoundPublicFields = z.infer<typeof roundPublicFieldsSchema>;
-
-export const roundAdminFieldsSchema = roundPublicFieldsSchema.extend({
-  votingConfig: z.object({
-    maxVotesPerVoter: z.number().int().positive(),
-    maxVotesPerProjectPerVoter: z.number().int().positive(),
-    allowedVoters: z.array(z.string()).nonempty(),
-  }),
-  isAdmin: z.literal<boolean>(true),
-});
-export type RoundAdminFields = z.infer<typeof roundAdminFieldsSchema>;
+export type Round<IsPublished extends boolean> = {
+  id: string;
+  published: IsPublished;
+  chainId: number;
+  emoji: string;
+  color: string;
+  urlSlug: IsPublished extends true ? string : string | null;
+  state: IsPublished extends true ? RoundState : null;
+  name: IsPublished extends true ? string : string | null;
+  customAvatarCid: string | null;
+  description: string | null;
+  applicationPeriodStart: IsPublished extends true ? Date : Date | null;
+  applicationPeriodEnd: IsPublished extends true ? Date : Date | null;
+  votingPeriodStart: IsPublished extends true ? Date : Date | null;
+  votingPeriodEnd: IsPublished extends true ? Date : Date | null;
+  resultsPeriodStart: IsPublished extends true ? Date : Date | null;
+  maxVotesPerVoter: IsPublished extends true ? number : number | null;
+  maxVotesPerProjectPerVoter: IsPublished extends true ? number : number | null;
+  voterGuidelinesLink: string | null;
+  createdByUser: {
+    walletAddress: string;
+    id: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+  resultsCalculated: boolean;
+  resultsPublished: boolean;
+  /** Whether the requesting user is an admin of the round */
+  isAdmin: boolean;
+  /** Whether the requesting user is a voter in the round */
+  isVoter: boolean;
+  linkedDripLists: string[];
+  applicationCategories: ApplicationCategory[];
+}
 
 export const createRoundDtoSchema = z.object({
-  name: z.string().min(1).max(255),
+  draft: z.literal(true),
   emoji: z.string().emoji(),
-  customAvatarCid: z.custom<string>(cid).nullable(),
+  chainId: z.number().int().positive(),
   color: possibleColorSchema,
+  name: z.string().min(1).max(255).nullable(),
+  customAvatarCid: z.custom<string>(cid).nullable(),
   urlSlug: z.string().max(255).regex(
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
     "URL slug must be URL-safe",
-  ).transform((val) => val.toLowerCase()),
-  chainId: z.number().int().positive(),
-  description: z.string().max(10000).optional(),
+  ).transform((val) => val.toLowerCase()).nullable(),
+  description: z.string().max(10000).nullable(),
   applicationPeriodStart: z.string().refine(
     (date) => !isNaN(Date.parse(date)),
     {
       message: "Invalid date format for applicationPeriodStart",
     },
-  ),
+  ).nullable(),
   applicationPeriodEnd: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: "Invalid date format for applicationPeriodEnd",
-  }),
+  }).nullable(),
   votingPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: "Invalid date format for votingPeriodStart",
-  }),
+  }).nullable(),
   votingPeriodEnd: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: "Invalid date format for votingPeriodEnd",
-  }),
+  }).nullable(),
   resultsPeriodStart: z.string().refine((date) => !isNaN(Date.parse(date)), {
     message: "Invalid date format for resultsPeriodStart",
-  }),
-  applicationFormat: applicationFormatSchema,
-  votingConfig: z.object({
-    maxVotesPerVoter: z.number().int().positive(),
-    maxVotesPerProjectPerVoter: z.number().int().positive(),
-    allowedVoters: z.array(ethereumAddressSchema).nonempty(),
-  }),
-  voterGuidelinesLink: z.string().url().max(255).nullish(),
-  adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(), // Array of wallet addresses
+  }).nullable(),
+  maxVotesPerVoter: z.number().int().positive().nullable(),
+  maxVotesPerProjectPerVoter: z.number().int().positive().nullable(),
+  voterGuidelinesLink: z.string().url().max(255).nullable(),
 });
 export type CreateRoundDto = z.infer<typeof createRoundDtoSchema>;
 
-export const createRoundDraftDtoSchema = createRoundDtoSchema.partial().extend({
-  chainId: z.number().int().positive(),
-  emoji: z.string().emoji(),
-  color: possibleColorSchema,
-  adminWalletAddresses: z.array(ethereumAddressSchema).nonempty(),
-});
-export type CreateRoundDraftDto = z.infer<typeof createRoundDraftDtoSchema>;
-
 export const patchRoundDtoSchema = createRoundDtoSchema.partial().omit({
-  // omit all the fields that are not allowed to be patched
-  urlSlug: true,
+  draft: true,
   chainId: true,
-  applicationPeriodStart: true,
-  applicationPeriodEnd: true,
-  votingPeriodStart: true,
-  votingPeriodEnd: true,
-  resultsPeriodStart: true,
-  applicationFormat: true,
 });
 export type PatchRoundDto = z.infer<typeof patchRoundDtoSchema>;
-
-export type WrappedRound<T extends RoundPublicFields | RoundAdminFields> = {
-  id: string;
-  type: "round";
-  chainId: number;
-  round: T;
-  isVoter: boolean;
-  isAdmin: boolean;
-  createdBy: {
-    id: string;
-    walletAddress: string;
-  }
-}
-
-export type WrappedRoundDraft = {
-  id: string;
-  chainId: number;
-  type: "round-draft";
-  draft: CreateRoundDraftDto;
-  validation: {
-    scheduleValid: boolean;
-    draftComplete: boolean;
-  }
-  createdBy: {
-    id: string;
-    walletAddress: string;
-  }
-  isAdmin: true,
-}
 
 export const linkDripListsToRoundDtoSchema = z.object({
   dripListAccountIds: z.string().array(),

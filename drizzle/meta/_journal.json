@@ -134,6 +134,20 @@
       "when": 1756373034545,
       "tag": "0018_fancy_turbo",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1756475680840,
+      "tag": "0019_aspiring_deathbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1756723066430,
+      "tag": "0020_wonderful_blur",
+      "breakpoints": true
     }
   ]
 }
