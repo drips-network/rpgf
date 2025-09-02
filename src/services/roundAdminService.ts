@@ -1,7 +1,7 @@
-import type { SetRoundVotersDto, RoundVoter } from '$app/types/roundVoter.ts';
+import type { RoundVoter } from '$app/types/roundVoter.ts';
 import { eq } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
-import { roundAdmins, rounds, roundVoters } from "../db/schema.ts";
+import { roundAdmins, rounds } from "../db/schema.ts";
 import { createOrGetUser } from "./userService.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { SetRoundAdminsDto } from "../types/roundAdmin.ts";
@@ -63,43 +63,19 @@ export async function getRoundAdminsByRoundId(roundId: string, requestingUserId:
   if (!round) {
     throw new Error("Round not found.");
   }
-
-  const voters = await db.query.roundVoters.findMany({
-    where: eq(roundVoters.roundId, roundId),
-    with: {
-      user: true,
-    },
-  });
-
-  return voters.map((voter) => ({
-    id: voter.user.id,
-    walletAddress: voter.user.walletAddress,
-  }));
-}
-
-export async function getRoundVotersByRoundSlug(roundSlug: string, requestingUserId: string): Promise<RoundVoter[]> {
-  const round = await db.query.rounds.findFirst({
-    where: eq(rounds.urlSlug, roundSlug),
-    with: {
-      admins: true,
-    }
-  });
-  if (!round) {
-    throw new Error("Round not found.");
-  }
   if (!isUserRoundAdmin(round, requestingUserId)) {
-    throw new Error("You are not authorized to view this round's voters.");
+    throw new Error("You are not authorized to view this round's admins.");
   }
 
-  const voters = await db.query.roundVoters.findMany({
-    where: eq(roundVoters.roundId, round.id),
+  const admins = await db.query.roundAdmins.findMany({
+    where: eq(roundAdmins.roundId, roundId),
     with: {
       user: true,
     },
   });
 
-  return voters.map((voter) => ({
-    id: voter.user.id,
-    walletAddress: voter.user.walletAddress,
+  return admins.map((admin) => ({
+    id: admin.user.id,
+    walletAddress: admin.user.walletAddress,
   }));
 }

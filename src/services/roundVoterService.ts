@@ -22,6 +22,9 @@ export async function setRoundVoters(
   if (!isUserRoundAdmin(round, requestingUserId)) {
     throw new Error("You are not authorized to modify this round.");
   }
+  if (round.published) {
+    throw new Error("Cannot modify voters for a published round.");
+  }
 
   const result = await db.transaction(async (tx) => {
     // get the list of users for the provided wallet addresses, creating any that don't exist
@@ -99,33 +102,6 @@ export async function getRoundVotersByRoundId(roundId: string, requestingUserId:
 
   const voters = await db.query.roundVoters.findMany({
     where: eq(roundVoters.roundId, roundId),
-    with: {
-      user: true,
-    },
-  });
-
-  return voters.map((voter) => ({
-    id: voter.user.id,
-    walletAddress: voter.user.walletAddress,
-  }));
-}
-
-export async function getRoundVotersByRoundSlug(roundSlug: string, requestingUserId: string): Promise<RoundVoter[]> {
-  const round = await db.query.rounds.findFirst({
-    where: eq(rounds.urlSlug, roundSlug),
-    with: {
-      admins: true,
-    }
-  });
-  if (!round) {
-    throw new Error("Round not found.");
-  }
-  if (!isUserRoundAdmin(round, requestingUserId)) {
-    throw new Error("You are not authorized to view this round's voters.");
-  }
-
-  const voters = await db.query.roundVoters.findMany({
-    where: eq(roundVoters.roundId, round.id),
     with: {
       user: true,
     },

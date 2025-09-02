@@ -13,7 +13,6 @@ import {
   linkDripListsToRound,
   patchRound,
   getRound,
-  getRoundsByUser,
   publishRound,
   isUrlSlugAvailable,
 } from "../services/roundService.ts";
@@ -21,7 +20,7 @@ import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import parseUrlParam from "../utils/parseUrlParam.ts";
 import { z } from "zod";
 
-export async function createRoundDraftController(
+export async function createRoundController(
   ctx: Context<AuthenticatedAppState>,
 ) {
   const dto = await parseDto(createRoundDtoSchema, ctx);
@@ -32,85 +31,25 @@ export async function createRoundDraftController(
   ctx.response.body = round;
 }
 
-export async function getRoundDraftController(
+export async function deleteRoundController(
   ctx: RouterContext<
-    "/api/round-drafts/:id",
-    RouteParams<"/api/round-drafts/:id">,
-    AuthenticatedAppState
-  >,
-) {
-  const roundDraftId = ctx.params.id;
-  const userId = ctx.state.user.userId;
-
-  const round = await getRound(roundDraftId, userId);
-  if (!round) {
-    throw new NotFoundError("Round draft not found");
-  }
-
-  if (round.published) {
-    return new NotFoundError("This round draft has already been published. Query the published round instead.");
-  }
-
-  ctx.response.status = 200;
-  ctx.response.body = round;
-}
-
-export async function getRoundDraftsController(
-  ctx: RouterContext<
-    "/api/round-drafts",
-    RouteParams<"/api/round-drafts">,
-    AuthenticatedAppState
-  >,
-) {
-  const chainId = Number(ctx.request.url.searchParams.get("chainId")) || undefined;
-  const userId = ctx.state.user.userId;
-
-  const rounds = await getRoundsByUser(userId, { chainId, published: false });
-
-  ctx.response.status = 200;
-  ctx.response.body = rounds;
-}
-
-export async function patchRoundDraftController(
-  ctx: RouterContext<
-    "/api/round-drafts/:id",
-    RouteParams<"/api/round-drafts/:id">,
+    "/api/rounds/:id",
+    RouteParams<"/api/rounds/:id">,
     AuthenticatedAppState
   >,
 ) {
   const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
-  const dto = await parseDto(patchRoundDtoSchema, ctx);
-
-  const roundDraft = await patchRound({
-    type: 'id',
-    value: roundId,
-  }, dto, userId);
-
-  ctx.response.status = 200;
-  ctx.response.body = roundDraft;
-}
-
-export async function deleteRoundDraftController(
-  ctx: RouterContext<
-    "/api/round-drafts/:id",
-    RouteParams<"/api/round-drafts/:id">,
-    AuthenticatedAppState
-  >,
-) {
-  const roundDraftId = ctx.params.id;
-  const userId = ctx.state.user.userId;
-
-  await deleteRound(roundDraftId, userId);
+  await deleteRound(roundId, userId);
 
   ctx.response.status = 204; // No content
 }
 
-export async function publishRoundDraftController(
+export async function publishRoundController(
   ctx: RouterContext<
-    "/api/round-drafts/:id/publish",
-    RouteParams<"/api/round-drafts/:id/publish">,
+    "/api/rounds/:id/publish",
+    RouteParams<"/api/rounds/:id/publish">,
     AuthenticatedAppState
   >,
 ) {
@@ -125,20 +64,17 @@ export async function publishRoundDraftController(
 
 export async function patchRoundController(
   ctx: RouterContext<
-    "/api/rounds/:slug",
-    RouteParams<"/api/rounds/:slug">,
+    "/api/rounds/:id",
+    RouteParams<"/api/rounds/:id">,
     AuthenticatedAppState
   >,
 ) {
-  const roundSlug = ctx.params.slug;
+  const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
 
   const dto = await parseDto(patchRoundDtoSchema, ctx);
 
-  const roundDraft = await patchRound({
-    type: 'slug',
-    value: roundSlug,
-  }, dto, userId);
+  const roundDraft = await patchRound(roundId, dto, userId);
 
   ctx.response.status = 200;
   ctx.response.body = roundDraft;
@@ -146,16 +82,16 @@ export async function patchRoundController(
 
 export async function getRoundController(
   ctx: RouterContext<
-    "/api/rounds/:slug",
-    RouteParams<"/api/rounds/:slug">,
+    "/api/rounds/:id",
+    RouteParams<"/api/rounds/:id">,
     AppState
   >,
 ) {
-  const roundSlug = ctx.params.slug;
+  const roundId = ctx.params.id;
   const chainId = Number(ctx.request.url.searchParams.get("chainId")) || undefined;
   const userId = ctx.state.user?.userId;
 
-  const round = await getRound(roundSlug, userId ?? null);
+  const round = await getRound(roundId, userId ?? null);
   if (!round) {
     throw new NotFoundError("Round not found");
   }
@@ -207,17 +143,17 @@ export async function checkSlugAvailabilityController(
 
 export async function linkDripListToRoundController(
   ctx: RouterContext<
-    "/api/rounds/:slug/drip-lists",
-    RouteParams<"/api/rounds/:slug/drip-lists">,
+    "/api/rounds/:id/drip-lists",
+    RouteParams<"/api/rounds/:id/drip-lists">,
     AuthenticatedAppState
   >,
 ) {
-  const slug = ctx.params.slug;
+  const roundId = ctx.params.id;
   const userId = ctx.state.user.userId;
   const dto = await parseDto(linkDripListsToRoundDtoSchema, ctx);
 
   await linkDripListsToRound(
-    slug,
+    roundId,
     userId,
     dto.dripListAccountIds,
   );

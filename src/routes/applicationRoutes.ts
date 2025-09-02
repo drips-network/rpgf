@@ -4,10 +4,10 @@ import * as applicationController from "$app/controllers/applicationController.t
 
 const router = new Router();
 
-router.put("/api/rounds/:slug/applications", enforceAuthenticationMiddleware, applicationController.createAppplicationController);
-router.get("/api/rounds/:slug/applications", applicationController.getApplicationsForRoundController);
-router.get("/api/rounds/:slug/applications/:applicationId", applicationController.getApplicationController);
+router.put("/api/rounds/:roundId/applications", enforceAuthenticationMiddleware, applicationController.createAppplicationController);
+router.get("/api/rounds/:roundId/applications", applicationController.getApplicationsForRoundController);
+router.get("/api/rounds/:roundId/applications/:applicationId", applicationController.getApplicationController);
 
-router.post("/api/rounds/:slug/applications/review", enforceAuthenticationMiddleware, applicationController.submitApplicationReviewController);
+router.post("/api/rounds/:roundId/applications/review", enforceAuthenticationMiddleware, applicationController.submitApplicationReviewController);
 
 export default router;

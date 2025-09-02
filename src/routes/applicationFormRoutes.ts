@@ -4,8 +4,8 @@ import { enforceAuthenticationMiddleware } from "../middleware/authMiddleware.ts
 
 const router = new Router();
 
-router.put("/api/round-drafts/:id/application-forms", enforceAuthenticationMiddleware, c.createApplicationFormController);
-router.patch("/api/round-drafts/:id/application-forms/:id", enforceAuthenticationMiddleware, c.updateApplicationFormController);
-router.delete("/api/round-drafts/:draftId/application-forms/:id", enforceAuthenticationMiddleware, c.deleteApplicationFormController);
+router.put("/api/rounds/:roundId/application-forms", enforceAuthenticationMiddleware, c.createApplicationFormController);
+router.patch("/api/rounds/:roundId/application-forms/:id", enforceAuthenticationMiddleware, c.updateApplicationFormController);
+router.delete("/api/rounds/:roundId/application-forms/:id", enforceAuthenticationMiddleware, c.deleteApplicationFormController);
 
 export default router;

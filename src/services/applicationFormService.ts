@@ -3,6 +3,7 @@ import { db } from "../db/postgres.ts";
 import { applicationFormFields, applicationForms } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { type ApplicationForm, type CreateApplicationFormDto } from "../types/applicationForm.ts";
+import { isUserRoundAdmin } from "./roundService.ts";
 
 function ensureUniqueSlugs(fields: CreateApplicationFormDto["fields"]) {
   const slugs: string[] = fields
@@ -32,17 +33,28 @@ function mapApplicationAndFieldsToApplicationForm(
 
 export async function createApplicationForm(
   dto: CreateApplicationFormDto,
+  requestingUserId: string,
   roundId: string,
 ): Promise<ApplicationForm> {
   const result = await db.transaction(async (tx) => {
     const round = await tx.query.rounds.findFirst({
       where: (rounds, { eq }) => eq(rounds.id, roundId),
+      columns: {
+        id: true,
+        published: true,
+      },
+      with: {
+        admins: true,
+      }
     });
     if (!round) {
       throw new NotFoundError("No round found for the provided ID");
     }
     if (round.published) {
       throw new BadRequestError("Cannot create application form for a published round");
+    }
+    if (!isUserRoundAdmin(round, requestingUserId)) {
+      throw new BadRequestError("You are not authorized to modify this round");
     }
 
     // First, create the form itself
@@ -59,6 +71,8 @@ export async function createApplicationForm(
         type: field.type,
         slug: "slug" in field ? field.slug : null,
         properties: field,
+        required: "required" in field ? field.required : null,
+        private: "private" in field ? field.private : null,
       }).returning()
     ))).flat();
 
@@ -70,6 +84,8 @@ export async function createApplicationForm(
 
 export async function updateApplicationForm(
   dto: CreateApplicationFormDto,
+  requestingUserId: string,
+  roundDraftId: string,
   formId: string,
 ): Promise<ApplicationForm> {
   ensureUniqueSlugs(dto.fields);
@@ -78,17 +94,27 @@ export async function updateApplicationForm(
     where: (forms, { eq }) => eq(forms.id, formId),
     with: {
       fields: true,
-      round: true,
+      round: {
+        with: {
+          admins: true,
+        }
+      },
     }
   });
   if (!existingForm) {
     throw new NotFoundError("No application form found for the provided ID");
+  }
+  if (!isUserRoundAdmin(existingForm.round, requestingUserId)) {
+    throw new BadRequestError("You are not authorized to modify this round");
   }
   if (existingForm.deletedAt) {
     throw new BadRequestError("Cannot update a deleted application form");
   }
   if (existingForm.round.published) {
     throw new BadRequestError("Cannot update application form for a published round");
+  }
+  if (existingForm.roundId !== roundDraftId) {
+    throw new NotFoundError("The application form does not belong to the specified round draft");
   }
 
   return await db.transaction(async (tx) => {
@@ -200,7 +226,35 @@ export async function getApplicationFormForCategory(
 
 export async function deleteApplicationForm(
   formId: string,
+  requestingUserId: string,
+  roundId: string,
 ) {
+  const form = await db.query.applicationForms.findFirst({
+    where: (forms, { eq }) => eq(forms.id, formId),
+    with: {
+      round: {
+        with: {
+          admins: true,
+        }
+      },
+    }
+  });
+  if (!form) {
+    throw new NotFoundError("No application form found for the provided ID");
+  }
+  if (!isUserRoundAdmin(form.round, requestingUserId)) {
+    throw new BadRequestError("You are not authorized to modify this round");
+  }
+  if (form.deletedAt) {
+    throw new BadRequestError("Application form is already deleted");
+  }
+  if (form.round.published) {
+    throw new BadRequestError("Cannot delete application form for a published round");
+  }
+  if (form.roundId !== roundId) {
+    throw new NotFoundError("The application form does not belong to the specified round");
+  }
+
   // check if any category is assigned to this form
   const categories = await db.query.applicationCategories.findMany({
     where: (categories, { eq }) => eq(categories.applicationFormId, formId),

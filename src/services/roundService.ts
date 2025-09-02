@@ -17,7 +17,7 @@ import {
   Round,
   RoundState,
 } from "$app/types/round.ts";
-import { and, eq, inArray, InferSelectModel } from "drizzle-orm";
+import { and, eq, inArray, InferSelectModel, or } from "drizzle-orm";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 
@@ -25,7 +25,7 @@ export function isUserRoundAdmin(
   roundWithAdmins: {
     admins: { userId: string }[];
   },
-  userId: string | undefined,
+  userId: string | undefined | null,
 ): boolean {
   if (!userId) {
     return false;
@@ -40,11 +40,7 @@ const defaultRoundSelectFields = {
       user: true,
     },
   },
-  voters: {
-    with: {
-      user: true,
-    },
-  },
+  voters: true,
   linkedDripLists: {
     columns: {
       dripListAccountId: true,
@@ -64,8 +60,8 @@ const defaultRoundSelectFields = {
 } as const;
 
 type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
-  admins: { user: { id: string, walletAddress: string } }[];
-  voters: { user: { id: string, walletAddress: string } }[];
+  admins: { userId: string }[];
+  voters: { userId: string }[];
   linkedDripLists: { dripListAccountId: string }[];
   createdBy: { id: string, walletAddress: string };
   chain: { chainId: number };
@@ -76,6 +72,12 @@ function mapDbRoundToDto(
   requestingUserId: string | null,
   round: RoundSelectModelWithRelations,
 ): Round<boolean> {
+  // triple ensure that the user is an admin if the round is unpublished
+  const isAdmin = isUserRoundAdmin(round, requestingUserId ?? undefined);
+  if (!round.published && !isAdmin) {
+    throw new Error(`We were about to return draft round ${round.id} to a non-admin user.`);
+  }
+
   return {
     id: round.id,
     published: round.published,
@@ -110,8 +112,8 @@ function mapDbRoundToDto(
       applicationFormId: c.applicationFormId,
       description: c.description,
     })),
-    isVoter: !!requestingUserId && round.voters.some((v) => v.user.id === requestingUserId),
-    isAdmin: !!requestingUserId && round.admins.some((a) => a.user.id === requestingUserId),
+    isVoter: !!requestingUserId && round.voters.some((v) => v.userId === requestingUserId),
+    isAdmin,
   };
 };
 
@@ -183,12 +185,15 @@ export async function getRoundsByUser(
 };
 
 export async function getRound(
-  roundSlug: string,
+  roundIdOrSlug: string,
   requestingUserId: string | null,
   tx?: Transaction,
 ): Promise<Round<boolean> | null> {
   const round = await (tx ?? db).query.rounds.findFirst({
-    where: eq(rounds.urlSlug, roundSlug),
+    where: or(
+      eq(rounds.id, roundIdOrSlug),
+      eq(rounds.urlSlug, roundIdOrSlug),
+    ),
     with: defaultRoundSelectFields,
   });
   if (!round) {
@@ -513,21 +518,13 @@ export async function publishRound(
 )};
 
 export async function patchRound(
-  roundIdOrSlug: {
-    type: 'slug',
-    value: string,
-  } | {
-    type: 'id',
-    value: string,
-  },
+  roundId: string,
   dto: PatchRoundDto,
   patchingUserId: string,
 ): Promise<Round<true>> {
   const result = await db.transaction(async (tx) => {
     const existingRound = await tx.query.rounds.findFirst({
-      where: roundIdOrSlug.type === 'id'
-        ? eq(rounds.id, roundIdOrSlug.value)
-        : eq(rounds.urlSlug, roundIdOrSlug.value),
+      where: eq(rounds.id, roundId),
       with: defaultRoundSelectFields,
     });
 
@@ -644,7 +641,7 @@ export function inferRoundState(
 }
 
 export async function linkDripListsToRound(
-  roundSlug: string,
+  roundId: string,
   requestingUserId: string,
   dripListAccountIds: string[],
 ): Promise<void> {
@@ -653,14 +650,14 @@ export async function linkDripListsToRound(
 
   void await db.transaction(async (tx) => {
     const round = await tx.query.rounds.findFirst({
-      where: (rounds, { eq }) => eq(rounds.urlSlug, roundSlug),
+      where: (rounds, { eq }) => eq(rounds.id, roundId),
       with: {
         admins: true,
       }
     });
     if (!round) {
       throw new NotFoundError(
-        `Round with slug ${roundSlug} not found`,
+        `Round with id ${roundId} not found`,
       );
     }
     if (!isUserRoundAdmin(round, requestingUserId)) {

@@ -6,12 +6,14 @@ export const applicationMarkdownFieldSchema = z.object({
   type: z.literal("markdown"),
   content: z.string().min(1).max(50000),
 });
+export type ApplicationMarkdownField = z.infer<typeof applicationMarkdownFieldSchema>;
 
 // Displays a horizontal line in the application form
 export const applicationDividerFieldSchema = z.object({
   id: z.string().min(1).max(255).optional(),
   type: z.literal("divider"),
 });
+export type ApplicationDividerField = z.infer<typeof applicationDividerFieldSchema>;
 
 // Displays as a standard text field
 export const applicationTextFieldSchema = z.object({
@@ -23,6 +25,7 @@ export const applicationTextFieldSchema = z.object({
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
 });
+export type ApplicationTextField = z.infer<typeof applicationTextFieldSchema>;
 
 // Displays as a standard text area
 export const applicationTextAreaFieldSchema = z.object({
@@ -34,6 +37,7 @@ export const applicationTextAreaFieldSchema = z.object({
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
 });
+export type ApplicationTextAreaField = z.infer<typeof applicationTextAreaFieldSchema>;
 
 // Displays as a text field that validates for a valid URL
 export const applicationUrlFieldSchema = z.object({
@@ -45,6 +49,7 @@ export const applicationUrlFieldSchema = z.object({
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
 });
+export type ApplicationUrlField = z.infer<typeof applicationUrlFieldSchema>;
 
 // Displays as a text field that validates for a valid email
 export const applicationEmailFieldSchema = z.object({
@@ -56,6 +61,7 @@ export const applicationEmailFieldSchema = z.object({
   label: z.string().min(1).max(255),
   descriptionMd: z.string().max(10000).optional(),
 });
+export type ApplicationEmailField = z.infer<typeof applicationEmailFieldSchema>;
 
 // Allows building a list of entries, where each entry has all the fields defined in entryFields
 export const applicationListFieldSchema = z.object({
@@ -82,6 +88,7 @@ export const applicationListFieldSchema = z.object({
     }),
   ])),
 });
+export type ApplicationListField = z.infer<typeof applicationListFieldSchema>;
 
 // Displays as a ListSelect component, either multi- or single-select
 export const applicationSelectFieldSchema = z.object({
@@ -98,6 +105,7 @@ export const applicationSelectFieldSchema = z.object({
   })),
   allowMultiple: z.boolean().optional(),
 });
+export type ApplicationSelectField = z.infer<typeof applicationSelectFieldSchema>;
 
 const applicationFieldSchema = z.union([
   applicationMarkdownFieldSchema,
@@ -109,6 +117,7 @@ const applicationFieldSchema = z.union([
   applicationListFieldSchema,
   applicationSelectFieldSchema,
 ]);
+export type ApplicationField = z.infer<typeof applicationFieldSchema>;
 
 const applicationFormFields = z.array(applicationFieldSchema).max(50);
 export type ApplicationFormFields = z.infer<typeof applicationFormFields>;

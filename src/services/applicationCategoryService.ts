@@ -125,5 +125,8 @@ export async function deleteApplicationCategory(
     throw new NotFoundError("Application category not found");
   }
 
-  await db.delete(applicationCategories).where(eq(applicationCategories.id, categoryId));
+  // soft delete
+  await db.update(applicationCategories).set({
+    deletedAt: new Date(),
+  }).where(eq(applicationCategories.id, categoryId));
 }

@@ -142,6 +142,7 @@ export const applicationCategories = pgTable("application_categories", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   applicationFormId: uuid("application_form_id").notNull().references(() => applicationForms.id),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 }, (table) => [
   uniqueIndex('application_category_name_unique_index').on(table.roundId, lower(table.name)),
 ]);
@@ -169,6 +170,8 @@ export const applicationFormFields = pgTable("application_form_fields", {
   type: varchar("type", { length: 255 }).notNull().$type<ApplicationFormFields[number]['type']>(),
   slug: varchar("slug", { length: 255 }),
   order: integer("order").notNull(),
+  required: boolean("required"),
+  private: boolean("private"),
   properties: jsonb("properties").notNull().$type<ApplicationFormFields[number]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -191,12 +194,16 @@ export const applications = pgTable("applications", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
   roundId: uuid("round_id").notNull().references(() => rounds.id),
+  formId: uuid("form_id").notNull().references(() => applicationForms.id),
+  categoryId: uuid("category_id").references(() => applicationCategories.id).notNull(),
 });
 export const applicationsRelations = relations(applications, ({ one, many }) => ({
   round: one(rounds, { fields: [applications.roundId], references: [rounds.id] }),
   submitter: one(users, { fields: [applications.submitterUserId], references: [users.id] }),
   result: one(results),
   answers: many(applicationAnswers),
+  form: one(applicationForms, { fields: [applications.formId], references: [applicationForms.id] }),
+  category: one(applicationCategories, { fields: [applications.categoryId], references: [applicationCategories.id] }),
 }));
 
 export const applicationAnswers = pgTable("application_answers", {

@@ -7,17 +7,17 @@ import { NotFoundError } from "../errors/generic.ts";
 
 export async function createApplicationCategoryController(
   ctx: RouterContext<
-      "/api/round-drafts/:id/application-categories",
-      RouteParams<"/api/round-drafts/:id/application-categories">,
+      "/api/rounds/:roundId/application-categories",
+      RouteParams<"/api/rounds/:roundId/application-categories">,
       AuthenticatedAppState
     >
 ) {
-  const roundDraftId = ctx.params.id;
+  const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;
 
   const dto = await parseDto(createApplicationCategoryDtoSchema, ctx);
 
-  const category = await createApplicationCategoryForRound(dto, userId, roundDraftId);
+  const category = await createApplicationCategoryForRound(dto, userId, roundId);
 
   ctx.response.status = 201;
   ctx.response.body = category;
@@ -25,18 +25,18 @@ export async function createApplicationCategoryController(
 
 export async function updateApplicationCategoryController(
   ctx: RouterContext<
-      "/api/round-drafts/:id/application-categories/:categoryId",
-      RouteParams<"/api/round-drafts/:id/application-categories/:categoryId">,
+      "/api/rounds/:roundId/application-categories/:categoryId",
+      RouteParams<"/api/rounds/:roundId/application-categories/:categoryId">,
       AuthenticatedAppState
     >
 ) {
-  const roundDraftId = ctx.params.id;
+  const roundId = ctx.params.roundId;
   const categoryId = ctx.params.categoryId;
   const userId = ctx.state.user.userId;
 
   const dto = await parseDto(createApplicationCategoryDtoSchema, ctx);
 
-  const category = await updateApplicationCategory(roundDraftId, categoryId, userId, dto);
+  const category = await updateApplicationCategory(roundId, categoryId, userId, dto);
 
   if (!category) {
     throw new NotFoundError("Application category not found");
@@ -48,16 +48,16 @@ export async function updateApplicationCategoryController(
 
 export async function deleteApplicationCategoryController(
   ctx: RouterContext<
-      "/api/round-drafts/:id/application-categories/:categoryId",
-      RouteParams<"/api/round-drafts/:id/application-categories/:categoryId">,
+      "/api/rounds/:roundId/application-categories/:categoryId",
+      RouteParams<"/api/rounds/:roundId/application-categories/:categoryId">,
       AuthenticatedAppState
     >
 ) {
-  const roundDraftId = ctx.params.id;
+  const roundId = ctx.params.roundId;
   const categoryId = ctx.params.categoryId;
   const userId = ctx.state.user.userId;
 
-  await deleteApplicationCategory(roundDraftId, userId, categoryId);
+  await deleteApplicationCategory(roundId, userId, categoryId);
 
   ctx.response.status = 204;
 }

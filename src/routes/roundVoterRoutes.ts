@@ -4,9 +4,7 @@ import { enforceAuthenticationMiddleware } from "../middleware/authMiddleware.ts
 
 const router = new Router();
 
-router.get("/api/rounds/:slug/voters", enforceAuthenticationMiddleware, c.getRoundVotersController);
-router.get("/api/round-drafts/:id/voters", enforceAuthenticationMiddleware, c.getRoundDraftVotersController);
-
-router.patch("/api/round-drafts/:id/voters", enforceAuthenticationMiddleware, c.setRoundVotersController);
+router.get("/api/rounds/:roundId/voters", enforceAuthenticationMiddleware, c.getRoundVotersController);
+router.patch("/api/rounds/:roundId/voters", enforceAuthenticationMiddleware, c.setRoundVotersController);
 
 export default router;
