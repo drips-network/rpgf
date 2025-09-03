@@ -5,6 +5,8 @@ import { roundAdmins, rounds } from "../db/schema.ts";
 import { createOrGetUser } from "./userService.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { SetRoundAdminsDto } from "../types/roundAdmin.ts";
+import { BadRequestError, NotFoundError } from "../errors/generic.ts";
+import { UnauthorizedError } from "../errors/auth.ts";
 
 export async function setRoundAdmins(
   dto: SetRoundAdminsDto,
@@ -18,10 +20,15 @@ export async function setRoundAdmins(
     }
   });
   if (!round) {
-    throw new Error("Round not found.");
+    throw new NotFoundError("Round not found.");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
-    throw new Error("You are not authorized to modify this round.");
+    throw new UnauthorizedError("You are not authorized to modify this round.");
+  }
+
+  const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
+  if (uniqueAddresses.size !== dto.walletAddresses.length) {
+    throw new BadRequestError("Duplicate wallet addresses are not allowed.");
   }
 
   const result = await db.transaction(async (tx) => {

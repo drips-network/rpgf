@@ -1,1 +1,0 @@
-ALTER TABLE "rounds" ADD COLUMN "emoji" varchar(255) NOT NULL;

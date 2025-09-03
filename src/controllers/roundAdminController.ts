@@ -16,10 +16,10 @@ export async function setRoundAdminsController(
 
   const dto = await parseDto(setRoundAdminsDtoSchema, ctx);
 
-  const newVoters = await setRoundAdmins(dto, userId, roundId);
+  const newAdmins = await setRoundAdmins(dto, userId, roundId);
 
   ctx.response.status = 200;
-  ctx.response.body = newVoters;
+  ctx.response.body = newAdmins;
 }
 
 export async function getRoundAdminsController(

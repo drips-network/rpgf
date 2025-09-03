@@ -279,11 +279,11 @@ export async function getBallots(
 }
 
 export async function getBallotStats(
-  roundSlug: string,
+  roundId: string,
   requestingUserId: string,
 ) {
   const round = await db.query.rounds.findFirst({
-    where: eq(rounds.urlSlug, roundSlug),
+    where: eq(rounds.id, roundId),
     with: { admins: true },
   });
   if (!round) {

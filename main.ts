@@ -9,6 +9,7 @@ import resultRoutes from "$app/routes/resultRoutes.ts";
 import healthRoutes from "$app/routes/healthRoutes.ts";
 import userRoutes from "$app/routes/userRoutes.ts";
 import roundVoterRoutes from "$app/routes/roundVoterRoutes.ts";
+import roundAdminRoutes from "$app/routes/roundAdminRoutes.ts";
 import dangerousTestRoutes from "$app/routes/dangerousTestRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
@@ -73,6 +74,9 @@ app.use(roundRoutes.allowedMethods());
 
 app.use(roundVoterRoutes.routes());
 app.use(roundVoterRoutes.allowedMethods());
+
+app.use(roundAdminRoutes.routes());
+app.use(roundAdminRoutes.allowedMethods());
 
 app.use(applicationRoutes.routes());
 app.use(applicationRoutes.allowedMethods());

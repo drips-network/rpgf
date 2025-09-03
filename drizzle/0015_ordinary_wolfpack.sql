@@ -1,1 +1,0 @@
-ALTER TABLE "refresh_tokens" ALTER COLUMN "token" SET DATA TYPE varchar(510);

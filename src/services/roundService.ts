@@ -17,9 +17,10 @@ import {
   Round,
   RoundState,
 } from "$app/types/round.ts";
-import { and, eq, inArray, InferSelectModel, or } from "drizzle-orm";
+import { and, count, eq, inArray, InferSelectModel, isNull } from "drizzle-orm";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
+import { z } from "zod";
 
 export function isUserRoundAdmin(
   roundWithAdmins: {
@@ -47,6 +48,7 @@ const defaultRoundSelectFields = {
     },
   },
   applicationCategories: {
+    where: isNull(applicationCategories.deletedAt),
     with: {
       form: true,
     }
@@ -71,12 +73,19 @@ type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
 function mapDbRoundToDto(
   requestingUserId: string | null,
   round: RoundSelectModelWithRelations,
+  adminCount: number | null,
 ): Round<boolean> {
   // triple ensure that the user is an admin if the round is unpublished
   const isAdmin = isUserRoundAdmin(round, requestingUserId ?? undefined);
   if (!round.published && !isAdmin) {
     throw new Error(`We were about to return draft round ${round.id} to a non-admin user.`);
   }
+
+  const validation = round.published ? null : {
+    scheduleValid: validateSchedule(round, false),
+    readyToPublish: validateRoundReadyForPublishing(round),
+    applicationFormValid: round.applicationCategories.length > 0,
+  };
 
   return {
     id: round.id,
@@ -114,6 +123,8 @@ function mapDbRoundToDto(
     })),
     isVoter: !!requestingUserId && round.voters.some((v) => v.userId === requestingUserId),
     isAdmin,
+    validation,
+    adminCount,
   };
 };
 
@@ -142,7 +153,7 @@ export async function getRounds(
     with: defaultRoundSelectFields,
   });
 
-  return results.map((r) => mapDbRoundToDto(requestingUserId, r));
+  return results.map((r) => mapDbRoundToDto(requestingUserId, r, null));
 }
 
 /** Get all rounds where the user is an admin, even if unpublished */
@@ -181,7 +192,7 @@ export async function getRoundsByUser(
     with: defaultRoundSelectFields,
   });
 
-  return matchingRounds.map((r) => mapDbRoundToDto(userId, r) as Round<true>); 
+  return matchingRounds.map((r) => mapDbRoundToDto(userId, r, null) as Round<true>);
 };
 
 export async function getRound(
@@ -189,23 +200,33 @@ export async function getRound(
   requestingUserId: string | null,
   tx?: Transaction,
 ): Promise<Round<boolean> | null> {
+  const isUuid = z.string().uuid().safeParse(roundIdOrSlug).success;
+
   const round = await (tx ?? db).query.rounds.findFirst({
-    where: or(
-      eq(rounds.id, roundIdOrSlug),
-      eq(rounds.urlSlug, roundIdOrSlug),
-    ),
+    where: isUuid
+      ? eq(rounds.id, roundIdOrSlug)
+      : eq(lower(rounds.urlSlug), roundIdOrSlug.toLowerCase()),
     with: defaultRoundSelectFields,
   });
   if (!round) {
     return null;
   }
 
+  const isAdmin = isUserRoundAdmin(round, requestingUserId ?? undefined);
+
   // only round admins are allowed to see unpublished round drafts
-  if (!round.published && !isUserRoundAdmin(round, requestingUserId ?? undefined)) {
+  if (!round.published && !isAdmin) {
     return null;
   }
 
-  return mapDbRoundToDto(requestingUserId, round);
+  const { count: adminCount } = isAdmin ? (await db
+    .select({ count: count() })
+    .from(roundAdmins)
+    .where(
+      eq(roundAdmins.roundId, round.id)
+    ))[0] : {};
+
+  return mapDbRoundToDto(requestingUserId, round, adminCount ?? null);
 }
 
 export async function isUrlSlugAvailable(
@@ -281,7 +302,7 @@ export async function createRound(
       voterGuidelinesLink: dto.voterGuidelinesLink,
       createdByUserId: creatorUserId,
       customAvatarCid: dto.customAvatarCid,
-    })).returning()[0];
+    }).returning())[0];
 
     // create a single admin for the round, the creator
     await tx.insert(roundAdmins).values({
@@ -300,7 +321,7 @@ export async function createRound(
     return newRoundDraft;
   });
 
-  return mapDbRoundToDto(creatorUserId, result) as Round<false>;
+  return mapDbRoundToDto(creatorUserId, result, null) as Round<false>;
 }
 
 
@@ -348,7 +369,7 @@ export async function deleteRound(roundId: string, requestingUserId: string): Pr
 
 
 function validateSchedule(
-  schedule: 
+  schedule:
     Pick<
       Round<boolean>,
       | "applicationPeriodStart"
@@ -512,10 +533,11 @@ export async function publishRound(
       if (!r) {
         throw new Error("Failed to retrieve published round.");
       }
-      return mapDbRoundToDto(publishedByUserId, r) as Round<true>;
+      return mapDbRoundToDto(publishedByUserId, r, null) as Round<true>;
     });
   }
-)};
+  )
+};
 
 export async function patchRound(
   roundId: string,
@@ -551,7 +573,12 @@ export async function patchRound(
 
       // check if dto has any fields not in allowedFields
       const dtoFields = Object.keys(dto);
-      const invalidFields = dtoFields.filter((field) => !allowedFields.includes(field));
+      const invalidFields = dtoFields
+        .filter((field) => !allowedFields.includes(field))
+        // ignore fields that haven't changed
+        // deno-lint-ignore no-explicit-any
+        .filter((field) => (dto as any)[field] !== (existingRound as any)[field]);
+      
       if (invalidFields.length > 0) {
         throw new BadRequestError(
           `Cannot update fields ${invalidFields.join(", ")} on a published round.`,
@@ -601,7 +628,7 @@ export async function patchRound(
       throw new Error("Failed to retrieve updated round.");
     }
 
-    return mapDbRoundToDto(patchingUserId, updatedRound);
+    return mapDbRoundToDto(patchingUserId, updatedRound, null);
   });
 
   return result as Round<true>;

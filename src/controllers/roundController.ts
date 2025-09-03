@@ -15,6 +15,7 @@ import {
   getRound,
   publishRound,
   isUrlSlugAvailable,
+  getRoundsByUser,
 } from "../services/roundService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import parseUrlParam from "../utils/parseUrlParam.ts";
@@ -110,6 +111,16 @@ export async function getRoundsController(ctx: Context<AppState>) {
   const chainId = Number(ctx.request.url.searchParams.get("chainId"));
 
   const rounds = await getRounds(userId ?? null, { chainId }, limit, offset);
+
+  ctx.response.status = 200;
+  ctx.response.body = rounds;
+}
+
+export async function getOwnRoundsController(ctx: Context<AuthenticatedAppState>) {
+  const userId = ctx.state.user.userId;
+  const chainId = Number(ctx.request.url.searchParams.get("chainId"));
+
+  const rounds = await getRoundsByUser(userId, { chainId});
 
   ctx.response.status = 200;
   ctx.response.body = rounds;

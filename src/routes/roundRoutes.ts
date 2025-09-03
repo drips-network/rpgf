@@ -5,6 +5,7 @@ import { enforceAuthenticationMiddleware } from "../middleware/authMiddleware.ts
 const router = new Router();
 
 router.get("/api/rounds", roundController.getRoundsController);
+router.get("/api/rounds/own", enforceAuthenticationMiddleware, roundController.getOwnRoundsController);
 router.get("/api/rounds/:id", roundController.getRoundController);
 
 router.get("/api/rounds/check-slug/:slug", roundController.checkSlugAvailabilityController);

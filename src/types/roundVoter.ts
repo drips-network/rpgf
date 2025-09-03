@@ -7,6 +7,6 @@ export type RoundVoter = {
 }
 
 export const setRoundVotersDtoSchema = z.object({
-  walletAddresses: z.array(ethereumAddressSchema).min(1, "At least one wallet address is required").max(100000, "A maximum of 100000 wallet addresses can be added at once"),
+  walletAddresses: z.array(ethereumAddressSchema).max(100000, "A maximum of 100000 wallet addresses can be added at once"),
 });
 export type SetRoundVotersDto = z.infer<typeof setRoundVotersDtoSchema>;

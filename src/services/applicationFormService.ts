@@ -1,9 +1,10 @@
-import { eq, inArray, InferSelectModel } from "drizzle-orm";
+import { eq, inArray, InferSelectModel, isNull } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
-import { applicationFormFields, applicationForms } from "../db/schema.ts";
+import { applicationFormFields, applicationForms, rounds } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { type ApplicationForm, type CreateApplicationFormDto } from "../types/applicationForm.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
+import { UnauthorizedError } from "../errors/auth.ts";
 
 function ensureUniqueSlugs(fields: CreateApplicationFormDto["fields"]) {
   const slugs: string[] = fields
@@ -36,26 +37,39 @@ export async function createApplicationForm(
   requestingUserId: string,
   roundId: string,
 ): Promise<ApplicationForm> {
+  const round = await db.query.rounds.findFirst({
+    where: (rounds, { eq }) => eq(rounds.id, roundId),
+    columns: {
+      id: true,
+      published: true,
+    },
+    with: {
+      admins: true,
+    }
+  });
+  if (!round) {
+    throw new NotFoundError("No round found for the provided ID");
+  }
+  if (round.published) {
+    throw new BadRequestError("Cannot create application form for a published round");
+  }
+  if (!isUserRoundAdmin(round, requestingUserId)) {
+    throw new BadRequestError("You are not authorized to modify this round");
+  }
+
+  // ensure no form with the same name exists for the round
+  const existingForm = await db.query.applicationForms.findFirst({
+    where: (forms, { and, eq, isNull }) => and(
+      eq(forms.roundId, roundId),
+      eq(forms.name, dto.name),
+      isNull(forms.deletedAt)
+    ),
+  });
+  if (existingForm) {
+    throw new BadRequestError("An application form with the same name already exists for this round");
+  }
+
   const result = await db.transaction(async (tx) => {
-    const round = await tx.query.rounds.findFirst({
-      where: (rounds, { eq }) => eq(rounds.id, roundId),
-      columns: {
-        id: true,
-        published: true,
-      },
-      with: {
-        admins: true,
-      }
-    });
-    if (!round) {
-      throw new NotFoundError("No round found for the provided ID");
-    }
-    if (round.published) {
-      throw new BadRequestError("Cannot create application form for a published round");
-    }
-    if (!isUserRoundAdmin(round, requestingUserId)) {
-      throw new BadRequestError("You are not authorized to modify this round");
-    }
 
     // First, create the form itself
     const [form] = await tx.insert(applicationForms).values({
@@ -93,7 +107,9 @@ export async function updateApplicationForm(
   const existingForm = await db.query.applicationForms.findFirst({
     where: (forms, { eq }) => eq(forms.id, formId),
     with: {
-      fields: true,
+      fields: {
+        where: isNull(applicationFormFields.deletedAt),
+      },
       round: {
         with: {
           admins: true,
@@ -114,6 +130,7 @@ export async function updateApplicationForm(
     throw new BadRequestError("Cannot update application form for a published round");
   }
   if (existingForm.roundId !== roundDraftId) {
+    console.log(existingForm.roundId, roundDraftId);
     throw new NotFoundError("The application form does not belong to the specified round draft");
   }
 
@@ -187,23 +204,8 @@ export async function updateApplicationForm(
   });
 }
 
-export async function getApplicationFormsForRound(
-  roundId: string,
-): Promise<ApplicationForm[]> {
-  const forms = await db.query.applicationForms.findMany({
-    where: (forms, { eq, and, isNull }) => and(
-      eq(forms.roundId, roundId),
-      isNull(forms.deletedAt)
-    ),
-    with: {
-      fields: true,
-    }
-  });
-
-  return forms.map((form) => mapApplicationAndFieldsToApplicationForm(form, form.fields));
-}
-
 export async function getApplicationFormForCategory(
+  roundId: string,
   categoryId: string,
 ): Promise<ApplicationForm | null> {
   const category = await db.query.applicationCategories.findFirst({
@@ -213,9 +215,23 @@ export async function getApplicationFormForCategory(
         with: {
           fields: true,
         }
+      },
+      round: {
+        columns: {
+          id: true,
+          // This route should only be used for applicants post-publish of the round
+          published: true,
+        }
       }
     }
   });
+
+  if (!category) {
+    throw new NotFoundError("No application category found for the provided ID");
+  }
+  if (category.roundId !== roundId) {
+    throw new NotFoundError("The application category does not belong to the specified round");
+  }
 
   if (!category?.form) {
     return null;
@@ -252,12 +268,15 @@ export async function deleteApplicationForm(
     throw new BadRequestError("Cannot delete application form for a published round");
   }
   if (form.roundId !== roundId) {
-    throw new NotFoundError("The application form does not belong to the specified round");
+  throw new NotFoundError("The application form does not belong to the specified round");
   }
 
   // check if any category is assigned to this form
   const categories = await db.query.applicationCategories.findMany({
-    where: (categories, { eq }) => eq(categories.applicationFormId, formId),
+    where: (categories, { eq, isNull, and }) => and(
+      eq(categories.applicationFormId, formId),
+      isNull(categories.deletedAt),
+    ),
   });
   if (categories.length > 0) {
     throw new BadRequestError("Cannot delete application form assigned to a category");
@@ -271,4 +290,22 @@ export async function deleteApplicationForm(
   // if the form itself is deleted, the fields are considered deleted as well, so no need to delete them explicitly
 
   return;
+}
+
+export async function getApplicationFormsByRoundId(
+  roundId: string,
+): Promise<ApplicationForm[]> {
+  const forms = await db.query.applicationForms.findMany({
+    where: (forms, { and, eq, isNull }) => and(
+      eq(forms.roundId, roundId),
+      isNull(forms.deletedAt)
+    ),
+    with: {
+      fields: {
+        where: isNull(applicationFormFields.deletedAt),
+      },
+    }
+  });
+
+  return forms.map((form) => mapApplicationAndFieldsToApplicationForm(form, form.fields));
 }

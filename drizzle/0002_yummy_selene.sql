@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "url_slug_unique_index" ON "rounds" USING btree (lower("url_slug"));

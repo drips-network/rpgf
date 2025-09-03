@@ -1,8 +1,8 @@
 import { RouteParams, RouterContext } from "oak";
-import { AuthenticatedAppState } from "../../main.ts";
+import { AppState, AuthenticatedAppState } from "../../main.ts";
 import { createApplicationCategoryDtoSchema } from "../types/applicationCategory.ts";
 import parseDto from "../utils/parseDto.ts";
-import { createApplicationCategoryForRound, deleteApplicationCategory, updateApplicationCategory } from "../services/applicationCategoryService.ts";
+import { createApplicationCategoryForRound, deleteApplicationCategory, getApplicationCategoriesByRoundId, updateApplicationCategory } from "../services/applicationCategoryService.ts";
 import { NotFoundError } from "../errors/generic.ts";
 
 export async function createApplicationCategoryController(
@@ -57,7 +57,23 @@ export async function deleteApplicationCategoryController(
   const categoryId = ctx.params.categoryId;
   const userId = ctx.state.user.userId;
 
-  await deleteApplicationCategory(roundId, userId, categoryId);
+  await deleteApplicationCategory(roundId, categoryId, userId);
 
   ctx.response.status = 204;
+}
+
+export async function getApplicationCategoriesController(
+  ctx: RouterContext<
+      "/api/rounds/:roundId/application-categories",
+      RouteParams<"/api/rounds/:roundId/application-categories">,
+      AppState
+    >
+) {
+  const roundId = ctx.params.roundId;
+  const userId = ctx.state.user?.userId;
+
+  const categories = await getApplicationCategoriesByRoundId(roundId, userId ?? null);
+
+  ctx.response.status = 200;
+  ctx.response.body = categories;
 }

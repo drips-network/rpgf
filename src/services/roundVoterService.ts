@@ -4,6 +4,8 @@ import { db } from "../db/postgres.ts";
 import { rounds, roundVoters } from "../db/schema.ts";
 import { createOrGetUser } from "./userService.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
+import { BadRequestError, NotFoundError } from "../errors/generic.ts";
+import { UnauthorizedError } from "../errors/auth.ts";
 
 export async function setRoundVoters(
   dto: SetRoundVotersDto,
@@ -17,13 +19,18 @@ export async function setRoundVoters(
     }
   });
   if (!round) {
-    throw new Error("Round not found.");
+    throw new NotFoundError("Round not found.");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
-    throw new Error("You are not authorized to modify this round.");
+    throw new UnauthorizedError("You are not authorized to modify this round.");
   }
   if (round.published) {
-    throw new Error("Cannot modify voters for a published round.");
+    throw new BadRequestError("Cannot modify voters for a published round.");
+  }
+
+  const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
+  if (uniqueAddresses.size !== dto.walletAddresses.length) {
+    throw new BadRequestError("Duplicate wallet addresses are not allowed.");
   }
 
   const result = await db.transaction(async (tx) => {
@@ -69,6 +76,10 @@ export async function setRoundVoters(
     await tx.delete(roundVoters).where(eq(roundVoters.roundId, roundId));
 
     // insert the new voters for the round
+
+    if (users.length === 0) {
+      return [];
+    }
 
     const voters = await tx.insert(roundVoters).values(
       users.map((u) => ({

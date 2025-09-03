@@ -64,6 +64,12 @@ export type Round<IsPublished extends boolean> = {
   isVoter: boolean;
   linkedDripLists: string[];
   applicationCategories: ApplicationCategory[];
+  validation: IsPublished extends true ? null : {
+    scheduleValid: boolean;
+    applicationFormValid: boolean;
+    readyToPublish: boolean;
+  }
+  adminCount: number | null;
 }
 
 export const createRoundDtoSchema = z.object({

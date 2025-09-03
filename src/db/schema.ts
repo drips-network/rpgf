@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { PossibleColor } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
-import { relations, SQL, sql } from "drizzle-orm";
+import { isNull, relations, SQL, sql } from "drizzle-orm";
 import { SubmitBallotDto } from "../types/ballot.ts";
 import { ProjectData } from "../gql/projects.ts";
 import { ApplicationFormFields } from "../types/applicationForm.ts";
@@ -144,7 +144,9 @@ export const applicationCategories = pgTable("application_categories", {
   applicationFormId: uuid("application_form_id").notNull().references(() => applicationForms.id),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 }, (table) => [
-  uniqueIndex('application_category_name_unique_index').on(table.roundId, lower(table.name)),
+  uniqueIndex('application_category_name_unique_index')
+    .on(table.roundId, lower(table.name))
+    .where(isNull(table.deletedAt)),
 ]);
 export const applicationCategoriesRelations = relations(applicationCategories, ({ one }) => ({
   round: one(rounds, { fields: [applicationCategories.roundId], references: [rounds.id] }),
