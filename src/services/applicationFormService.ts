@@ -180,6 +180,8 @@ export async function updateApplicationForm(
           type: field.type,
           slug: "slug" in field ? field.slug : null,
           properties: field,
+          private: "private" in field ? field.private : null,
+          required: "required" in field ? field.required : null,
           order: fieldIndexMap.get(field)!,
         })),
       );
