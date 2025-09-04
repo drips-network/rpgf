@@ -19,16 +19,10 @@ export function validateAnswers(
   dto: ApplicationAnswerDto,
   applicationFields: InferSelectModel<typeof applicationFormFields>[],
 ): boolean {
-  console.log({
-    dto,
-    applicationFields
-  })
-
   // ensure all required fields are present in the answers
   const requiredFields = applicationFields.filter((f) => f.required).map((f) => f.id);
   for (const requiredFieldId of requiredFields) {
     if (!dto.find((a) => a.fieldId === requiredFieldId && a.value.toString().trim() !== "")) {
-      console.log("Missing required field:", requiredFieldId);
       return false;
     }
   }
@@ -37,7 +31,6 @@ export function validateAnswers(
   const fieldIdSet = new Set<string>();
   for (const answer of dto) {
     if (fieldIdSet.has(answer.fieldId)) {
-      console.log("Duplicate field ID in answers:", answer.fieldId);
       return false;
     }
     fieldIdSet.add(answer.fieldId);
@@ -47,7 +40,6 @@ export function validateAnswers(
   const formFieldIds = new Set(applicationFields.map((f) => f.id));
   for (const answer of dto) {
     if (!formFieldIds.has(answer.fieldId)) {
-      console.log("Answered field ID not in form:", answer.fieldId);
       return false;
     }
   }
@@ -86,7 +78,6 @@ export function validateAnswers(
   for (const answer of dto) {
     const schema = fieldSchemaMap[answer.fieldId];
     if (!schema || !schema.safeParse(answer).success) {
-      console.log("Answer validation failed for field ID:", answer.fieldId);
       return false;
     }
 
@@ -95,7 +86,6 @@ export function validateAnswers(
 
   // ensure no fields unvalidated
   if (validatedFieldIds.size !== dto.length) {
-    console.log("Some fields were not validated");
     return false;
   }
 
@@ -194,8 +184,6 @@ export async function recordAnswers(
   if (!valid) {
     throw new BadRequestError("Invalid answers");
   }
-
-  console.log({ applicationId: application.id, answers: dto });
 
   return await (tx ?? db).transaction(async (tx) => {
     await Promise.all(dto.map(async (answer) => {

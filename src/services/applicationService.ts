@@ -218,8 +218,6 @@ export async function createApplication(
     throw new BadRequestError("Invalid application category");
   }
 
-  console.log({ applicationDto })
-
   validateAnswers(applicationDto.answers, applicationCategory.form.fields);
 
   // Validate provided Drips project ID is valid and owned by the submitter

@@ -134,7 +134,6 @@ export async function updateApplicationForm(
     throw new BadRequestError("Cannot update application form for a published round");
   }
   if (existingForm.roundId !== roundDraftId) {
-    console.log(existingForm.roundId, roundDraftId);
     throw new NotFoundError("The application form does not belong to the specified round draft");
   }
 
@@ -158,12 +157,6 @@ export async function updateApplicationForm(
     const fieldIdsToDelete = existingFields
       .map((f) => f.id)
       .filter((id) => !incomingFieldIds.has(id));
-
-    console.log({
-      fieldsToCreate,
-      fieldsToUpdate,
-      fieldIdsToDelete,
-    })
 
     if (fieldIdsToDelete.length > 0) {
       await tx
