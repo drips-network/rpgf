@@ -118,7 +118,10 @@ function mapDbRoundToDto(
     applicationCategories: round.applicationCategories.map((c) => ({
       id: c.id,
       name: c.name,
-      applicationFormId: c.applicationFormId,
+      applicationForm: {
+        id: c.applicationFormId,
+        name: c.name,
+      },
       description: c.description,
     })),
     isVoter: !!requestingUserId && round.voters.some((v) => v.userId === requestingUserId),
