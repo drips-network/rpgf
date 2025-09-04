@@ -222,14 +222,14 @@ function _generateCsvRowsForVoter(
 }
 
 export async function getBallots(
-  roundSlug: string,
+  roundId: string,
   requestingUserId: string,
   limit = 0,
   offset = 0,
   format: "json" | "csv" = "json",
 ): Promise<WrappedBallot[] | string> {
   const round = await db.query.rounds.findFirst({
-    where: eq(rounds.urlSlug, roundSlug),
+    where: eq(rounds.id, roundId),
     with: {
       voters: {
         with: {
