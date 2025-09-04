@@ -1,10 +1,9 @@
 import { eq, inArray, InferSelectModel, isNull } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
-import { applicationFormFields, applicationForms, rounds } from "../db/schema.ts";
+import { applicationFormFields, applicationForms } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { type ApplicationForm, type CreateApplicationFormDto } from "../types/applicationForm.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
-import { UnauthorizedError } from "../errors/auth.ts";
 
 function ensureUniqueSlugs(fields: CreateApplicationFormDto["fields"]) {
   const slugs: string[] = fields
@@ -28,7 +27,12 @@ function mapApplicationAndFieldsToApplicationForm(
     name: application.name,
     fields: fields
       .sort((a, b) => a.order - b.order)
-      .map((field) => field.properties),
+      .map((field) => ({
+        ...field.properties,
+        id: field.id,
+        private: field.private ?? false,
+        required: field.required ?? false,
+      })),
   };
 }
 
@@ -150,11 +154,16 @@ export async function updateApplicationForm(
       // Ensure it's a field that already exists
       f.id && existingFields.some(ef => ef.id === f.id)
     );
-
     const incomingFieldIds = new Set(incomingFields.map((f) => f.id));
     const fieldIdsToDelete = existingFields
       .map((f) => f.id)
       .filter((id) => !incomingFieldIds.has(id));
+
+    console.log({
+      fieldsToCreate,
+      fieldsToUpdate,
+      fieldIdsToDelete,
+    })
 
     if (fieldIdsToDelete.length > 0) {
       await tx
@@ -188,6 +197,8 @@ export async function updateApplicationForm(
               properties: field,
               // **Set order based on the field's index in the DTO array**
               order: fieldIndexMap.get(field)!,
+              private: "private" in field ? field.private : null,
+              required: "required" in field ? field.required : null,
             })
             .where(eq(applicationFormFields.id, field.id!)),
         ),

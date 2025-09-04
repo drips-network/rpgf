@@ -129,6 +129,10 @@ async function validateEasAttestation(
 
 function mapDbApplicationToDto(
   application: InferSelectModel<typeof applications>,
+  applicationForm: {
+    id: string;
+    name: string;
+  },
   category: InferSelectModel<typeof applicationCategories>,
   submitter: { id: string; walletAddress: string },
   answers: ApplicationAnswer[],
@@ -149,7 +153,7 @@ function mapDbApplicationToDto(
       id: category.id,
       name: category.name,
       description: category.description,
-      applicationFormId: category.applicationFormId,
+      applicationForm,
     },
     answers,
     allocation: resultAllocation,
@@ -266,6 +270,7 @@ export async function createApplication(
 
     return mapDbApplicationToDto(
       newApplication,
+      applicationCategory.form,
       applicationCategory,
       { id: submitterUserId, walletAddress: submitterWalletAddress },
       newAnswers,
@@ -303,6 +308,12 @@ export async function getApplication(
           results: true,
         }
       },
+      form: {
+        columns: {
+          id: true,
+          name: true,
+        }
+      },
       submitter: {
         columns: {
           id: true,
@@ -337,6 +348,7 @@ export async function getApplication(
 
   return mapDbApplicationToDto(
     application,
+    application.form,
     application.category,
     application.submitter,
     answers,
