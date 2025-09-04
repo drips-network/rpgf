@@ -1,18 +1,16 @@
 import { RouteParams, RouterContext } from "oak";
 import { AuthenticatedAppState } from "../../main.ts";
-import { BadRequestError, NotFoundError } from "../errors/generic.ts";
-import { getWrappedRound } from "../services/roundService.ts";
-import { UnauthorizedError } from "../errors/auth.ts";
+import { BadRequestError } from "../errors/generic.ts";
 import { calculateDripListWeights, isValidResultsCalculationMethod, publishResults, recalculateResultsForRound } from "../services/resultsService.ts";
 
 export async function recalculateResultsController(
   ctx: RouterContext<
-      "/api/rounds/:slug/results/recalculate",
-      RouteParams<"/api/rounds/:slug/recalculate">,
+      "/api/rounds/:roundId/results/recalculate",
+      RouteParams<"/api/rounds/:roundId/recalculate">,
       AuthenticatedAppState
     >,
 ) {
-  const roundSlug = ctx.params.slug;
+  const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;
   const method = ctx.request.url.searchParams.get("method");
 
@@ -20,71 +18,37 @@ export async function recalculateResultsController(
     throw new BadRequestError("Invalid or missing result calculation `method` parameter. Possible: median, avg, sum");
   }
 
-  const { round, isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
-
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
-
-  if (!isAdmin) {
-    throw new UnauthorizedError("You are not an admin of this round");
-  }
-
-  if (!(round.state === "results" || round.state === "pending-results")) {
-    throw new BadRequestError("Round voting hasn't concluded yet");
-  }
-
-  await recalculateResultsForRound(roundSlug, method);
+  await recalculateResultsForRound(roundId, userId, method);
 
   ctx.response.status = 200;
 }
 
 export async function publishResultsController(
   ctx: RouterContext<
-      "/api/rounds/:slug/results/publish",
-      RouteParams<"/api/rounds/:slug/publish">,
+      "/api/rounds/:roundId/results/publish",
+      RouteParams<"/api/rounds/:roundId/publish">,
       AuthenticatedAppState
     >,
 ) {
-  const roundSlug = ctx.params.slug;
+  const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;
 
-  const { round, isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
-
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
-
-  if (!isAdmin) {
-    throw new UnauthorizedError("You are not an admin of this round");
-  }
-
-  await publishResults(roundSlug);
+  await publishResults(roundId, userId);
 
   ctx.response.status = 200;
 }
 
 export async function getDripListWeightsController(
   ctx: RouterContext<
-      "/api/rounds/:slug/results/drip-list-weights",
-      RouteParams<"/api/rounds/:slug/drip-list-weights">,
+      "/api/rounds/:roundId/results/drip-list-weights",
+      RouteParams<"/api/rounds/:roundId/drip-list-weights">,
       AuthenticatedAppState
     >,
 ) {
-  const roundSlug = ctx.params.slug;
+  const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;
 
-  const { round, isAdmin } = await getWrappedRound(roundSlug, userId) ?? {};
-
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
-
-  if (!isAdmin) {
-    throw new UnauthorizedError("You are not an admin of this round");
-  }
-
-  const dripListWeights = await calculateDripListWeights(round.urlSlug);
+  const dripListWeights = await calculateDripListWeights(roundId, userId);
 
   ctx.response.status = 200;
   ctx.response.body = dripListWeights;

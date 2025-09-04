@@ -4,9 +4,9 @@ import * as resolutController from "$app/controllers/resultController.ts";
 
 const router = new Router();
 
-router.post('/api/rounds/:slug/results/recalculate', enforceAuthenticationMiddleware, resolutController.recalculateResultsController);
-router.post('/api/rounds/:slug/results/publish', enforceAuthenticationMiddleware, resolutController.publishResultsController);
+router.post('/api/rounds/:roundId/results/recalculate', enforceAuthenticationMiddleware, resolutController.recalculateResultsController);
+router.post('/api/rounds/:roundId/results/publish', enforceAuthenticationMiddleware, resolutController.publishResultsController);
 
-router.get('/api/rounds/:slug/results/drip-list-weights', enforceAuthenticationMiddleware, resolutController.getDripListWeightsController);
+router.get('/api/rounds/:roundId/results/drip-list-weights', enforceAuthenticationMiddleware, resolutController.getDripListWeightsController);
 
 export default router;

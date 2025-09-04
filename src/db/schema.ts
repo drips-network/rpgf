@@ -12,12 +12,12 @@ import {
   AnyPgColumn,
   boolean,
 } from "drizzle-orm/pg-core";
-import { PossibleColor, type ApplicationFormat, type CreateRoundDraftDto, type CreateRoundDto } from "$app/types/round.ts";
+import { PossibleColor } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
-import { relations, SQL, sql } from "drizzle-orm";
-import { CreateApplicationDto } from "../types/application.ts";
+import { isNull, relations, SQL, sql } from "drizzle-orm";
 import { SubmitBallotDto } from "../types/ballot.ts";
 import { ProjectData } from "../gql/projects.ts";
+import { ApplicationFormFields } from "../types/applicationForm.ts";
 
 export function lower(email: AnyPgColumn): SQL {
   return sql`lower(${email})`;
@@ -40,7 +40,7 @@ export const nonces = pgTable("nonces", {
 export const refreshTokens = pgTable("refresh_tokens", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id),
-  token: varchar("token", { length: 510 }).notNull().unique(), 
+  token: varchar("token", { length: 510 }).notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   revoked: boolean("revoked").notNull().default(false),
 });
@@ -63,77 +63,64 @@ export const chains = pgTable("chains", {
 export const rounds = pgTable("rounds", {
   id: uuid("id").primaryKey().defaultRandom(),
   chainId: integer("chain_id").notNull().references(() => chains.id),
-  urlSlug: varchar("url_slug", { length: 255 }).notNull().unique(),
-  name: varchar("name", { length: 255 }).notNull(),
+  urlSlug: varchar("url_slug", { length: 255 }).unique(),
+  published: boolean("published").notNull().default(false),
+  name: varchar("name", { length: 255 }),
   emoji: varchar("emoji", { length: 255 }).notNull(),
   color: varchar("color", { length: 255 }).notNull().$type<PossibleColor>(),
-  createdFromDraftId: uuid("created_from_draft_id").notNull(),
   description: text("description"),
   applicationPeriodStart: timestamp("application_period_start", {
     withTimezone: true,
-  }).notNull(),
+  }),
   applicationPeriodEnd: timestamp("application_period_end", {
     withTimezone: true,
-  }).notNull(),
+  }),
   votingPeriodStart: timestamp("voting_period_start", {
     withTimezone: true,
-  }).notNull(),
+  }),
   votingPeriodEnd: timestamp("voting_period_end", {
     withTimezone: true,
-  }).notNull(),
+  }),
   resultsPeriodStart: timestamp("results_period_start", {
     withTimezone: true,
-  }).notNull(),
-  applicationFormat: jsonb("application_format").notNull().$type<ApplicationFormat>(),
-  votingConfig: jsonb("voting_config").notNull().$type<CreateRoundDto['votingConfig']>(),
+  }),
+  maxVotesPerVoter: integer("max_votes_per_voter"),
+  maxVotesPerProjectPerVoter: integer("max_votes_per_project_per_voter"),
   voterGuidelinesLink: varchar("voter_guidelines_link", { length: 255 }),
   createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  publishedByUserId: uuid("published_by_user_id").references(() => users.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
   resultsCalculated: boolean("results_calculated").notNull().default(false),
   resultsPublished: boolean("results_published").notNull().default(false),
   customAvatarCid: varchar("custom_avatar_cid", { length: 255 }),
 }, (table => [
-    uniqueIndex('url_slug_unique_index').on(lower(table.urlSlug)),
-  ]
+  uniqueIndex('url_slug_unique_index').on(lower(table.urlSlug)),
+]
 ));
-export const roundsRelations = relations(rounds, ({ one, many  }) => ({
+export const roundsRelations = relations(rounds, ({ one, many }) => ({
   chain: one(chains, { fields: [rounds.chainId], references: [chains.id] }),
   createdBy: one(users, { fields: [rounds.createdByUserId], references: [users.id] }),
-  createdFromDraft: one(roundDrafts, { fields: [rounds.createdFromDraftId], references: [roundDrafts.id] }),
   applications: many(applications),
   admins: many(roundAdmins),
   voters: many(roundVoters),
   ballots: many(ballots),
   linkedDripLists: many(linkedDripLists),
-}));
-
-export const roundDrafts = pgTable("round_drafts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  chainId: integer("chain_id").notNull().references(() => chains.id),
-  publishedAsRoundId: uuid("published_as_round_id").references(() => rounds.id),
-  createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
-  draft: jsonb("draft").notNull().$type<Omit<CreateRoundDraftDto, 'adminWalletAddresses'>>()
-});
-export const roundDraftsRelations = relations(roundDrafts, ({ one, many }) => ({
-  chain: one(chains, { fields: [roundDrafts.chainId], references: [chains.id] }),
-  createdBy: one(users, { fields: [roundDrafts.createdByUserId], references: [users.id] }),
-  admins: many(roundAdmins),
-  publishedAsRound: one(rounds, { fields: [roundDrafts.publishedAsRoundId], references: [rounds.id] }),
+  applicationForms: many(applicationForms),
+  applicationCategories: many(applicationCategories),
+  results: many(results),
 }));
 
 export const roundAdmins = pgTable("round_admins", {
-  roundId: uuid("round_id").references(() => rounds.id),
-  roundDraftId: uuid("round_draft_id").notNull(),
+  roundId: uuid("round_id").references(() => rounds.id).notNull(),
   userId: uuid("user_id").notNull().references(() => users.id),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).defaultNow(),
 }, (table) => [
-    primaryKey({ columns: [table.roundDraftId, table.userId] }),
-  ]
-);
+  primaryKey({ columns: [table.roundId, table.userId] }),
+]);
 export const roundAdminsRelations = relations(roundAdmins, ({ one }) => ({
   round: one(rounds, { fields: [roundAdmins.roundId], references: [rounds.id] }),
-  roundDraft: one(roundDrafts, { fields: [roundAdmins.roundDraftId], references: [roundDrafts.id] }),
   user: one(users, { fields: [roundAdmins.userId], references: [users.id] }),
 }));
 
@@ -142,12 +129,60 @@ export const roundVoters = pgTable("round_voters", {
   userId: uuid("user_id").notNull(),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).defaultNow(),
 }, (table) => [
-    primaryKey({ columns: [table.roundId, table.userId] }),
-  ]
-);
+  primaryKey({ columns: [table.roundId, table.userId] }),
+]);
 export const roundVotersRelations = relations(roundVoters, ({ one }) => ({
   user: one(users, { fields: [roundVoters.userId], references: [users.id] }),
   round: one(rounds, { fields: [roundVoters.roundId], references: [rounds.id] }),
+}));
+
+export const applicationCategories = pgTable("application_categories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roundId: uuid("round_id").references(() => rounds.id).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  applicationFormId: uuid("application_form_id").notNull().references(() => applicationForms.id),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex('application_category_name_unique_index')
+    .on(table.roundId, lower(table.name))
+    .where(isNull(table.deletedAt)),
+]);
+export const applicationCategoriesRelations = relations(applicationCategories, ({ one }) => ({
+  round: one(rounds, { fields: [applicationCategories.roundId], references: [rounds.id] }),
+  form: one(applicationForms, { fields: [applicationCategories.applicationFormId], references: [applicationForms.id] }),
+}));
+
+export const applicationForms = pgTable("application_forms", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roundId: uuid("round_id").references(() => rounds.id).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export const applicationFormsRelations = relations(applicationForms, ({ one, many }) => ({
+  round: one(rounds, { fields: [applicationForms.roundId], references: [rounds.id] }),
+  fields: many(applicationFormFields),
+}));
+
+export const applicationFormFields = pgTable("application_form_fields", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  formId: uuid("form_id").notNull().references(() => applicationForms.id),
+  type: varchar("type", { length: 255 }).notNull().$type<ApplicationFormFields[number]['type']>(),
+  slug: varchar("slug", { length: 255 }),
+  order: integer("order").notNull(),
+  required: boolean("required"),
+  private: boolean("private"),
+  properties: jsonb("properties").notNull().$type<ApplicationFormFields[number]>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [
+  uniqueIndex('form_field_slug_unique_index').on(table.formId, lower(table.slug)).where(sql`${table.deletedAt} IS NULL`),
+]);
+export const applicationFormFieldsRelations = relations(applicationFormFields, ({ one }) => ({
+  form: one(applicationForms, { fields: [applicationFormFields.formId], references: [applicationForms.id] }),
 }));
 
 export const applications = pgTable("applications", {
@@ -158,15 +193,32 @@ export const applications = pgTable("applications", {
   dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
   dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectData>().notNull(),
   submitterUserId: uuid("submitter").notNull().references(() => users.id),
-  fields: jsonb("fields").notNull().$type<CreateApplicationDto['fields']>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
   roundId: uuid("round_id").notNull().references(() => rounds.id),
+  formId: uuid("form_id").notNull().references(() => applicationForms.id),
+  categoryId: uuid("category_id").references(() => applicationCategories.id).notNull(),
 });
-export const applicationsRelations = relations(applications, ({ one }) => ({
+export const applicationsRelations = relations(applications, ({ one, many }) => ({
   round: one(rounds, { fields: [applications.roundId], references: [rounds.id] }),
   submitter: one(users, { fields: [applications.submitterUserId], references: [users.id] }),
   result: one(results),
+  answers: many(applicationAnswers),
+  form: one(applicationForms, { fields: [applications.formId], references: [applicationForms.id] }),
+  category: one(applicationCategories, { fields: [applications.categoryId], references: [applicationCategories.id] }),
+}));
+
+export const applicationAnswers = pgTable("application_answers", {
+  applicationId: uuid("application_id").notNull().references(() => applications.id),
+  fieldId: uuid("field_id").notNull().references(() => applicationFormFields.id),
+  answer: jsonb("answer").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.applicationId, table.fieldId] }),
+]);
+export const applicationAnswersRelations = relations(applicationAnswers, ({ one }) => ({
+  application: one(applications, { fields: [applicationAnswers.applicationId], references: [applications.id] }),
+  field: one(applicationFormFields, { fields: [applicationAnswers.fieldId], references: [applicationFormFields.id] }),
 }));
 
 export const ballots = pgTable("ballots", {
@@ -179,15 +231,15 @@ export const ballots = pgTable("ballots", {
 });
 export const votesRelations = relations(ballots, ({ one }) => ({
   round: one(rounds, { fields: [ballots.roundId], references: [rounds.id] }),
-  voter: one(users, { fields: [ballots.voterUserId], references: [users.id] }),
+  user: one(users, { fields: [ballots.voterUserId], references: [users.id] }),
 }));
 
 export const linkedDripLists = pgTable("linked_drip_lists", {
   roundId: uuid("round_id").notNull().references(() => rounds.id),
   dripListAccountId: varchar("drip_list_id", { length: 255 }).notNull(),
 }, (table) => [
-    primaryKey({ columns: [table.roundId, table.dripListAccountId] }),
-  ]
+  primaryKey({ columns: [table.roundId, table.dripListAccountId] }),
+]
 );
 export const linkedDripListsRelations = relations(linkedDripLists, ({ one }) => ({
   round: one(rounds, { fields: [linkedDripLists.roundId], references: [rounds.id] }),
@@ -202,7 +254,7 @@ export const results = pgTable("results", {
   result: integer("result").notNull(),
   calculatedAt: timestamp("calculated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table => [
-    primaryKey({ columns: [table.roundId, table.applicationId] }),
+  primaryKey({ columns: [table.roundId, table.applicationId] }),
 ]));
 export const resultsRelations = relations(results, ({ one }) => ({
   round: one(rounds, { fields: [results.roundId], references: [rounds.id] }),

@@ -2,10 +2,14 @@ import { Application } from "oak";
 import authRoutes from "$app/routes/authRoutes.ts";
 import roundRoutes from "$app/routes/roundRoutes.ts";
 import applicationRoutes from "$app/routes/applicationRoutes.ts";
+import applicationFormRoutes from "$app/routes/applicationFormRoutes.ts";
+import applicationCategoryRoutes from "$app/routes/applicationCategoryRoutes.ts";
 import ballotRoutes from "$app/routes/ballotRoutes.ts";
 import resultRoutes from "$app/routes/resultRoutes.ts";
 import healthRoutes from "$app/routes/healthRoutes.ts";
 import userRoutes from "$app/routes/userRoutes.ts";
+import roundVoterRoutes from "$app/routes/roundVoterRoutes.ts";
+import roundAdminRoutes from "$app/routes/roundAdminRoutes.ts";
 import dangerousTestRoutes from "$app/routes/dangerousTestRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
@@ -68,8 +72,20 @@ app.use(authRoutes.allowedMethods());
 app.use(roundRoutes.routes());
 app.use(roundRoutes.allowedMethods());
 
+app.use(roundVoterRoutes.routes());
+app.use(roundVoterRoutes.allowedMethods());
+
+app.use(roundAdminRoutes.routes());
+app.use(roundAdminRoutes.allowedMethods());
+
 app.use(applicationRoutes.routes());
 app.use(applicationRoutes.allowedMethods());
+
+app.use(applicationFormRoutes.routes());
+app.use(applicationFormRoutes.allowedMethods());
+
+app.use(applicationCategoryRoutes.routes());
+app.use(applicationCategoryRoutes.allowedMethods());
 
 app.use(ballotRoutes.routes());
 app.use(ballotRoutes.allowedMethods());

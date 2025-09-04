@@ -1,9 +1,9 @@
 /** Includes functionality only intended for testing.
  * These routes are all disabled unless ENABLE_DANGEROUS_TEST_ROUTES is set to true in env */
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
-import { applications, ballots, results, roundAdmins, roundDrafts, rounds, roundVoters } from "../db/schema.ts";
+import { applicationCategories, applicationFormFields, applicationForms, applications, ballots, results, roundAdmins, rounds, roundVoters } from "../db/schema.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { roundStateSchema } from "../types/round.ts";
 import { UnauthenticatedAppState } from "../../main.ts";
@@ -150,8 +150,23 @@ export async function dangerouslyForceDeleteRoundController(
     await tx.delete(ballots).where(eq(ballots.roundId, id));
     await tx.delete(roundAdmins).where(eq(roundAdmins.roundId, id));
     await tx.delete(roundVoters).where(eq(roundVoters.roundId, id));
-    await tx.delete(roundDrafts).where(eq(roundDrafts.publishedAsRoundId, id));
 
+    const applicationFormsRelatedToRound = await tx.query.applicationForms.findMany({
+      where: eq(applicationForms.roundId, id),
+      columns: { id: true },
+    });
+    await tx.delete(applicationFormFields).where(
+      inArray(applicationFormFields.formId, applicationFormsRelatedToRound.map((f) => f.id)),
+    );
+
+    await tx.delete(applicationCategories).where(
+      eq(applicationCategories.roundId, id),
+    );
+
+    await tx.delete(applicationForms).where(
+      eq(applicationForms.roundId, id),
+    );
+  
     await tx.delete(rounds).where(eq(rounds.id, id));
   });
 

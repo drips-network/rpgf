@@ -1,1 +1,0 @@
-ALTER TABLE "applications" ADD COLUMN "attestation_uid" varchar(255);

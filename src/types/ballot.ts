@@ -10,7 +10,7 @@ export type SubmitBallotDto = z.infer<typeof submitBallotDtoSchema>;
 
 export type WrappedBallot = {
   id: string;
-  voter: {
+  user: {
     id: string;
     walletAddress: string;
   } 

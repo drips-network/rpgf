@@ -6,6 +6,7 @@ import { db } from "../db/postgres.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { results as resultsTable, rounds } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
+import { getRound } from "./roundService.ts";
 
 export enum ResultCalculationMethod {
   MEDIAN = "median",
@@ -26,7 +27,7 @@ export function isValidResultsCalculationMethod(
  * Calculate the results for a set of applications based on the provided ballots
  * and calculation method, ensuring integer outputs.
  */
-export function calculateResultsForApplications(
+function calculateResultsForApplications(
   applicationIds: string[],
   ballots: { [key: string]: number }[],
   method: ResultCalculationMethod,
@@ -74,15 +75,21 @@ export function calculateResultsForApplications(
 
 /** For the given round, calculate results, and persist them in the `results` table for later retrieval. */
 export async function recalculateResultsForRound(
-  roundSlug: string,
+  roundId: string,
+  requestingUserId: string,
   method: ResultCalculationMethod,
 ) {
   await db.transaction(async (tx) => {
-    const round = await db.query.rounds.findFirst({
-      where: (rounds, { eq }) => eq(rounds.urlSlug, roundSlug),
-    });
+    const round = await getRound(roundId, requestingUserId, tx);
     if (!round) {
       throw new NotFoundError("Round not found");
+    }
+    if (!round.isAdmin) {
+      throw new BadRequestError("You are not authorized to modify this round");
+    }
+
+    if (!(round.state === "results" || round.state === "pending-results")) {
+      throw new BadRequestError("Round voting hasn't concluded yet");
     }
 
     const applications = await db.query.applications.findMany({
@@ -134,18 +141,15 @@ export async function recalculateResultsForRound(
 }
 
 export async function publishResults(
-  roundSlug: string,
+  roundId: string,
+  requestingUserId: string,
 ): Promise<void> {
-  const round = await db.query.rounds.findFirst({
-    where: (rounds, { eq }) => eq(rounds.urlSlug, roundSlug),
-    columns: {
-      id: true,
-      resultsCalculated: true,
-    },
-  });
-
+  const round = await getRound(roundId, requestingUserId);
   if (!round) {
     throw new NotFoundError("Round not found");
+  }
+  if (!round.isAdmin) {
+    throw new BadRequestError("You are not authorized to modify this round");
   }
 
   if (!round.resultsCalculated) {
@@ -164,21 +168,15 @@ export async function publishResults(
 const MAX_WEIGHT = 1_000_000;
 
 export async function calculateDripListWeights(
-  roundSlug: string,
+  roundId: string,
+  requestingUserId: string,
 ): Promise<{ [gitHubUrl: string]: number}> {
-  const round = await db.query.rounds.findFirst({
-    where: (rounds, { eq }) => eq(rounds.urlSlug, roundSlug),
-    columns: {
-      id: true,
-      resultsCalculated: true,
-    },
-  });
-
+  const round = await getRound(roundId, requestingUserId);
   if (!round) {
     throw new NotFoundError("Round not found");
   }
-  if (!round.resultsCalculated) {
-    throw new BadRequestError("Results have not been calculated for this round");
+  if (!round.isAdmin) {
+    throw new BadRequestError("You are not authorized to modify this round");
   }
 
   // get the results for the round
