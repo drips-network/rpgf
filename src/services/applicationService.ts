@@ -20,6 +20,7 @@ import { inferRoundState, isUserRoundAdmin } from "./roundService.ts";
 import { getAnswersByApplicationId, recordAnswers, validateAnswers } from "./applicationAnswerService.ts";
 import { ApplicationAnswer } from "../types/applicationAnswer.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
+import { stringify } from "jsr:@std/csv";
 
 async function validateEasAttestation(
   applicationDto: CreateApplicationDto,
@@ -198,7 +199,7 @@ export async function createApplication(
   // Validate category and answers
   const applicationCategory = await db.query.applicationCategories.findFirst({
     where: and(
-      eq(rounds.id, roundId),
+      eq(applicationCategories.roundId, round.id),
       eq(applicationCategories.id, applicationDto.categoryId),
       isNull(applicationCategories.deletedAt)
     ),
@@ -207,14 +208,17 @@ export async function createApplication(
         with: {
           fields: {
             where: isNull(applicationFormFields.deletedAt)
-          }
+          },
         }
       },
     }
   });
+
   if (!applicationCategory) {
     throw new BadRequestError("Invalid application category");
   }
+
+  console.log({ applicationDto })
 
   validateAnswers(applicationDto.answers, applicationCategory.form.fields);
 
@@ -266,6 +270,7 @@ export async function createApplication(
     const newAnswers = await recordAnswers(
       applicationDto.answers,
       newApplication,
+      tx,
     );
 
     return mapDbApplicationToDto(
@@ -433,7 +438,7 @@ export async function getApplications(
 
   return applicationsResult.map((application) => mapDbApplicationToListingDto(
     application.applications,
-    application.results?.result ?? null,
+    returnResults && application.results?.result ? application.results.result : null,
   ));
 }
 
@@ -451,43 +456,50 @@ export async function getApplicationsCsv(
     throw new NotFoundError("Round not found");
   }
 
-  // TODO: Get all applications, with:
-  // - submitter wallet address
-  // - 
+  const includeRejectedAndPrivateData = isUserRoundAdmin(round, requestingUserId);
+  const includeVoteResult = includeRejectedAndPrivateData || round.resultsPublished;
 
-  // const returnPrivateFields = isUserRoundAdmin(round, requestingUserId);
-  // const returnResults = returnPrivateFields || round.resultsPublished;
+  const data = await db.query.applications.findMany({
+    where: and(
+      eq(applications.roundId, roundId),
+      includeRejectedAndPrivateData ? undefined : eq(applications.state, "approved"),
+    ),
+    with: {
+      answers: {
+        with: {
+          field: true,
+        }
+      },
+      result: true,
+    }
+  });
 
-  // const applications = await db
-  //   .select()
+  const uniqueAnswerSlugs = Array.from(new Set(data.flatMap((app) =>
+    app.answers
+      .filter((a) => includeRejectedAndPrivateData ? true : !a.field.private)
+      .map((a) => a.field.slug ?? null)
+      .filter((s): s is string => s !== null)
+  )));
 
+  const csvData = [
+    ["ID", "State", "Project Name", "GitHub URL", "Drips Account ID", "Submitter Wallet Address", ...uniqueAnswerSlugs, "Created At", "Allocation"],
+    ...data.map((app) => [
+      app.id,
+      app.state,
+      app.projectName,
+      app.dripsProjectDataSnapshot.gitHubUrl,
+      app.dripsAccountId,
+      app.submitterUserId,
+      ...uniqueAnswerSlugs.map((slug) => {
+        const answer = app.answers.find((a) => a.field.slug === slug);
+        return answer ? (typeof answer.answer === "string" ? answer.answer : JSON.stringify(answer.answer)) : "";
+      }),
+      app.createdAt.toISOString(),
+      includeVoteResult ? (app.result !== null ? app.result.result.toString() : "Not yet calculated") : "N/A",
+    ])
+  ];
 
-  // const applicationFieldSlugs = Object.keys(applications[0]?.fields ?? {});
-  // const applicationFieldHeaders = applicationFieldSlugs.map(escapeCsvValue)
-  //   .join(",");
-
-  // const header =
-  //   `ID,Project Name,GitHub URL,Drips Account ID,Submitter Wallet Address,${applicationFieldHeaders},Created At,Vote result`;
-
-  // const rows = applications.map((application) => {
-  //   const fields: string[] = applicationFieldSlugs.map((slug) => {
-  //     const value = application.fields[slug];
-  //     return escapeCsvValue(value);
-  //   });
-
-  //   return [
-  //     escapeCsvValue(application.id),
-  //     escapeCsvValue(application.projectName),
-  //     escapeCsvValue(application.dripsProjectDataSnapshot.gitHubUrl ?? "Unknown"),
-  //     escapeCsvValue(application.dripsAccountId),
-  //     escapeCsvValue(application.submitter.walletAddress),
-  //     ...fields,
-  //     escapeCsvValue(application.createdAt.toISOString()),
-  //     escapeCsvValue(application.result !== null ? application.result.toString() : "Results not yet calculated"),
-  //   ].join(',');
-  // });
-
-  return ["Hi,there"].join("\n");
+  return stringify(csvData);
 }
 
 export async function setApplicationsState(
