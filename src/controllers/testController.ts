@@ -159,6 +159,10 @@ export async function dangerouslyForceDeleteRoundController(
       inArray(applicationFormFields.formId, applicationFormsRelatedToRound.map((f) => f.id)),
     );
 
+    await tx.delete(applicationCategories).where(
+      eq(applicationCategories.roundId, id),
+    );
+
     await tx.delete(applicationForms).where(
       eq(applicationForms.roundId, id),
     );

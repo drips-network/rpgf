@@ -352,15 +352,17 @@ export async function deleteRound(roundId: string, requestingUserId: string): Pr
       where: eq(applicationForms.roundId, roundId),
       columns: { id: true },
     });
+
     await tx.delete(applicationFormFields).where(
       inArray(applicationFormFields.formId, applicationFormsRelatedToRound.map((f) => f.id)),
     );
 
-    await tx.delete(applicationForms).where(
-      eq(applicationForms.roundId, roundId),
-    );
     await tx.delete(applicationCategories).where(
       eq(applicationCategories.roundId, roundId),
+    );
+
+    await tx.delete(applicationForms).where(
+      eq(applicationForms.roundId, roundId),
     );
 
     await tx.delete(rounds).where(eq(rounds.id, roundId));
