@@ -57,6 +57,7 @@ export async function getApplicationsForRoundController(
   const filterConfig = parseFilterParams(ctx, {
     state: z.enum(["approved", "rejected", "pending"]),
     submitterUserId: z.string().optional(),
+    categoryId: z.string().optional(),
   });
 
   if (!(format === "json" || format === "csv")) {
