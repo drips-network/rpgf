@@ -130,9 +130,6 @@ export async function updateApplicationForm(
   if (existingForm.deletedAt) {
     throw new BadRequestError("Cannot update a deleted application form");
   }
-  if (existingForm.round.published) {
-    throw new BadRequestError("Cannot update application form for a published round");
-  }
   if (existingForm.roundId !== roundDraftId) {
     throw new NotFoundError("The application form does not belong to the specified round draft");
   }

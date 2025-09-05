@@ -128,9 +128,6 @@ export async function deleteApplicationCategory(
   if (!existingCategory) {
     throw new NotFoundError("Application category not found");
   }
-  if (existingCategory.round.published) {
-    throw new BadRequestError("Cannot delete category of a published round");
-  }
   if (!isUserRoundAdmin(existingCategory.round, requestingUserId)) {
     throw new BadRequestError("You are not authorized to modify this round");
   }
