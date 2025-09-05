@@ -381,7 +381,7 @@ export async function getApplication(
 export async function getApplications(
   roundId: string,
   requestingUserId: string | null,
-  filterConfig: { state?: ApplicationState; submitterUserId?: string } | null =
+  filterConfig: { state?: ApplicationState; submitterUserId?: string, categoryId?: string } | null =
     null,
   sortConfig:
     | SortConfig<"random" | "name" | "createdAt" | "allocation">
@@ -410,6 +410,7 @@ export async function getApplications(
     .from(applications)
     .leftJoin(results, eq(applications.id, results.applicationId))
     .innerJoin(users, eq(applications.submitterUserId, users.id))
+    .innerJoin(applicationCategories, eq(applications.categoryId, applicationCategories.id))
     .where(
       and(
         returnOnlyAcceptedOrOwn
@@ -424,6 +425,9 @@ export async function getApplications(
           : undefined,
         filterConfig?.submitterUserId
           ? eq(applications.submitterUserId, filterConfig.submitterUserId)
+          : undefined,
+        filterConfig?.categoryId
+          ? eq(applications.categoryId, filterConfig.categoryId)
           : undefined,
       ),
     )
