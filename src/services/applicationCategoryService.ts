@@ -15,14 +15,13 @@ export async function createApplicationCategoryForRound(
   const round = await db.query.rounds.findFirst({
     where: and(
       eq(rounds.id, roundId),
-      eq(rounds.published, false),
     ),
     with: {
       admins: true,
     }
   });
   if (!round) {
-    throw new BadRequestError("Round not found or already published");
+    throw new BadRequestError("Round not found");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
     throw new BadRequestError("You are not authorized to modify this round");
