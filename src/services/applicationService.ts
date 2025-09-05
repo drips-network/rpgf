@@ -12,7 +12,7 @@ import {
 } from "../types/application.ts";
 import { getProject } from "../gql/projects.ts";
 import { JsonRpcProvider, type Provider } from "ethers";
-import { EAS, SchemaEncoder } from "@ethereum-attestation-service/eas-sdk";
+import { Attestation, EAS, SchemaEncoder } from "@ethereum-attestation-service/eas-sdk";
 import * as ipfs from "../ipfs/ipfs.ts";
 import z from "zod";
 import { SortConfig } from "../utils/sort.ts";
@@ -39,7 +39,25 @@ async function validateEasAttestation(
   const eas = new EAS(easContractAddress);
   eas.connect(provider);
 
-  const attestation = await eas.getAttestation(uid);
+  const retryTimeout = 30000; // 30 seconds
+  const retryInterval = 2000; // 2 seconds
+  const startTime = Date.now();
+  let attestation: Attestation | null = null;
+
+  while (Date.now() - startTime < retryTimeout) {
+    try {
+      const foundAttestation = await eas.getAttestation(uid);
+      if (foundAttestation) {
+        attestation = foundAttestation;
+        break;
+      }
+    } catch (error) {
+      console.warn(`Attempt to fetch attestation failed: ${error}. Retrying...`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, retryInterval));
+  }
+
   if (!attestation) {
     throw new BadRequestError("EAS attestation not found");
   }
