@@ -486,6 +486,18 @@ export async function getApplicationsCsv(
           field: true,
         }
       },
+      category: {
+        columns: {
+          id: true,
+          name: true,
+        },
+      },
+      form: {
+        columns: {
+          id: true,
+          name: true,
+        }
+      },
       result: true,
     }
   });
@@ -498,7 +510,7 @@ export async function getApplicationsCsv(
   )));
 
   const csvData = [
-    ["ID", "State", "Project Name", "GitHub URL", "Drips Account ID", "Submitter Wallet Address", ...uniqueAnswerSlugs, "Created At", "Allocation"],
+    ["ID", "State", "Project Name", "GitHub URL", "Drips Account ID", "Submitter Wallet Address", "Category ID", "Category Name", "Form ID", "Form Name", ...uniqueAnswerSlugs, "Created At", "Allocation"],
     ...data.map((app) => [
       app.id,
       app.state,
@@ -506,6 +518,10 @@ export async function getApplicationsCsv(
       app.dripsProjectDataSnapshot.gitHubUrl,
       app.dripsAccountId,
       app.submitterUserId,
+      app.category.id,
+      app.category.name,
+      app.form.id,
+      app.form.name,
       ...uniqueAnswerSlugs.map((slug) => {
         const answer = app.answers.find((a) => a.field.slug === slug);
         return answer ? (typeof answer.answer === "string" ? answer.answer : JSON.stringify(answer.answer)) : "";
