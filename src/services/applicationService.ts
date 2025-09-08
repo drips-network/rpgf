@@ -256,6 +256,11 @@ export async function createApplication(
     onChainProject.owner.address.toLowerCase() !==
     submitterWalletAddress.toLowerCase()
   ) {
+    console.log({
+      onChainProject,
+      projectOwner: onChainProject.owner.address,
+      submitter: submitterWalletAddress,
+    })
     throw new BadRequestError(
       "Drips Account ID is pointing at a project not currently owned by the submitter",
     );
