@@ -7,31 +7,33 @@ import { isUserRoundAdmin } from "./roundService.ts";
 import { SetRoundAdminsDto } from "../types/roundAdmin.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
+import { createLog } from "./auditLogService.ts";
+import { AuditLogAction } from "../types/auditLog.ts";
 
 export async function setRoundAdmins(
   dto: SetRoundAdminsDto,
   requestingUserId: string,
   roundId: string,
 ): Promise<RoundVoter[]> {
-  const round = await db.query.rounds.findFirst({
-    where: eq(rounds.id, roundId),
-    with: {
-      admins: true,
-    }
-  });
-  if (!round) {
-    throw new NotFoundError("Round not found.");
-  }
-  if (!isUserRoundAdmin(round, requestingUserId)) {
-    throw new UnauthorizedError("You are not authorized to modify this round.");
-  }
-
-  const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
-  if (uniqueAddresses.size !== dto.walletAddresses.length) {
-    throw new BadRequestError("Duplicate wallet addresses are not allowed.");
-  }
-
   const result = await db.transaction(async (tx) => {
+    const round = await db.query.rounds.findFirst({
+      where: eq(rounds.id, roundId),
+      with: {
+        admins: true,
+      }
+    });
+    if (!round) {
+      throw new NotFoundError("Round not found.");
+    }
+    if (!isUserRoundAdmin(round, requestingUserId)) {
+      throw new UnauthorizedError("You are not authorized to modify this round.");
+    }
+
+    const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
+    if (uniqueAddresses.size !== dto.walletAddresses.length) {
+      throw new BadRequestError("Duplicate wallet addresses are not allowed.");
+    }
+
     // get the list of users for the provided wallet addresses, creating any that don't exist
 
     const users = await Promise.all(dto.walletAddresses.map((walletAddress) =>
@@ -51,11 +53,22 @@ export async function setRoundAdmins(
       })),
     ).returning();
 
+    await createLog({
+      type: AuditLogAction.RoundAdminsChanged,
+      roundId: round.id,
+      userId: requestingUserId,
+      payload: {
+        walletAddresses: dto.walletAddresses,
+      },
+      tx,
+    })
+
     return admins.map((admin) => ({
       id: admin.userId,
       walletAddress: users.find((u) => u.id === admin.userId)!.walletAddress,
     }));
   });
+
 
   return result;
 }

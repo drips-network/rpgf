@@ -11,6 +11,7 @@ import {
   uniqueIndex,
   AnyPgColumn,
   boolean,
+  pgEnum,
 } from "drizzle-orm/pg-core";
 import { PossibleColor } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
@@ -18,6 +19,7 @@ import { isNull, relations, SQL, sql } from "drizzle-orm";
 import { SubmitBallotDto } from "../types/ballot.ts";
 import { ProjectData } from "../gql/projects.ts";
 import { ApplicationFormFields } from "../types/applicationForm.ts";
+import { AuditLogAction } from "../types/auditLog.ts";
 
 export function lower(email: AnyPgColumn): SQL {
   return sql`lower(${email})`;
@@ -259,4 +261,38 @@ export const results = pgTable("results", {
 export const resultsRelations = relations(results, ({ one }) => ({
   round: one(rounds, { fields: [results.roundId], references: [rounds.id] }),
   application: one(applications, { fields: [results.applicationId], references: [applications.id] }),
+}));
+
+export const auditLogAction = pgEnum('audit_log_action', [
+  'round_created',
+  'round_settings_changed',
+  'round_admins_changed',
+  'round_voters_changed',
+  'round_published',
+  'round_deleted',
+  'application_category_created',
+  'application_category_updated',
+  'application_category_deleted',
+  'application_form_created',
+  'application_form_updated',
+  'application_form_deleted',
+  'application_submitted',
+  'application_reviewed',
+  'ballot_submitted',
+  'ballot_updated',
+  'results_calculated',
+  'linked_drip_lists_edited',
+  'results_published'
+]);
+
+export const auditLogs = pgTable("audit_logs", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  action: auditLogAction("action").notNull().$type<AuditLogAction>(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  roundId: uuid("round_id"),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  user: one(users, { fields: [auditLogs.userId], references: [users.id] }),
 }));

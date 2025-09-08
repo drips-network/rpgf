@@ -21,6 +21,8 @@ import { getAnswersByApplicationId, recordAnswers, validateAnswers } from "./app
 import { ApplicationAnswer } from "../types/applicationAnswer.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { stringify } from "jsr:@std/csv";
+import { createLog } from "./auditLogService.ts";
+import { AuditLogAction } from "../types/auditLog.ts";
 
 async function validateEasAttestation(
   applicationDto: CreateApplicationDto,
@@ -289,6 +291,17 @@ export async function createApplication(
       tx,
     );
 
+    await createLog({
+      type: AuditLogAction.ApplicationSubmitted,
+      roundId: round.id,
+      userId: submitterUserId,
+      payload: {
+        ...applicationDto,
+        id: newApplication.id,
+      },
+      tx,
+    });
+
     return mapDbApplicationToDto(
       newApplication,
       applicationCategory.form,
@@ -296,7 +309,7 @@ export async function createApplication(
       { id: submitterUserId, walletAddress: submitterWalletAddress },
       newAnswers,
       null,
-    )
+    );
   });
 
   return result;
@@ -611,6 +624,14 @@ export async function applyApplicationReview(
       applicationIdsToReject,
       "rejected",
     );
+
+    await createLog({
+      type: AuditLogAction.ApplicationsReviewed,
+      roundId: round.id,
+      userId: requestingUserId,
+      payload: review,
+      tx,
+    });
 
     return [...approvedApplications, ...rejectedApplications];
   });

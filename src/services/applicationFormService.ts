@@ -4,6 +4,8 @@ import { applicationFormFields, applicationForms } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { type ApplicationForm, type CreateApplicationFormDto } from "../types/applicationForm.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
+import { createLog } from "./auditLogService.ts";
+import { AuditLogAction } from "../types/auditLog.ts";
 
 function ensureUniqueSlugs(fields: CreateApplicationFormDto["fields"]) {
   const slugs: string[] = fields
@@ -93,6 +95,17 @@ export async function createApplicationForm(
         private: "private" in field ? field.private : null,
       }).returning()
     ))).flat();
+
+    await createLog({
+      type: AuditLogAction.ApplicationFormCreated,
+      roundId: round.id,
+      userId: requestingUserId,
+      payload: {
+        ...dto,
+        id: form.id,
+      },
+      tx,
+    })
 
     return mapApplicationAndFieldsToApplicationForm(form, createdFields);
   });
@@ -203,6 +216,17 @@ export async function updateApplicationForm(
       orderBy: (fields, { asc }) => [asc(fields.order)],
     });
 
+    await createLog({
+      type: AuditLogAction.ApplicationFormUpdated,
+      roundId: existingForm.round.id,
+      userId: requestingUserId,
+      payload: {
+        ...dto,
+        id: existingForm.id,
+      },
+      tx,
+    });
+
     return mapApplicationAndFieldsToApplicationForm(updatedForm, fieldsAfterUpdate);
   });
 }
@@ -248,51 +272,65 @@ export async function deleteApplicationForm(
   requestingUserId: string,
   roundId: string,
 ) {
-  const form = await db.query.applicationForms.findFirst({
-    where: (forms, { eq }) => eq(forms.id, formId),
-    with: {
-      round: {
-        with: {
-          admins: true,
-        }
-      },
+  await db.transaction(async (tx) => {
+
+    const form = await tx.query.applicationForms.findFirst({
+      where: (forms, { eq }) => eq(forms.id, formId),
+      with: {
+        round: {
+          with: {
+            admins: true,
+          }
+        },
+      }
+    });
+    if (!form) {
+      throw new NotFoundError("No application form found for the provided ID");
     }
+    if (!isUserRoundAdmin(form.round, requestingUserId)) {
+      throw new BadRequestError("You are not authorized to modify this round");
+    }
+    if (form.deletedAt) {
+      throw new BadRequestError("Application form is already deleted");
+    }
+    if (form.round.published) {
+      throw new BadRequestError("Cannot delete application form for a published round");
+    }
+    if (form.roundId !== roundId) {
+      throw new NotFoundError("The application form does not belong to the specified round");
+    }
+
+    // check if any category is assigned to this form
+    const categories = await tx.query.applicationCategories.findMany({
+      where: (categories, { eq, isNull, and }) => and(
+        eq(categories.applicationFormId, formId),
+        isNull(categories.deletedAt),
+      ),
+    });
+    if (categories.length > 0) {
+      throw new BadRequestError("Cannot delete application form assigned to a category");
+    }
+
+    // Soft-delete in order to be able to handle form edits during an active round gracefully
+    await tx.update(applicationForms).set({
+      deletedAt: new Date(),
+    }).where(eq(applicationForms.id, formId));
+
+    await createLog({
+      type: AuditLogAction.ApplicationFormDeleted,
+      roundId: form.round.id,
+      userId: requestingUserId,
+      payload: {
+        id: form.id,
+        previousName: form.name,
+      },
+      tx,
+    });
+
+    // if the form itself is deleted, the fields are considered deleted as well, so no need to delete them explicitly
+
+    return;
   });
-  if (!form) {
-    throw new NotFoundError("No application form found for the provided ID");
-  }
-  if (!isUserRoundAdmin(form.round, requestingUserId)) {
-    throw new BadRequestError("You are not authorized to modify this round");
-  }
-  if (form.deletedAt) {
-    throw new BadRequestError("Application form is already deleted");
-  }
-  if (form.round.published) {
-    throw new BadRequestError("Cannot delete application form for a published round");
-  }
-  if (form.roundId !== roundId) {
-  throw new NotFoundError("The application form does not belong to the specified round");
-  }
-
-  // check if any category is assigned to this form
-  const categories = await db.query.applicationCategories.findMany({
-    where: (categories, { eq, isNull, and }) => and(
-      eq(categories.applicationFormId, formId),
-      isNull(categories.deletedAt),
-    ),
-  });
-  if (categories.length > 0) {
-    throw new BadRequestError("Cannot delete application form assigned to a category");
-  }
-
-  // Soft-delete in order to be able to handle form edits during an active round gracefully
-  await db.update(applicationForms).set({
-    deletedAt: new Date(),
-  }).where(eq(applicationForms.id, formId));
-
-  // if the form itself is deleted, the fields are considered deleted as well, so no need to delete them explicitly
-
-  return;
 }
 
 export async function getApplicationFormsByRoundId(

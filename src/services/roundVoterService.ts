@@ -6,6 +6,8 @@ import { createOrGetUser } from "./userService.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
+import { createLog } from "./auditLogService.ts";
+import { AuditLogAction } from "../types/auditLog.ts";
 
 export async function setRoundVoters(
   dto: SetRoundVotersDto,
@@ -34,6 +36,17 @@ export async function setRoundVoters(
   }
 
   const result = await db.transaction(async (tx) => {
+
+    await createLog({
+      type: AuditLogAction.RoundVotersChanged,
+      roundId: round.id,
+      userId: requestingUserId,
+      payload: {
+        walletAddresses: dto.walletAddresses,
+      },
+      tx,
+    })
+
     // get the list of users for the provided wallet addresses, creating any that don't exist
 
     const users = await Promise.all(dto.walletAddresses.map((walletAddress) =>

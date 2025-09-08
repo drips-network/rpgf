@@ -7,6 +7,8 @@ import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { results as resultsTable, rounds } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
 import { getRound } from "./roundService.ts";
+import { createLog } from "./auditLogService.ts";
+import { AuditLogAction } from "../types/auditLog.ts";
 
 export enum ResultCalculationMethod {
   MEDIAN = "median",
@@ -137,6 +139,16 @@ export async function recalculateResultsForRound(
       .update(rounds)
       .set({ resultsCalculated: true })
       .where(eq(rounds.id, round.id));
+
+    await createLog({
+      type: AuditLogAction.ResultsCalculated,
+      roundId: round.id,
+      userId: requestingUserId,
+      payload: {
+        method,
+      },
+      tx,
+    })
   });
 }
 
@@ -144,23 +156,33 @@ export async function publishResults(
   roundId: string,
   requestingUserId: string,
 ): Promise<void> {
-  const round = await getRound(roundId, requestingUserId);
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
-  if (!round.isAdmin) {
-    throw new BadRequestError("You are not authorized to modify this round");
-  }
+  await db.transaction(async (tx) => {
+    const round = await getRound(roundId, requestingUserId, tx);
+    if (!round) {
+      throw new NotFoundError("Round not found");
+    }
+    if (!round.isAdmin) {
+      throw new BadRequestError("You are not authorized to modify this round");
+    }
 
-  if (!round.resultsCalculated) {
-    throw new BadRequestError("Results have not been calculated for this round");
-  }
+    if (!round.resultsCalculated) {
+      throw new BadRequestError("Results have not been calculated for this round");
+    }
 
-  // Update the round to indicate that results are published
-  await db
-    .update(rounds)
-    .set({ resultsPublished: true })
-    .where(eq(rounds.id, round.id));
+    // Update the round to indicate that results are published
+    await tx
+      .update(rounds)
+      .set({ resultsPublished: true })
+      .where(eq(rounds.id, round.id));
+
+    await createLog({
+      type: AuditLogAction.ResultsPublished,
+      roundId: round.id,
+      userId: requestingUserId,
+      payload: null,
+      tx,
+    })
+  });
 }
 
 // Equal to 100% for a Drips split receiver.

@@ -5,8 +5,9 @@ import { Ballot, SubmitBallotDto, WrappedBallot } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { getRound, isUserRoundAdmin } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
-
+import { createLog } from "./auditLogService.ts";
 import { escapeCsvValue } from "../utils/csv.ts";
+import { AuditLogAction } from "../types/auditLog.ts";
 
 function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
@@ -104,36 +105,49 @@ export async function submitBallot(
   roundId: string,
   ballotDto: SubmitBallotDto,
 ): Promise<WrappedBallot> {
-  const round = await getRound(roundId, userId);
-  if (!round) {
-    throw new NotFoundError("Round not found");
-  }
-  if (!round.isVoter) {
-    throw new UnauthorizedError(
-      "You are not authorized to submit a ballot for this round",
-    );
-  }
-  if (round.state !== "voting") {
-    throw new BadRequestError("Round is not in voting state");
-  }
-  if (!round.published || !round.maxVotesPerProjectPerVoter || !round.maxVotesPerVoter) {
-    throw new BadRequestError("Round is not properly configured for voting");
-  }
-
-  const existingBallot = await getBallot(roundId, userId);
-  if (existingBallot) {
-    throw new BadRequestError(
-      "You have already submitted a ballot for this round",
-    );
-  }
-
-  validateBallot(ballotDto.ballot, {
-    maxVotesPerVoter: round.maxVotesPerVoter,
-    maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
-  });
-
   const result = await db.transaction(async (tx) => {
-    return await createBallot(tx, round.id, userId, ballotDto);
+    const round = await getRound(roundId, userId);
+    if (!round) {
+      throw new NotFoundError("Round not found");
+    }
+    if (!round.isVoter) {
+      throw new UnauthorizedError(
+        "You are not authorized to submit a ballot for this round",
+      );
+    }
+    if (round.state !== "voting") {
+      throw new BadRequestError("Round is not in voting state");
+    }
+    if (!round.published || !round.maxVotesPerProjectPerVoter || !round.maxVotesPerVoter) {
+      throw new BadRequestError("Round is not properly configured for voting");
+    }
+
+    const existingBallot = await getBallot(roundId, userId, tx);
+    if (existingBallot) {
+      throw new BadRequestError(
+        "You have already submitted a ballot for this round",
+      );
+    }
+
+    validateBallot(ballotDto.ballot, {
+      maxVotesPerVoter: round.maxVotesPerVoter,
+      maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
+    });
+
+    const result = await createBallot(tx, round.id, userId, ballotDto);
+
+    await createLog({
+      type: AuditLogAction.BallotSubmitted,
+      roundId: round.id,
+      userId,
+      payload: {
+        ...ballotDto,
+        id: result.id,
+      },
+      tx,
+    });
+
+    return result;
   });
 
   return result;
@@ -179,6 +193,17 @@ export async function patchBallot(
     if (!ballot) {
       throw new Error("Ballot not found after submission");
     }
+
+    await createLog({
+      type: AuditLogAction.BallotUpdated,
+      roundId: round.id,
+      userId,
+      payload: {
+        ...ballotDto,
+        id: ballot.id,
+      },
+      tx,
+    })
 
     return ballot;
   });

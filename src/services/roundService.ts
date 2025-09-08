@@ -21,6 +21,8 @@ import { and, count, eq, inArray, InferSelectModel, isNull } from "drizzle-orm";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { z } from "zod";
+import { createLog } from "./auditLogService.ts";
+import { AuditLogAction } from "../types/auditLog.ts";
 
 export function isUserRoundAdmin(
   roundWithAdmins: {
@@ -321,6 +323,14 @@ export async function createRound(
       throw new Error("Failed to create round draft.");
     }
 
+    await createLog({
+      type: AuditLogAction.RoundCreated,
+      roundId: newRoundDraft.id,
+      userId: creatorUserId,
+      payload: dto,
+      tx,
+    });
+
     return newRoundDraft;
   });
 
@@ -369,9 +379,16 @@ export async function deleteRound(roundId: string, requestingUserId: string): Pr
     );
 
     await tx.delete(rounds).where(eq(rounds.id, roundId));
+
+    await createLog({
+      type: AuditLogAction.RoundDeleted,
+      roundId: round.id,
+      userId: requestingUserId,
+      payload: null,
+      tx,
+    })
   });
 }
-
 
 function validateSchedule(
   schedule:
@@ -531,6 +548,14 @@ export async function publishRound(
       publishedAt: new Date(),
     }).where(eq(rounds.id, roundId));
 
+    await createLog({
+      type: AuditLogAction.RoundPublished,
+      roundId: round.id,
+      userId: publishedByUserId,
+      payload: null,
+      tx,
+    })
+
     return await db.query.rounds.findFirst({
       where: eq(rounds.id, roundId),
       with: defaultRoundSelectFields,
@@ -633,6 +658,14 @@ export async function patchRound(
       throw new Error("Failed to retrieve updated round.");
     }
 
+    await createLog({
+      type: AuditLogAction.RoundSettingsChanged,
+      roundId: updatedRound.id,
+      userId: patchingUserId,
+      payload: dto,
+      tx,
+    });
+
     return mapDbRoundToDto(patchingUserId, updatedRound, null);
   });
 
@@ -710,5 +743,15 @@ export async function linkDripListsToRound(
       roundId: round.id,
       dripListAccountId: accountId,
     })));
+
+    await createLog({
+      type: AuditLogAction.LinkedDripListsEdited,
+      roundId: round.id,
+      userId: requestingUserId,
+      payload: {
+        dripListAccountIds,
+      },
+      tx,
+    })
   });
 }
