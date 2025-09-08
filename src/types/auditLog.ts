@@ -45,7 +45,7 @@ export enum AuditLogAction {
   RoundPublished = "round_published",
   RoundDeleted = "round_deleted",
   ApplicationSubmitted = "application_submitted",
-  ApplicationsReviewed = "applications_reviewed",
+  ApplicationsReviewed = "application_reviewed",
   BallotSubmitted = "ballot_submitted",
   BallotUpdated = "ballot_updated",
   ResultsCalculated = "results_calculated",
