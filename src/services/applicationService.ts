@@ -257,6 +257,8 @@ export async function createApplication(
     submitterWalletAddress.toLowerCase()
   ) {
     console.log({
+      chainGqlName,
+      dripsAccountId: applicationDto.dripsAccountId,
       onChainProject,
       projectOwner: onChainProject.owner.address,
       submitter: submitterWalletAddress,
