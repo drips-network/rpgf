@@ -130,6 +130,7 @@ function mapDbRoundToDto(
     isAdmin,
     validation,
     adminCount,
+    kycProvider: round.kycProvider,
   };
 };
 

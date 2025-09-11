@@ -15,6 +15,20 @@
       "when": 1757337206326,
       "tag": "0001_mature_stepford_cuckoos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1757592343665,
+      "tag": "0002_useful_richard_fisk",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1757593601949,
+      "tag": "0003_gorgeous_deathbird",
+      "breakpoints": true
     }
   ]
 }

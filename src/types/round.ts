@@ -1,6 +1,7 @@
 import z from "zod";
 import type { ApplicationCategory } from "./applicationCategory.ts";
 import { cid } from 'is-ipfs';
+import { KycProvider } from "./kyc.ts";
 
 export const roundStateSchema = z.union([
   z.literal("pending-intake"),
@@ -70,6 +71,7 @@ export type Round<IsPublished extends boolean> = {
     readyToPublish: boolean;
   }
   adminCount: number | null;
+  kycProvider: KycProvider | null;
 }
 
 export const createRoundDtoSchema = z.object({
@@ -105,6 +107,7 @@ export const createRoundDtoSchema = z.object({
   maxVotesPerVoter: z.number().int().positive().nullable(),
   maxVotesPerProjectPerVoter: z.number().int().positive().nullable(),
   voterGuidelinesLink: z.string().url().max(255).nullable(),
+  kycProvider: z.enum(["FERN"]).nullable(),
 });
 export type CreateRoundDto = z.infer<typeof createRoundDtoSchema>;
 

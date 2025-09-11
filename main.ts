@@ -12,6 +12,7 @@ import roundVoterRoutes from "$app/routes/roundVoterRoutes.ts";
 import roundAdminRoutes from "$app/routes/roundAdminRoutes.ts";
 import dangerousTestRoutes from "$app/routes/dangerousTestRoutes.ts";
 import auditLogRoutes from "$app/routes/auditLogRoutes.ts";
+import kycRoutes from "$app/routes/kycRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
@@ -99,6 +100,9 @@ app.use(userRoutes.allowedMethods());
 
 app.use(auditLogRoutes.routes());
 app.use(auditLogRoutes.allowedMethods());
+
+app.use(kycRoutes.routes());
+app.use(kycRoutes.allowedMethods());
 
 if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
   console.warn("----------------------------------------------------------------------")

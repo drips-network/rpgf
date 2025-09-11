@@ -20,6 +20,7 @@ import { SubmitBallotDto } from "../types/ballot.ts";
 import { ProjectData } from "../gql/projects.ts";
 import { ApplicationFormFields } from "../types/applicationForm.ts";
 import { AuditLogAction } from "../types/auditLog.ts";
+import { KycProvider, KycStatus, KycType } from "../types/kyc.ts";
 
 export function lower(email: AnyPgColumn): SQL {
   return sql`lower(${email})`;
@@ -62,6 +63,24 @@ export const chains = pgTable("chains", {
   rpcUrl: varchar("rpc_url", { length: 255 }).notNull(),
 });
 
+export const kycStatus = pgEnum('kyc_status', [
+  'CREATED',
+  'UNDER_REVIEW',
+  'NEEDS_ADDITIONAL_INFORMATION',
+  'ACTIVE',
+  'REJECTED',
+  'DEACTIVATED'
+]);
+
+export const kycProvider = pgEnum('kyc_provider', [
+  'Fern',
+]);
+
+export const kycType = pgEnum('kyc_type', [
+  'INDIVIDUAL',
+  'BUSINESS',
+]);
+
 export const rounds = pgTable("rounds", {
   id: uuid("id").primaryKey().defaultRandom(),
   chainId: integer("chain_id").notNull().references(() => chains.id),
@@ -97,6 +116,7 @@ export const rounds = pgTable("rounds", {
   resultsCalculated: boolean("results_calculated").notNull().default(false),
   resultsPublished: boolean("results_published").notNull().default(false),
   customAvatarCid: varchar("custom_avatar_cid", { length: 255 }),
+  kycProvider: kycProvider("kyc_provider").$type<KycProvider>(),
 }, (table => [
   uniqueIndex('url_slug_unique_index').on(lower(table.urlSlug)),
 ]
@@ -295,4 +315,34 @@ export const auditLogs = pgTable("audit_logs", {
 });
 export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
   user: one(users, { fields: [auditLogs.userId], references: [users.id] }),
+}));
+
+export const kycRequests = pgTable("kyc_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  status: kycStatus("status").notNull().default('CREATED').$type<KycStatus>(),
+  roundId: uuid("round_id").notNull().references(() => rounds.id),
+  kycEmail: varchar("kyc_email", { length: 255 }).notNull(),
+  kycType: kycType("kyc_type").notNull().$type<KycType>(),
+  kycProvider: kycProvider("kyc_provider").notNull().$type<KycProvider>(),
+  kycFormUrl: varchar("kyc_form_url", { length: 510 }).notNull(),
+  providerUserId: varchar("provider_user_id", { length: 255 }).notNull(),
+  providerOrgId: varchar("provider_org_id", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export const kycRequestsRelations = relations(kycRequests, ({ one }) => ({
+  round: one(rounds, { fields: [kycRequests.roundId], references: [rounds.id] }),
+  user: one(users, { fields: [kycRequests.userId], references: [users.id] }),
+}));
+
+export const applicationKycRequests = pgTable("application_kyc_requests", {
+  applicationId: uuid("application_id").notNull().unique().references(() => applications.id),
+  kycRequestId: uuid("kyc_request_id").notNull().references(() => kycRequests.id),
+}, (table) => [
+  primaryKey({ columns: [table.applicationId, table.kycRequestId] }),
+]);
+export const applicationKycRequestsRelations = relations(applicationKycRequests, ({ one }) => ({
+  application: one(applications, { fields: [applicationKycRequests.applicationId], references: [applications.id] }),
+  kycRequest: one(kycRequests, { fields: [applicationKycRequests.kycRequestId], references: [kycRequests.id] }),
 }));
