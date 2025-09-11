@@ -252,13 +252,6 @@ export async function linkExistingKycToApplication(
   const isSubmitter = application.submitterUserId === requestingUserId;
   const isRoundAdmin = isUserRoundAdmin(application.round, requestingUserId);
   if (!isSubmitter && !isRoundAdmin) {
-    console.log({
-      isSubmitter,
-      isRoundAdmin,
-      applicationSubmitter: application.submitterUserId,
-      requestingUserId,
-      roundAdmins: application.round.admins.map(a => a.userId),
-    })
     throw new UnauthorizedError("You are not allowed to link a KYC request to this application");
   }
 
