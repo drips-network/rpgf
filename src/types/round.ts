@@ -79,7 +79,7 @@ export const createRoundDtoSchema = z.object({
   color: possibleColorSchema,
   name: z.string().min(1).max(255).nullable(),
   customAvatarCid: z.custom<string>(cid).nullable(),
-  urlSlug: z.string().max(255).regex(
+  urlSlug: z.string().min(1).max(50).regex(
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
     "URL slug must be URL-safe",
   ).transform((val) => val.toLowerCase()).nullable(),
