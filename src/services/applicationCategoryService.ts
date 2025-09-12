@@ -6,7 +6,7 @@ import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 export async function createApplicationCategoryForRound(
   dto: CreateApplicationCategoryDto,
@@ -51,7 +51,10 @@ export async function createApplicationCategoryForRound(
     await createLog({
       type: AuditLogAction.ApplicationCategoryCreated,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         ...dto,
         id: category.id,
@@ -118,7 +121,10 @@ export async function updateApplicationCategory(
     await createLog({
       type: AuditLogAction.ApplicationCategoryUpdated,
       roundId: existingCategory.round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         ...dto,
         id: category.id,
@@ -182,7 +188,10 @@ export async function deleteApplicationCategory(
     await createLog({
       type: AuditLogAction.ApplicationCategoryDeleted,
       roundId: category.round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         id: category.id,
         previousName: category.name,

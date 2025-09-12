@@ -22,7 +22,7 @@ import { ApplicationAnswer } from "../types/applicationAnswer.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { stringify } from "jsr:@std/csv";
 import { createLog } from "./auditLogService.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 async function validateEasAttestation(
   applicationDto: CreateApplicationDto,
@@ -294,7 +294,10 @@ export async function createApplication(
     await createLog({
       type: AuditLogAction.ApplicationSubmitted,
       roundId: round.id,
-      userId: submitterUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: submitterUserId,
+      },
       payload: {
         ...applicationDto,
         id: newApplication.id,
@@ -489,7 +492,9 @@ export async function getApplicationsCsv(
     throw new NotFoundError("Round not found");
   }
 
-  const includeRejectedAndPrivateData = isUserRoundAdmin(round, requestingUserId);
+  const isAdmin = isUserRoundAdmin(round, requestingUserId);
+  const includeRejectedAndPrivateData = isAdmin;
+  const includeKycData = isAdmin;
   const includeVoteResult = includeRejectedAndPrivateData || round.resultsPublished;
 
   const data = await db.query.applications.findMany({
@@ -516,18 +521,31 @@ export async function getApplicationsCsv(
         }
       },
       result: true,
+      kycRequestMapping: {
+        with: {
+          kycRequest: true,
+        }
+      }
     }
   });
 
   const uniqueAnswerSlugs = Array.from(new Set(data.flatMap((app) =>
     app.answers
+      // Extremely important: this drops private fields unless the user is an admin
       .filter((a) => includeRejectedAndPrivateData ? true : !a.field.private)
       .map((a) => a.field.slug ?? null)
       .filter((s): s is string => s !== null)
   )));
 
+  const kycSlugs = includeKycData ? [
+    "KYC Status",
+    "KYC Email address",
+    "KYC Updated At",
+    "KYC Provider",
+  ] : [];
+
   const csvData = [
-    ["ID", "State", "Project Name", "GitHub URL", "Drips Account ID", "Submitter Wallet Address", "Category ID", "Category Name", "Form ID", "Form Name", ...uniqueAnswerSlugs, "Created At", "Allocation"],
+    ["ID", "State", "Project Name", "GitHub URL", "Drips Account ID", "Submitter Wallet Address", "Category ID", "Category Name", "Form ID", "Form Name", ...kycSlugs, ...uniqueAnswerSlugs, "Created At", "Allocation"],
     ...data.map((app) => [
       app.id,
       app.state,
@@ -539,6 +557,12 @@ export async function getApplicationsCsv(
       app.category.name,
       app.form.id,
       app.form.name,
+      ...(includeKycData ? [
+        app.kycRequestMapping?.kycRequest.status ?? "N/A",
+        app.kycRequestMapping?.kycRequest.kycEmail ?? "N/A",
+        app.kycRequestMapping?.kycRequest.updatedAt.toISOString() ?? "N/A",
+        app.kycRequestMapping?.kycRequest.kycProvider ?? "N/A",
+      ] : []),
       ...uniqueAnswerSlugs.map((slug) => {
         const answer = app.answers.find((a) => a.field.slug === slug);
         return answer ? (typeof answer.answer === "string" ? answer.answer : JSON.stringify(answer.answer)) : "";
@@ -592,11 +616,7 @@ export async function applyApplicationReview(
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
-      admins: {
-        columns: {
-          userId: true,
-        }
-      }
+      admins: true,
     }
   });
   if (!round) {
@@ -628,7 +648,10 @@ export async function applyApplicationReview(
     await createLog({
       type: AuditLogAction.ApplicationsReviewed,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: review,
       tx,
     });

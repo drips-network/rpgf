@@ -22,7 +22,7 @@ import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { z } from "zod";
 import { createLog } from "./auditLogService.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 export function isUserRoundAdmin(
   roundWithAdmins: {
@@ -327,7 +327,10 @@ export async function createRound(
     await createLog({
       type: AuditLogAction.RoundCreated,
       roundId: newRoundDraft.id,
-      userId: creatorUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: creatorUserId,
+      },
       payload: dto,
       tx,
     });
@@ -384,7 +387,10 @@ export async function deleteRound(roundId: string, requestingUserId: string): Pr
     await createLog({
       type: AuditLogAction.RoundDeleted,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: null,
       tx,
     })
@@ -552,7 +558,10 @@ export async function publishRound(
     await createLog({
       type: AuditLogAction.RoundPublished,
       roundId: round.id,
-      userId: publishedByUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: publishedByUserId,
+      },
       payload: null,
       tx,
     })
@@ -662,7 +671,10 @@ export async function patchRound(
     await createLog({
       type: AuditLogAction.RoundSettingsChanged,
       roundId: updatedRound.id,
-      userId: patchingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: patchingUserId,
+      },
       payload: dto,
       tx,
     });
@@ -748,7 +760,10 @@ export async function linkDripListsToRound(
     await createLog({
       type: AuditLogAction.LinkedDripListsEdited,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         dripListAccountIds,
       },

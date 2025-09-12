@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { CreateKycRequestForApplicationDto, KycProvider, KycRequest, KycStatus, KycType } from "../types/kyc.ts";
 import { db, Transaction } from "../db/postgres.ts";
-import { applicationKycRequests, kycRequests } from "../db/schema.ts";
+import { applicationKycRequests, kycRequests, users } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { InferSelectModel } from "drizzle-orm/table";
 import { and, eq } from "drizzle-orm";
+import { createLog } from "./auditLogService.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 const FERN_API_BASE = "https://api.fernhq.com";
 const FERN_API_KEY = Deno.env.get("FERN_KYC_API_KEY");
@@ -49,6 +51,7 @@ function _mapDbKycToDto(kycStatus: InferSelectModel<typeof kycRequests>): KycReq
 
 export async function createKycRequest({
   userId,
+  requestingUserId,
   applicationId,
   provider,
   type,
@@ -59,6 +62,7 @@ export async function createKycRequest({
   roundId,
 }: {
   userId: string,
+  requestingUserId: string,
   applicationId: string,
   provider: KycProvider,
   type: KycType,
@@ -122,6 +126,24 @@ export async function createKycRequest({
     kycRequestId: inserted[0].id,
   });
 
+  const requestingUser = await tx.query.users.findFirst({
+    where: eq(users.id, requestingUserId),
+    columns: {
+      walletAddress: true,
+    }
+  });
+  if (!requestingUser) {
+    throw new Error("Requesting user not found");
+  }
+
+  await createLog({
+    type: AuditLogAction.KycRequestCreated,
+    roundId,
+    actor: { type: AuditLogActorType.User, userId: requestingUserId },
+    payload: { kycRequestId: inserted[0].id },
+    tx,
+  });
+
   return _mapDbKycToDto(inserted[0]);
 }
 
@@ -166,7 +188,8 @@ export async function createKycRequestForApplication(
     }
 
     return await createKycRequest({
-      userId: requestingUserId,
+      userId: application.submitterUserId,
+      requestingUserId,
       applicationId,
       provider: KycProvider.Fern,
       type: dto.type,
@@ -284,10 +307,26 @@ export async function linkExistingKycToApplication(
 export async function updateKycStatus(
   newStatus: KycStatus,
   providerUserId: string,
+  provider: KycProvider,
 ) {
-  await db.update(kycRequests)
-    .set({ status: newStatus, updatedAt: new Date() })
-    .where(eq(kycRequests.providerUserId, providerUserId));
+  await db.transaction(async (tx) => {
+    const kycRequest = await tx.update(kycRequests)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(eq(kycRequests.providerUserId, providerUserId))
+      .returning();
+
+    await createLog({
+      type: AuditLogAction.KycRequestUpdated,
+      roundId: kycRequest[0].roundId,
+      actor: { type: AuditLogActorType.KycProvider, provider },
+      payload: { 
+        kycRequestId: kycRequest[0].id, 
+        previousStatus: kycRequest[0].status, 
+        newStatus 
+      },
+      tx,
+    })
+  });
 
   return;
 }

@@ -29,6 +29,41 @@
       "when": 1757593601949,
       "tag": "0003_gorgeous_deathbird",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1757666856653,
+      "tag": "0004_messy_demogoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1757667017703,
+      "tag": "0005_sturdy_clint_barton",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1757667141511,
+      "tag": "0006_lame_scalphunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1757667386997,
+      "tag": "0007_tense_invaders",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1757667430749,
+      "tag": "0008_cloudy_steve_rogers",
+      "breakpoints": true
     }
   ]
 }

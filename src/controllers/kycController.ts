@@ -4,7 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { z } from "zod";
 import { createKycRequestForApplication, getKycRequestForApplication, getKycRequestsForRound, linkExistingKycToApplication, updateKycStatus } from "../services/kycService.ts";
-import { createKycRequestForApplicationDtoSchema, KycStatus } from "../types/kyc.ts";
+import { createKycRequestForApplicationDtoSchema, KycProvider, KycStatus } from "../types/kyc.ts";
 import parseDto from "../utils/parseDto.ts";
 
 const FERN_WEBHOOK_SECRET = Deno.env.get("FERN_KYC_WEBHOOK_SECRET") || "";
@@ -94,7 +94,7 @@ export async function fernUpdateWebhookController(
 
   const { resource: { customerId, customerStatus } } = parsedPayload.data;
 
-  await updateKycStatus(customerStatus as KycStatus, customerId);
+  await updateKycStatus(customerStatus as KycStatus, customerId, KycProvider.Fern);
 }
 
 export async function createKycRequestForApplicationController(

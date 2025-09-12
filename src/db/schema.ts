@@ -19,7 +19,7 @@ import { isNull, relations, SQL, sql } from "drizzle-orm";
 import { SubmitBallotDto } from "../types/ballot.ts";
 import { ProjectData } from "../gql/projects.ts";
 import { ApplicationFormFields } from "../types/applicationForm.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogKycProviderActor, AuditLogSystemActor, AuditLogUserActor } from "../types/auditLog.ts";
 import { KycProvider, KycStatus, KycType } from "../types/kyc.ts";
 
 export function lower(email: AnyPgColumn): SQL {
@@ -228,6 +228,7 @@ export const applicationsRelations = relations(applications, ({ one, many }) => 
   answers: many(applicationAnswers),
   form: one(applicationForms, { fields: [applications.formId], references: [applicationForms.id] }),
   category: one(applicationCategories, { fields: [applications.categoryId], references: [applicationCategories.id] }),
+  kycRequestMapping: one(applicationKycRequests),
 }));
 
 export const applicationAnswers = pgTable("application_answers", {
@@ -302,13 +303,22 @@ export const auditLogAction = pgEnum('audit_log_action', [
   'ballot_updated',
   'results_calculated',
   'linked_drip_lists_edited',
-  'results_published'
+  'results_published',
+  'kyc_request_created',
+  'kyc_request_linked_to_application',
+  'kyc_request_updated',
 ]);
+
+export type DbAuditLogActor =
+  | Omit<AuditLogUserActor, 'walletAddress'>
+  | AuditLogSystemActor
+  | AuditLogKycProviderActor;
 
 export const auditLogs = pgTable("audit_logs", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   action: auditLogAction("action").notNull().$type<AuditLogAction>(),
-  userId: uuid("user_id").notNull().references(() => users.id),
+  actor: jsonb("actor").notNull().$type<DbAuditLogActor>(),
+  userId: uuid("user_id").references(() => users.id),
   roundId: uuid("round_id"),
   payload: jsonb("payload"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

@@ -1,26 +1,27 @@
 import { desc, eq, lt } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
-import { auditLogs, rounds } from "../db/schema.ts";
-import { AuditLog, AuditLogAction, PayloadByAction } from "../types/auditLog.ts";
+import { auditLogs, DbAuditLogActor, rounds } from "../db/schema.ts";
+import { AuditLog, AuditLogAction, AuditLogActor, AuditLogActorType, PayloadByAction } from "../types/auditLog.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 
 export async function createLog<TAction extends AuditLogAction>({
   type,
   roundId,
-  userId,
+  actor,
   payload,
   tx,
 }: {
   type: TAction;
   roundId: string;
-  userId: string;
+  actor: DbAuditLogActor;
   payload: PayloadByAction[TAction];
   tx: Transaction;
 }) {
   await (tx ?? db).insert(auditLogs).values({
     action: type,
     roundId,
-    userId,
+    actor,
+    userId: actor.type === AuditLogActorType.User ? actor.userId : null,
     payload,
   });
 }
@@ -69,13 +70,37 @@ export async function getLogsByRoundId(
   const nextCursor = hasNext ? logs[logs.length - 1].createdAt.toISOString() : null;
 
   return {
-    logs: logs.map((log) => ({
-      id: log.id,
-      userWalletAddress: log.user.walletAddress,
-      action: log.action,
-      payload: log.payload as PayloadByAction[typeof log.action],
-      createdAt: log.createdAt,
-    })),
+    logs: logs.map((log) => {
+      let actor: AuditLogActor;
+
+      switch (log.actor.type) {
+        case AuditLogActorType.User: {
+          const walletAddress = log.user?.walletAddress;
+          if (!log.user || !walletAddress || !log.userId) {
+            throw new Error("Log actor is a user but no user found.");
+          }
+
+          actor = {
+            type: AuditLogActorType.User,
+            walletAddress,
+            userId: log.userId,
+          };
+          break;
+        }
+        default: {
+          actor = log.actor as AuditLogActor;
+          break;
+        }
+      }
+
+      return {
+        id: log.id,
+        actor,
+        action: log.action,
+        payload: log.payload as PayloadByAction[typeof log.action],
+        createdAt: log.createdAt,
+      }
+    }),
     next: nextCursor,
   };
 }

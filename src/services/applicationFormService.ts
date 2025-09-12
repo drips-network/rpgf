@@ -5,7 +5,7 @@ import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { type ApplicationForm, type CreateApplicationFormDto } from "../types/applicationForm.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { createLog } from "./auditLogService.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 function ensureUniqueSlugs(fields: CreateApplicationFormDto["fields"]) {
   const slugs: string[] = fields
@@ -56,9 +56,6 @@ export async function createApplicationForm(
   if (!round) {
     throw new NotFoundError("No round found for the provided ID");
   }
-  if (round.published) {
-    throw new BadRequestError("Cannot create application form for a published round");
-  }
   if (!isUserRoundAdmin(round, requestingUserId)) {
     throw new BadRequestError("You are not authorized to modify this round");
   }
@@ -99,7 +96,10 @@ export async function createApplicationForm(
     await createLog({
       type: AuditLogAction.ApplicationFormCreated,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         ...dto,
         id: form.id,
@@ -219,7 +219,10 @@ export async function updateApplicationForm(
     await createLog({
       type: AuditLogAction.ApplicationFormUpdated,
       roundId: existingForm.round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         ...dto,
         id: existingForm.id,
@@ -319,7 +322,10 @@ export async function deleteApplicationForm(
     await createLog({
       type: AuditLogAction.ApplicationFormDeleted,
       roundId: form.round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         id: form.id,
         previousName: form.name,

@@ -8,7 +8,7 @@ import { SetRoundAdminsDto } from "../types/roundAdmin.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 export async function setRoundAdmins(
   dto: SetRoundAdminsDto,
@@ -56,7 +56,10 @@ export async function setRoundAdmins(
     await createLog({
       type: AuditLogAction.RoundAdminsChanged,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         walletAddresses: dto.walletAddresses,
       },

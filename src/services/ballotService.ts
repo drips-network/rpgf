@@ -7,7 +7,7 @@ import { getRound, isUserRoundAdmin } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
 import { escapeCsvValue } from "../utils/csv.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
@@ -139,7 +139,10 @@ export async function submitBallot(
     await createLog({
       type: AuditLogAction.BallotSubmitted,
       roundId: round.id,
-      userId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId,
+      },
       payload: {
         ...ballotDto,
         id: result.id,
@@ -197,7 +200,10 @@ export async function patchBallot(
     await createLog({
       type: AuditLogAction.BallotUpdated,
       roundId: round.id,
-      userId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId,
+      },
       payload: {
         ...ballotDto,
         id: ballot.id,

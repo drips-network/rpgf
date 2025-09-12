@@ -7,7 +7,7 @@ import { isUserRoundAdmin } from "./roundService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 export async function setRoundVoters(
   dto: SetRoundVotersDto,
@@ -40,7 +40,10 @@ export async function setRoundVoters(
     await createLog({
       type: AuditLogAction.RoundVotersChanged,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         walletAddresses: dto.walletAddresses,
       },

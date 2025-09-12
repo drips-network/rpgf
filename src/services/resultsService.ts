@@ -8,7 +8,7 @@ import { results as resultsTable, rounds } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
 import { getRound } from "./roundService.ts";
 import { createLog } from "./auditLogService.ts";
-import { AuditLogAction } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 export enum ResultCalculationMethod {
   MEDIAN = "median",
@@ -143,7 +143,10 @@ export async function recalculateResultsForRound(
     await createLog({
       type: AuditLogAction.ResultsCalculated,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: {
         method,
       },
@@ -178,7 +181,10 @@ export async function publishResults(
     await createLog({
       type: AuditLogAction.ResultsPublished,
       roundId: round.id,
-      userId: requestingUserId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
       payload: null,
       tx,
     })
