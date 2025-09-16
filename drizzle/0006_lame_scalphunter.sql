@@ -1,1 +1,0 @@
-ALTER TABLE "audit_logs" RENAME COLUMN "actor" TO "actor_type";

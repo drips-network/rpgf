@@ -1,5 +1,5 @@
 import { InferSelectModel } from "drizzle-orm/table";
-import { applicationAnswers, applicationFormFields, applications } from "../db/schema.ts";
+import { applicationAnswers, applicationFormFields } from "../db/schema.ts";
 import { 
   ApplicationAnswerDto,
   applicationUrlAnswerDtoSchema,
@@ -146,9 +146,9 @@ export function mapDbAnswersToDto(
   });
 }
 
-export async function getAnswersByApplicationId(applicationId: string, dropPrivateFields = true, tx?: Transaction): Promise<ApplicationAnswer[]> {
+export async function getAnswersByApplicationVersionId(applicationVersionId: string, dropPrivateFields = true, tx?: Transaction): Promise<ApplicationAnswer[]> {
   const answers = await (tx ?? db).query.applicationAnswers.findMany({
-    where: (answers, { eq }) => eq(answers.applicationId, applicationId),
+    where: (answers, { eq }) => eq(answers.applicationVersionId, applicationVersionId),
     with: {
       field: true,
     },
@@ -159,41 +159,45 @@ export async function getAnswersByApplicationId(applicationId: string, dropPriva
 
 export async function recordAnswers(
   dto: ApplicationAnswerDto,
-  application: InferSelectModel<typeof applications>,
-  tx?: Transaction,
+  applicationVersionId: string,
+  tx: Transaction,
 ): Promise<ApplicationAnswer[]> {
-  const category = await (tx ?? db).query.applicationCategories.findFirst({
-    where: (categories, { eq }) => eq(categories.id, application.categoryId),
+  const applicationVersion = await tx.query.applicationVersions.findFirst({
+    where: (versions, { eq }) => eq(versions.id, applicationVersionId),
     with: {
-      form: {
+      category: {
         with: {
-          fields: {
-            where: isNull(applicationFormFields.deletedAt)
+          form: {
+            with: {
+              fields: {
+                where: isNull(applicationFormFields.deletedAt)
+              }
+            }
           }
         }
       }
     }
   });
-  if (!category) {
-    throw new BadRequestError("Application category not found");
+  if (!applicationVersion) {
+    throw new BadRequestError("Application version not found");
   }
 
-  const { fields } = category.form;
+  const { fields } = applicationVersion.category.form;
 
   const valid = validateAnswers(dto, fields);
   if (!valid) {
     throw new BadRequestError("Invalid answers");
   }
 
-  return await (tx ?? db).transaction(async (tx) => {
+  return await tx.transaction(async (tx) => {
     await Promise.all(dto.map(async (answer) => {
       await tx.insert(applicationAnswers).values({
-        applicationId: application.id,
+        applicationVersionId: applicationVersionId,
         fieldId: answer.fieldId,
         answer: JSON.stringify(answer.value),
       })
     }));
 
-    return await getAnswersByApplicationId(application.id, false, tx);
+    return await getAnswersByApplicationVersionId(applicationVersionId, false, tx);
   });
 }

@@ -1,9 +1,13 @@
+CREATE TYPE "public"."audit_log_action" AS ENUM('round_created', 'round_settings_changed', 'round_admins_changed', 'round_voters_changed', 'round_published', 'round_deleted', 'application_category_created', 'application_category_updated', 'application_category_deleted', 'application_form_created', 'application_form_updated', 'application_form_deleted', 'application_submitted', 'application_updated', 'application_reviewed', 'ballot_submitted', 'ballot_updated', 'results_calculated', 'linked_drip_lists_edited', 'results_published', 'kyc_request_created', 'kyc_request_linked_to_application', 'kyc_request_updated');--> statement-breakpoint
+CREATE TYPE "public"."kyc_provider" AS ENUM('Fern');--> statement-breakpoint
+CREATE TYPE "public"."kyc_status" AS ENUM('CREATED', 'UNDER_REVIEW', 'NEEDS_ADDITIONAL_INFORMATION', 'ACTIVE', 'REJECTED', 'DEACTIVATED');--> statement-breakpoint
+CREATE TYPE "public"."kyc_type" AS ENUM('INDIVIDUAL', 'BUSINESS');--> statement-breakpoint
 CREATE TABLE "application_answers" (
-	"application_id" uuid NOT NULL,
+	"application_version_id" uuid NOT NULL,
 	"field_id" uuid NOT NULL,
 	"answer" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "application_answers_application_id_field_id_pk" PRIMARY KEY("application_id","field_id")
+	CONSTRAINT "application_answers_application_version_id_field_id_pk" PRIMARY KEY("application_version_id","field_id")
 );
 --> statement-breakpoint
 CREATE TABLE "application_categories" (
@@ -38,19 +42,45 @@ CREATE TABLE "application_forms" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "application_kyc_requests" (
+	"application_id" uuid NOT NULL,
+	"kyc_request_id" uuid NOT NULL,
+	CONSTRAINT "application_kyc_requests_application_id_kyc_request_id_pk" PRIMARY KEY("application_id","kyc_request_id"),
+	CONSTRAINT "application_kyc_requests_application_id_unique" UNIQUE("application_id")
+);
+--> statement-breakpoint
+CREATE TABLE "application_versions" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"application_id" uuid NOT NULL,
+	"project_name" varchar(255) NOT NULL,
+	"drips_account_id" varchar(255) NOT NULL,
+	"drips_project_data_snapshot" jsonb NOT NULL,
+	"attestation_uid" varchar(255),
+	"form_id" uuid NOT NULL,
+	"category_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "applications" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"state" varchar(255) DEFAULT 'pending' NOT NULL,
-	"project_name" varchar(255) NOT NULL,
-	"attestation_uid" varchar(255),
-	"drips_account_id" varchar(255) NOT NULL,
-	"drips_project_data_snapshot" jsonb NOT NULL,
 	"submitter" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"round_id" uuid NOT NULL,
-	"form_id" uuid NOT NULL,
+	"project_name" varchar(255) NOT NULL,
+	"drips_project_data_snapshot" jsonb NOT NULL,
 	"category_id" uuid NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "audit_logs" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "audit_logs_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 2147483647 START WITH 1 CACHE 1),
+	"action" "audit_log_action" NOT NULL,
+	"actor" jsonb NOT NULL,
+	"user_id" uuid,
+	"round_id" uuid,
+	"payload" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "ballots" (
@@ -69,6 +99,21 @@ CREATE TABLE "chains" (
 	"attestation_setup" jsonb,
 	"whitelist_mode" boolean DEFAULT true NOT NULL,
 	"rpc_url" varchar(255) NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "kyc_requests" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid NOT NULL,
+	"status" "kyc_status" DEFAULT 'CREATED' NOT NULL,
+	"round_id" uuid NOT NULL,
+	"kyc_email" varchar(255) NOT NULL,
+	"kyc_type" "kyc_type" NOT NULL,
+	"kyc_provider" "kyc_provider" NOT NULL,
+	"kyc_form_url" varchar(510) NOT NULL,
+	"provider_user_id" varchar(255) NOT NULL,
+	"provider_org_id" varchar(255) NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "linked_drip_lists" (
@@ -139,6 +184,7 @@ CREATE TABLE "rounds" (
 	"results_calculated" boolean DEFAULT false NOT NULL,
 	"results_published" boolean DEFAULT false NOT NULL,
 	"custom_avatar_cid" varchar(255),
+	"kyc_provider" "kyc_provider",
 	CONSTRAINT "rounds_url_slug_unique" UNIQUE("url_slug")
 );
 --> statement-breakpoint
@@ -151,18 +197,25 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_wallet_address_unique" UNIQUE("wallet_address")
 );
 --> statement-breakpoint
-ALTER TABLE "application_answers" ADD CONSTRAINT "application_answers_application_id_applications_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."applications"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "application_answers" ADD CONSTRAINT "application_answers_application_version_id_application_versions_id_fk" FOREIGN KEY ("application_version_id") REFERENCES "public"."application_versions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application_answers" ADD CONSTRAINT "application_answers_field_id_application_form_fields_id_fk" FOREIGN KEY ("field_id") REFERENCES "public"."application_form_fields"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application_categories" ADD CONSTRAINT "application_categories_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application_categories" ADD CONSTRAINT "application_categories_application_form_id_application_forms_id_fk" FOREIGN KEY ("application_form_id") REFERENCES "public"."application_forms"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application_form_fields" ADD CONSTRAINT "application_form_fields_form_id_application_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."application_forms"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "application_forms" ADD CONSTRAINT "application_forms_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "application_kyc_requests" ADD CONSTRAINT "application_kyc_requests_application_id_applications_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."applications"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "application_kyc_requests" ADD CONSTRAINT "application_kyc_requests_kyc_request_id_kyc_requests_id_fk" FOREIGN KEY ("kyc_request_id") REFERENCES "public"."kyc_requests"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "application_versions" ADD CONSTRAINT "application_versions_application_id_applications_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."applications"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "application_versions" ADD CONSTRAINT "application_versions_form_id_application_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."application_forms"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "application_versions" ADD CONSTRAINT "application_versions_category_id_application_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."application_categories"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "applications" ADD CONSTRAINT "applications_submitter_users_id_fk" FOREIGN KEY ("submitter") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "applications" ADD CONSTRAINT "applications_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "applications" ADD CONSTRAINT "applications_form_id_application_forms_id_fk" FOREIGN KEY ("form_id") REFERENCES "public"."application_forms"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "applications" ADD CONSTRAINT "applications_category_id_application_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."application_categories"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ballots" ADD CONSTRAINT "ballots_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ballots" ADD CONSTRAINT "ballots_voter_user_id_users_id_fk" FOREIGN KEY ("voter_user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "kyc_requests" ADD CONSTRAINT "kyc_requests_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "kyc_requests" ADD CONSTRAINT "kyc_requests_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "linked_drip_lists" ADD CONSTRAINT "linked_drip_lists_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "results" ADD CONSTRAINT "results_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

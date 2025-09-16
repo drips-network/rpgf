@@ -1,5 +1,5 @@
 import { CreateRoundDto, PatchRoundDto } from "./round.ts";
-import { ApplicationReviewDto, CreateApplicationDto } from "./application.ts";
+import { ApplicationReviewDto, CreateApplicationDto, UpdateApplicationDto } from "./application.ts";
 import { ResultCalculationMethod } from "../services/resultsService.ts";
 import { SubmitBallotDto } from "./ballot.ts";
 import { SetRoundAdminsDto } from "./roundAdmin.ts";
@@ -16,6 +16,7 @@ type RoundPublishedPayload = null;
 type RoundDeletedPayload = null;
 
 type ApplicationSubmittedPayload = CreateApplicationDto & { id: string };
+type ApplicationUpdatedPayload = UpdateApplicationDto & { id: string };
 type ApplicationsReviewedPayload = ApplicationReviewDto;
 
 type BallotSubmittedPayload = SubmitBallotDto & { id: string };
@@ -51,6 +52,7 @@ export enum AuditLogAction {
   RoundDeleted = "round_deleted",
 
   ApplicationSubmitted = "application_submitted",
+  ApplicationUpdated = "application_updated",
   ApplicationsReviewed = "application_reviewed",
 
   BallotSubmitted = "ballot_submitted",
@@ -82,6 +84,7 @@ export type PayloadByAction = {
   [AuditLogAction.RoundDeleted]: RoundDeletedPayload;
 
   [AuditLogAction.ApplicationSubmitted]: ApplicationSubmittedPayload;
+  [AuditLogAction.ApplicationUpdated]: ApplicationUpdatedPayload;
   [AuditLogAction.ApplicationsReviewed]: ApplicationsReviewedPayload;
 
   [AuditLogAction.BallotSubmitted]: BallotSubmittedPayload;

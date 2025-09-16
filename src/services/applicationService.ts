@@ -1,14 +1,17 @@
 import { and, asc, desc, eq, InferSelectModel, isNull, or } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
-import { applicationCategories, applicationFormFields, applications, results, rounds, users } from "../db/schema.ts";
+import { applicationCategories, applicationFormFields, applications, applicationVersions, results, rounds, users } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
   Application,
   ApplicationReviewDto,
   ApplicationState,
+  ApplicationVersion,
   CreateApplicationDto,
   createApplicationDtoSchema,
   ListingApplication,
+  UpdateApplicationDto,
+  updateApplicationDtoSchema,
 } from "../types/application.ts";
 import { getProject } from "../gql/projects.ts";
 import { JsonRpcProvider, type Provider } from "ethers";
@@ -17,7 +20,7 @@ import * as ipfs from "../ipfs/ipfs.ts";
 import z from "zod";
 import { SortConfig } from "../utils/sort.ts";
 import { inferRoundState, isUserRoundAdmin } from "./roundService.ts";
-import { getAnswersByApplicationId, recordAnswers, validateAnswers } from "./applicationAnswerService.ts";
+import { mapDbAnswersToDto, recordAnswers, validateAnswers } from "./applicationAnswerService.ts";
 import { ApplicationAnswer } from "../types/applicationAnswer.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { stringify } from "jsr:@std/csv";
@@ -25,7 +28,7 @@ import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
 async function validateEasAttestation(
-  applicationDto: CreateApplicationDto,
+  applicationDto: CreateApplicationDto | UpdateApplicationDto,
   formFields: InferSelectModel<typeof applicationFormFields>[],
   submitterWalletAddress: string,
   easContractAddress: string,
@@ -88,7 +91,7 @@ async function validateEasAttestation(
 
   const ipfsData = await ipfs.getIpfsFile(ipfsHashParse.data);
 
-  const attestedApplicationDtoParse = createApplicationDtoSchema.safeParse(JSON.parse(ipfsData));
+  const attestedApplicationDtoParse = createApplicationDtoSchema.or(updateApplicationDtoSchema).safeParse(JSON.parse(ipfsData));
   if (!attestedApplicationDtoParse.success) {
     throw new BadRequestError(
       "EAS attestation data is not a valid application DTO for this round",
@@ -115,7 +118,8 @@ async function validateEasAttestation(
     const fillableFields = formFields.filter((f) => f.slug);
     const field = fillableFields.find((f) => f.id === fieldId);
     if (!field) {
-      throw new Error(`Field ${fieldId} is not part of the application format`);
+      // field not found in the form, possibly deleted while the application was being filled
+      continue;
     }
 
     // the field must be present in the attested fields IF IT IS NOT PRIVATE.
@@ -123,62 +127,70 @@ async function validateEasAttestation(
 
     if (field.private) {
       if (attestedAnswers.find((a) => a.fieldId === fieldId)) {
-        throw new BadRequestError(`EAS attestation must not contain private field ${fieldId}`);
+        throw new BadRequestError(`EAS attestation must not contain private field ${fieldId}. The round organizers may have edited the application form. Please reload the page and try again.`);
       }
       continue;
     }
 
     if (!attestedAnswers.find((a) => a.fieldId === fieldId)) {
-      throw new BadRequestError(`EAS attestation is missing field ${fieldId}`);
+      throw new BadRequestError(`EAS attestation is missing field ${fieldId}. The round organizers may have edited the application form. Please reload the page and try again.`);
     }
 
     const attestedValue = attestedAnswers.find((a) => a.fieldId === fieldId);
 
     if (typeof attestedValue?.value !== typeof value) {
       throw new BadRequestError(
-        `EAS attestation field ${fieldId} type does not match the submitted application`,
+        `EAS attestation field ${fieldId} type does not match the submitted application. The round organizers may have edited the application form. Please reload the page and try again.`,
       );
     }
 
     if (JSON.stringify(attestedValue?.value) !== JSON.stringify(value)) {
       throw new BadRequestError(
-        `EAS attestation field ${fieldId} value does not match the submitted application`,
+        `EAS attestation field ${fieldId} value does not match the submitted application.`,
       );
     }
   }
 }
 
 function mapDbApplicationToDto(
-  application: InferSelectModel<typeof applications>,
-  applicationForm: {
-    id: string;
-    name: string;
+  application: InferSelectModel<typeof applications> & {
+    versions: (InferSelectModel<typeof applicationVersions> & {
+      answers: ApplicationAnswer[];
+      form: { id: string; name: string; };
+      category: InferSelectModel<typeof applicationCategories>;
+    })[];
   },
-  category: InferSelectModel<typeof applicationCategories>,
   submitter: { id: string; walletAddress: string },
-  answers: ApplicationAnswer[],
   resultAllocation: number | null,
 ): Application {
+  const latestVersion = application.versions[0];
+
   return {
     id: application.id,
     state: application.state,
-    projectName: application.projectName,
-    dripsAccountId: application.dripsAccountId,
-    easAttestationUID: application.easAttestationUID ?? null,
-    dripsProjectDataSnapshot: application.dripsProjectDataSnapshot,
     createdAt: application.createdAt,
     updatedAt: application.updatedAt,
     roundId: application.roundId,
-    formId: application.formId,
-    category: {
-      id: category.id,
-      name: category.name,
-      description: category.description,
-      applicationForm,
-    },
-    answers,
     allocation: resultAllocation,
     submitter,
+    projectName: latestVersion.projectName,
+    dripsProjectDataSnapshot: latestVersion.dripsProjectDataSnapshot,
+    latestVersion: {
+      id: latestVersion.id,
+      projectName: latestVersion.projectName,
+      dripsAccountId: latestVersion.dripsAccountId,
+      easAttestationUID: latestVersion.easAttestationUID ?? null,
+      dripsProjectDataSnapshot: latestVersion.dripsProjectDataSnapshot,
+      createdAt: latestVersion.createdAt,
+      formId: latestVersion.formId,
+      category: {
+        id: latestVersion.category.id,
+        name: latestVersion.category.name,
+        description: latestVersion.category.description,
+        applicationForm: latestVersion.form,
+      },
+      answers: latestVersion.answers,
+    },
   }
 }
 
@@ -186,11 +198,13 @@ function mapDbApplicationToListingDto(
   application: InferSelectModel<typeof applications>,
   resultAllocation: number | null,
 ): ListingApplication {
+  if (!application.dripsProjectDataSnapshot) {
+    throw new Error("dripsProjectDataSnapshot is null");
+  }
   return {
     id: application.id,
     state: application.state,
     projectName: application.projectName,
-    dripsAccountId: application.dripsAccountId,
     dripsProjectDataSnapshot: application.dripsProjectDataSnapshot,
     allocation: resultAllocation,
   }
@@ -273,21 +287,28 @@ export async function createApplication(
   }
 
   // Create answers and application
-  const result = await db.transaction(async (tx) => {
+  const newApplication = await db.transaction(async (tx) => {
     const newApplication = (await tx.insert(applications).values({
+      submitterUserId,
+      roundId,
+      projectName: applicationDto.projectName,
+      dripsProjectDataSnapshot: onChainProject,
+      categoryId: applicationDto.categoryId,
+    }).returning())[0];
+
+    const newVersion = (await tx.insert(applicationVersions).values({
+      applicationId: newApplication.id,
       projectName: applicationDto.projectName,
       dripsProjectDataSnapshot: onChainProject,
       easAttestationUID: applicationDto.attestationUID,
       dripsAccountId: applicationDto.dripsAccountId,
-      submitterUserId,
-      roundId,
       formId: applicationCategory.applicationFormId,
       categoryId: applicationCategory.id,
     }).returning())[0];
 
     const newAnswers = await recordAnswers(
       applicationDto.answers,
-      newApplication,
+      newVersion.id,
       tx,
     );
 
@@ -305,17 +326,259 @@ export async function createApplication(
       tx,
     });
 
-    return mapDbApplicationToDto(
-      newApplication,
-      applicationCategory.form,
-      applicationCategory,
-      { id: submitterUserId, walletAddress: submitterWalletAddress },
-      newAnswers,
-      null,
-    );
+    return {
+      ...newApplication,
+      versions: [{
+        ...newVersion,
+        answers: newAnswers,
+        form: applicationCategory.form,
+        category: applicationCategory,
+      }],
+    };
   });
 
-  return result;
+  return mapDbApplicationToDto(
+    newApplication,
+    { id: submitterUserId, walletAddress: submitterWalletAddress },
+    null,
+  );
+}
+
+/**
+ * Gets a single application with the privileges of `requestingUserId`.
+ * Private fields are only included if the requesting user is the submitter or a round admin.
+ */
+export async function updateApplication(
+  applicationId: string,
+  roundId: string,
+  submitterUserId: string,
+  submitterWalletAddress: string,
+  applicationDto: UpdateApplicationDto,
+): Promise<Application> {
+  const application = await db.query.applications.findFirst({
+    where: and(
+      eq(applications.id, applicationId),
+      eq(applications.roundId, roundId),
+    ),
+    with: {
+      versions: {
+        orderBy: desc(applicationVersions.createdAt),
+      },
+      round: true,
+    },
+  });
+
+  if (!application) {
+    throw new NotFoundError("Application not found");
+  }
+  if (application.submitterUserId !== submitterUserId) {
+    throw new UnauthorizedError("Not authorized to update this application");
+  }
+  if (inferRoundState(application.round) !== 'intake') {
+    throw new BadRequestError("Round is not currently accepting applications");
+  }
+
+  const round = await db.query.rounds.findFirst({
+    where: eq(rounds.id, roundId),
+    with: {
+      chain: true,
+    },
+  });
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+  if (inferRoundState(round) !== 'intake') {
+    throw new BadRequestError("Round is not currently accepting applications");
+  }
+
+  const applicationCategory = await db.query.applicationCategories.findFirst({
+    where: and(
+      eq(applicationCategories.roundId, round.id),
+      eq(applicationCategories.id, applicationDto.categoryId),
+      isNull(applicationCategories.deletedAt)
+    ),
+    with: {
+      form: {
+        with: {
+          fields: {
+            where: isNull(applicationFormFields.deletedAt)
+          },
+        }
+      },
+    }
+  });
+
+  if (!applicationCategory) {
+    throw new BadRequestError("Invalid application category");
+  }
+
+  validateAnswers(applicationDto.answers, applicationCategory.form.fields);
+
+  const { gqlName: chainGqlName, attestationSetup } = round.chain;
+
+  const onChainProject = await getProject(
+    applicationDto.dripsAccountId,
+    chainGqlName,
+  );
+  if (!onChainProject) {
+    throw new BadRequestError(
+      "Drips Account ID is not for a valid, claimed project",
+    );
+  }
+  if (
+    onChainProject.owner.address.toLowerCase() !==
+    submitterWalletAddress.toLowerCase()
+  ) {
+    throw new BadRequestError(
+      "Drips Account ID is pointing at a project not currently owned by the submitter",
+    );
+  }
+
+  if (attestationSetup) {
+    await validateEasAttestation(
+      applicationDto,
+      applicationCategory.form.fields,
+      submitterWalletAddress,
+      attestationSetup.easAddress,
+      new JsonRpcProvider(round.chain.rpcUrl),
+    )
+  }
+
+  const updatedApplication = await db.transaction(async (tx) => {
+    const newVersion = (await tx.insert(applicationVersions).values({
+      applicationId: application.id,
+      projectName: applicationDto.projectName,
+      dripsProjectDataSnapshot: onChainProject,
+      easAttestationUID: applicationDto.attestationUID,
+      dripsAccountId: applicationDto.dripsAccountId,
+      formId: applicationCategory.applicationFormId,
+      categoryId: applicationCategory.id,
+    }).returning())[0];
+
+    // set the application state back to pending and update the fields
+    // duplicated for listing
+    await tx.update(applications).set({
+      state: "pending",
+      projectName: applicationDto.projectName,
+      dripsProjectDataSnapshot: onChainProject,
+      categoryId: applicationDto.categoryId,
+    }).where(
+      eq(applications.id, application.id),
+    );
+
+    await recordAnswers(
+      applicationDto.answers,
+      newVersion.id,
+      tx,
+    );
+
+    await createLog({
+      type: AuditLogAction.ApplicationUpdated,
+      roundId: round.id,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: submitterUserId,
+      },
+      payload: {
+        ...applicationDto,
+        id: application.id,
+      },
+      tx,
+    });
+
+    const fullApplication = (await db.query.applications.findFirst({
+      where: eq(applications.id, applicationId),
+      with: {
+        versions: {
+          orderBy: desc(applicationVersions.createdAt),
+          with: {
+            answers: {
+              with: {
+                field: true,
+              }
+            },
+            form: true,
+            category: true,
+          }
+        },
+      }
+    }))!;
+
+    return {
+      ...fullApplication,
+      versions: fullApplication.versions.map((v) => ({
+        ...v,
+        answers: mapDbAnswersToDto(v.answers, false),
+      })),
+    };
+  });
+
+  return mapDbApplicationToDto(
+    updatedApplication,
+    { id: submitterUserId, walletAddress: submitterWalletAddress },
+    null,
+  );
+}
+
+export async function getApplicationHistory(
+  applicationId: string,
+  roundId: string,
+  requestingUserId: string | null,
+): Promise<ApplicationVersion[]> {
+  const application = await db.query.applications.findFirst({
+    where: eq(applications.id, applicationId),
+    with: {
+      round: {
+        with: {
+          admins: true,
+        },
+      },
+      submitter: true,
+      versions: {
+        orderBy: desc(applicationVersions.createdAt),
+        with: {
+          answers: {
+            with: {
+              field: true,
+            }
+          },
+          form: true,
+          category: true,
+        }
+      }
+    }
+  });
+
+  if (!application) {
+    throw new NotFoundError("Application not found");
+  }
+  if (application.roundId !== roundId) {
+    throw new NotFoundError("Application does not belong to the specified round");
+  }
+
+  const userIsAdmin = isUserRoundAdmin(application.round, requestingUserId);
+  const userIsSubmitter = application.submitter.id === requestingUserId;
+
+  if (!userIsAdmin && !userIsSubmitter && application.state !== "approved") {
+    throw new UnauthorizedError("Not authorized to view this application");
+  }
+
+  return application.versions.map((v) => ({
+    id: v.id,
+    projectName: v.projectName,
+    dripsAccountId: v.dripsAccountId,
+    easAttestationUID: v.easAttestationUID ?? null,
+    dripsProjectDataSnapshot: v.dripsProjectDataSnapshot,
+    createdAt: v.createdAt,
+    formId: v.formId,
+    category: {
+      id: v.category.id,
+      name: v.category.name,
+      description: v.category.description,
+      applicationForm: v.form,
+    },
+    answers: mapDbAnswersToDto(v.answers, !userIsAdmin && !userIsSubmitter),
+  }));
 }
 
 /**
@@ -330,7 +593,6 @@ export async function getApplication(
   const application = await db.query.applications.findFirst({
     where: eq(applications.id, applicationId),
     with: {
-      category: true,
       round: {
         columns: {
           id: true,
@@ -345,16 +607,22 @@ export async function getApplication(
           results: true,
         }
       },
-      form: {
-        columns: {
-          id: true,
-          name: true,
-        }
-      },
       submitter: {
         columns: {
           id: true,
           walletAddress: true,
+        }
+      },
+      versions: {
+        orderBy: desc(applicationVersions.createdAt),
+        with: {
+          answers: {
+            with: {
+              field: true,
+            }
+          },
+          form: true,
+          category: true,
         }
       }
     }
@@ -376,7 +644,13 @@ export async function getApplication(
   }
 
   // Drop private fields if user is not admin or submitter
-  const answers = await getAnswersByApplicationId(applicationId, !(userIsSubmitter || userIsAdmin));
+  const applicationWithFilteredAnswers = {
+    ...application,
+    versions: application.versions.map((v) => ({
+      ...v,
+      answers: mapDbAnswersToDto(v.answers, !userIsAdmin && !userIsSubmitter),
+    })),
+  };
 
   // Return calculated result if exists & published or exists & user is admin
   const resultAllocation = application.round.resultsPublished || userIsAdmin
@@ -384,11 +658,8 @@ export async function getApplication(
     : null;
 
   return mapDbApplicationToDto(
-    application,
-    application.form,
-    application.category,
+    applicationWithFilteredAnswers,
     application.submitter,
-    answers,
     resultAllocation,
   );
 }
@@ -503,21 +774,27 @@ export async function getApplicationsCsv(
       includeRejectedAndPrivateData ? undefined : eq(applications.state, "approved"),
     ),
     with: {
-      answers: {
+      versions: {
+        orderBy: desc(applicationVersions.createdAt),
+        limit: 1,
         with: {
-          field: true,
-        }
-      },
-      category: {
-        columns: {
-          id: true,
-          name: true,
-        },
-      },
-      form: {
-        columns: {
-          id: true,
-          name: true,
+          answers: {
+            with: {
+              field: true,
+            }
+          },
+          category: {
+            columns: {
+              id: true,
+              name: true,
+            },
+          },
+          form: {
+            columns: {
+              id: true,
+              name: true,
+            }
+          },
         }
       },
       result: true,
@@ -530,7 +807,7 @@ export async function getApplicationsCsv(
   });
 
   const uniqueAnswerSlugs = Array.from(new Set(data.flatMap((app) =>
-    app.answers
+    app.versions[0].answers
       // Extremely important: this drops private fields unless the user is an admin
       .filter((a) => includeRejectedAndPrivateData ? true : !a.field.private)
       .map((a) => a.field.slug ?? null)
@@ -549,14 +826,14 @@ export async function getApplicationsCsv(
     ...data.map((app) => [
       app.id,
       app.state,
-      app.projectName,
-      app.dripsProjectDataSnapshot.gitHubUrl,
-      app.dripsAccountId,
+      app.versions[0].projectName,
+      app.versions[0].dripsProjectDataSnapshot.gitHubUrl,
+      app.versions[0].dripsAccountId,
       app.submitterUserId,
-      app.category.id,
-      app.category.name,
-      app.form.id,
-      app.form.name,
+      app.versions[0].category.id,
+      app.versions[0].category.name,
+      app.versions[0].form.id,
+      app.versions[0].form.name,
       ...(includeKycData ? [
         app.kycRequestMapping?.kycRequest.status ?? "N/A",
         app.kycRequestMapping?.kycRequest.kycEmail ?? "N/A",
@@ -564,7 +841,7 @@ export async function getApplicationsCsv(
         app.kycRequestMapping?.kycRequest.kycProvider ?? "N/A",
       ] : []),
       ...uniqueAnswerSlugs.map((slug) => {
-        const answer = app.answers.find((a) => a.field.slug === slug);
+        const answer = app.versions[0].answers.find((a) => a.field.slug === slug);
         return answer ? (typeof answer.answer === "string" ? answer.answer : JSON.stringify(answer.answer)) : "";
       }),
       app.createdAt.toISOString(),

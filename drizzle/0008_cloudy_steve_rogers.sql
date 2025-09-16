@@ -1,1 +1,0 @@
-ALTER TABLE "audit_logs" ALTER COLUMN "actor" DROP DEFAULT;

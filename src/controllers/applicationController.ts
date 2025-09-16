@@ -1,14 +1,16 @@
 import { RouteParams, RouterContext } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
-import { applicationReviewDtoSchema, createApplicationDtoSchema } from "../types/application.ts";
+import { applicationReviewDtoSchema, createApplicationDtoSchema, updateApplicationDtoSchema } from "../types/application.ts";
 import { BadRequestError } from "../errors/generic.ts";
 import {
   applyApplicationReview,
   createApplication,
   getApplication,
+  getApplicationHistory,
   getApplications,
   getApplicationsCsv,
+  updateApplication,
 } from "../services/applicationService.ts";
 import { parseSortParam } from "../utils/sort.ts";
 import { parseFilterParams } from "../utils/filter.ts";
@@ -31,6 +33,35 @@ export async function createAppplicationController(
   );
 
   const application = await createApplication(
+    roundId,
+    userId,
+    userWalletAddress,
+    dto,
+  );
+
+  ctx.response.status = 200;
+  ctx.response.body = application;
+}
+
+export async function updateApplicationController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/applications/:applicationId",
+    RouteParams<"/api/rounds/:roundId/applications/:applicationId">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const applicationId = ctx.params.applicationId;
+  const userId = ctx.state.user.userId;
+  const userWalletAddress = ctx.state.user.walletAddress;
+
+  const dto = await parseDto(
+    updateApplicationDtoSchema,
+    ctx,
+  );
+
+  const application = await updateApplication(
+    applicationId,
     roundId,
     userId,
     userWalletAddress,
@@ -108,6 +139,27 @@ export async function getApplicationController(
 
   ctx.response.status = 200;
   ctx.response.body = application;
+}
+
+export async function getApplicationHistoryController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/applications/:applicationId/history",
+    RouteParams<"/api/rounds/:roundId/applications/:applicationId/history">,
+    AppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const applicationId = ctx.params.applicationId;
+  const userId = ctx.state.user?.userId;
+
+  const history = await getApplicationHistory(
+    applicationId,
+    roundId,
+    userId ?? null,
+  )
+
+  ctx.response.status = 200;
+  ctx.response.body = history;
 }
 
 export async function submitApplicationReviewController(

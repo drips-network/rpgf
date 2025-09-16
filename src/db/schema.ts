@@ -210,37 +210,53 @@ export const applicationFormFieldsRelations = relations(applicationFormFields, (
 export const applications = pgTable("applications", {
   id: uuid("id").primaryKey().defaultRandom(),
   state: varchar("state", { length: 255 }).notNull().default("pending").$type<ApplicationState>(),
-  projectName: varchar("project_name", { length: 255 }).notNull(),
-  easAttestationUID: varchar("attestation_uid", { length: 255 }),
-  dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
-  dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectData>().notNull(),
   submitterUserId: uuid("submitter").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
   roundId: uuid("round_id").notNull().references(() => rounds.id),
-  formId: uuid("form_id").notNull().references(() => applicationForms.id),
+
+  // The below are 'denormalized' and actually stored in application versions, but are duplicated here for easy listing
+  projectName: varchar("project_name", { length: 255 }).notNull(),
+  dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectData>().notNull(),
   categoryId: uuid("category_id").references(() => applicationCategories.id).notNull(),
 });
 export const applicationsRelations = relations(applications, ({ one, many }) => ({
   round: one(rounds, { fields: [applications.roundId], references: [rounds.id] }),
   submitter: one(users, { fields: [applications.submitterUserId], references: [users.id] }),
   result: one(results),
-  answers: many(applicationAnswers),
-  form: one(applicationForms, { fields: [applications.formId], references: [applicationForms.id] }),
+  versions: many(applicationVersions),
   category: one(applicationCategories, { fields: [applications.categoryId], references: [applicationCategories.id] }),
   kycRequestMapping: one(applicationKycRequests),
 }));
 
-export const applicationAnswers = pgTable("application_answers", {
+export const applicationVersions = pgTable("application_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
   applicationId: uuid("application_id").notNull().references(() => applications.id),
+  projectName: varchar("project_name", { length: 255 }).notNull(),
+  dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
+  dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectData>().notNull(),
+  easAttestationUID: varchar("attestation_uid", { length: 255 }),
+  formId: uuid("form_id").notNull().references(() => applicationForms.id),
+  categoryId: uuid("category_id").references(() => applicationCategories.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const applicationVersionsRelations = relations(applicationVersions, ({ one, many }) => ({
+  application: one(applications, { fields: [applicationVersions.applicationId], references: [applications.id] }),
+  answers: many(applicationAnswers),
+  form: one(applicationForms, { fields: [applicationVersions.formId], references: [applicationForms.id] }),
+  category: one(applicationCategories, { fields: [applicationVersions.categoryId], references: [applicationCategories.id] }),
+}));
+
+export const applicationAnswers = pgTable("application_answers", {
+  applicationVersionId: uuid("application_version_id").notNull().references(() => applicationVersions.id),
   fieldId: uuid("field_id").notNull().references(() => applicationFormFields.id),
   answer: jsonb("answer").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-  primaryKey({ columns: [table.applicationId, table.fieldId] }),
+  primaryKey({ columns: [table.applicationVersionId, table.fieldId] }),
 ]);
 export const applicationAnswersRelations = relations(applicationAnswers, ({ one }) => ({
-  application: one(applications, { fields: [applicationAnswers.applicationId], references: [applications.id] }),
+  applicationVersion: one(applicationVersions, { fields: [applicationAnswers.applicationVersionId], references: [applicationVersions.id] }),
   field: one(applicationFormFields, { fields: [applicationAnswers.fieldId], references: [applicationFormFields.id] }),
 }));
 
@@ -298,6 +314,7 @@ export const auditLogAction = pgEnum('audit_log_action', [
   'application_form_updated',
   'application_form_deleted',
   'application_submitted',
+  'application_updated',
   'application_reviewed',
   'ballot_submitted',
   'ballot_updated',

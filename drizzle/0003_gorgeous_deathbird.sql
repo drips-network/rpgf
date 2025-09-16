@@ -1,2 +1,0 @@
-ALTER TABLE "kyc_requests" ADD COLUMN "round_id" uuid NOT NULL;--> statement-breakpoint
-ALTER TABLE "kyc_requests" ADD CONSTRAINT "kyc_requests_round_id_rounds_id_fk" FOREIGN KEY ("round_id") REFERENCES "public"."rounds"("id") ON DELETE no action ON UPDATE no action;
