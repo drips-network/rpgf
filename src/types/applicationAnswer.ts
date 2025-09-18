@@ -20,7 +20,7 @@ export type ApplicationTextAnswer = {
 }
 export const applicationTextAnswerDtoSchema = z.object({
   fieldId: z.string().min(1).max(255),
-  value: z.string().max(10000),
+  value: z.string().max(5000),
 });
 
 export type ApplicationEmailAnswer = {
