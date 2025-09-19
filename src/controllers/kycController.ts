@@ -18,7 +18,7 @@ if (Deno.env.get("DENO_ENV") === "production" && !TREOVA_KYC_WEBHOOK_SECRET) {
   throw new Error("TREOVA_KYC_WEBHOOK_SECRET is not set");
 }
 
-const generateFernWebhookSig = (
+const generateWebhookSig = (
   body: string,
   timestamp: string,
   secret: string
@@ -30,37 +30,18 @@ const generateFernWebhookSig = (
     .digest("hex");
 };
 
-const isValidFernWebhookSig = (
+const isValidWebhookSig = (
   body: string,
   timestamp: string,
   signature: string,
   secret: string
 ): boolean => {
-  const expectedSignature = generateFernWebhookSig(body, timestamp, secret);
+  const expectedSignature = generateWebhookSig(body, timestamp, secret);
   const sigBuffer = Buffer.from(signature, "hex");
   const expectedSigBuffer = Buffer.from(expectedSignature, "hex");
   return (
     sigBuffer.length === expectedSigBuffer.length &&
     timingSafeEqual(sigBuffer, expectedSigBuffer)
-  );
-};
-
-const isValidTreovaWebhookSig = (
-  body: string,
-  signature: string,
-  secret: string,
-): boolean => {
-  const expectedSignature = createHmac("sha256", secret)
-    .update(body)
-    .digest("hex");
-
-  if (expectedSignature.length !== signature.length) {
-    return false;
-  }
-
-  return timingSafeEqual(
-    Buffer.from(signature, "hex"),
-    Buffer.from(expectedSignature, "hex"),
   );
 };
 
@@ -82,7 +63,7 @@ export async function fernUpdateWebhookController(
 
   console.log("Received Fern KYC webhook", rawBody);
 
-  if (!signature || !timestamp || !isValidFernWebhookSig(rawBody, timestamp, signature, FERN_WEBHOOK_SECRET)) {
+  if (!signature || !timestamp || !isValidWebhookSig(rawBody, timestamp, signature, FERN_WEBHOOK_SECRET)) {
     console.error("Invalid webhook signature – request possibly forged!");
     return ctx.response.status = 401;
   }
@@ -134,11 +115,12 @@ export async function treovaUpdateWebhookController(
   }
 
   const signature = ctx.request.headers.get("x-webhook-signature");
+  const timestamp = ctx.request.headers.get("x-webhook-timestamp");
   const rawBody = await ctx.request.body.text();
 
   console.log("Received Treova KYC webhook", rawBody);
 
-  if (!signature || !isValidTreovaWebhookSig(rawBody, signature, TREOVA_KYC_WEBHOOK_SECRET)) {
+  if (!signature || !timestamp || !isValidWebhookSig(rawBody, timestamp, signature, TREOVA_KYC_WEBHOOK_SECRET)) {
     console.error("Invalid webhook signature – request possibly forged!");
     return ctx.response.status = 401;
   }
