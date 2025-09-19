@@ -2,6 +2,8 @@
 
 This is the backend service for handling Retroactive Public Goods Funding (RPGF) related functionality for the Drips application. It is built with Deno, Oak, PostgreSQL, and uses SIWE for Ethereum-based authentication.
 
+To understand the service architecture, refer to the [DeepWiki](https://deepwiki.com/drips-network/rpgf/4.5-kyc-system).
+
 ## Features
 
 *   **Authentication:** Uses Sign-In with Ethereum (SIWE) for secure user authentication.
