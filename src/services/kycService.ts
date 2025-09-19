@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { CreateKycRequestForApplicationDto, KycProvider, KycRequest, KycStatus, KycType } from "../types/kyc.ts";
 import { db, Transaction } from "../db/postgres.ts";
-import { applicationKycRequests, kycRequests, users } from "../db/schema.ts";
+import { applicationKycRequests, applications, kycRequests, roundKycConfigurations, users } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { InferSelectModel } from "drizzle-orm/table";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
@@ -37,41 +37,50 @@ function _fetchFern(
   });
 }
 
-function _mapDbKycToDto(kycStatus: InferSelectModel<typeof kycRequests>): KycRequest {
+function _mapDbKycToDto(kycStatus: InferSelectModel<typeof kycRequests>, kycConfiguration: InferSelectModel<typeof roundKycConfigurations>): KycRequest {
+  let formUrl: string;
+
+  switch (kycStatus.kycProvider) {
+    case KycProvider.Fern:
+      if (!kycStatus.kycFormUrl) {
+        throw new Error("KYC form URL is missing for Fern KYC request");
+      }
+
+      formUrl = kycStatus.kycFormUrl;
+      break;
+    case KycProvider.Treova:
+      if (!kycConfiguration.treovaFormId) {
+        throw new Error("Treova form ID is not configured for this round");
+      }
+
+      formUrl = `https://kyc.treova.ai/${kycConfiguration.treovaFormId}`;
+      break;
+  }
+
   return {
     id: kycStatus.id,
+    kycProvider: kycStatus.kycProvider,
     kycType: kycStatus.kycType,
     kycEmail: kycStatus.kycEmail,
-    kycRequestId: kycStatus.id,
-    kycFormUrl: kycStatus.kycFormUrl,
+    kycFormUrl: formUrl,
     status: kycStatus.status,
     updatedAt: kycStatus.updatedAt,
   };
 }
 
-export async function createKycRequest({
-  userId,
-  requestingUserId,
-  applicationId,
-  provider,
-  type,
+async function _createFernKycCustomer({
   email,
   firstName,
   lastName,
   businessName,
-  roundId,
+  type,
 }: {
-  userId: string,
-  requestingUserId: string,
-  applicationId: string,
-  provider: KycProvider,
-  type: KycType,
   email: string,
   firstName: string,
   lastName: string,
   businessName?: string,
-  roundId: string,
-}, tx: Transaction ): Promise<KycRequest> {
+  type: KycType,
+}) {
   _assertCanKyc();
 
   const createCustomerResponse = await _fetchFern("/customers", {
@@ -103,13 +112,79 @@ export async function createKycRequest({
     throw new Error("Failed to create KYC request");
   }
 
-  const {
-    kycLink,
-    customerId,
-    organizationId,
-  } = parseResult.data;
+  return {
+    kycLink: parseResult.data.kycLink,
+    customerId: parseResult.data.customerId,
+    organizationId: parseResult.data.organizationId,
+  };
+}
 
-  const inserted = await tx.insert(kycRequests).values({ 
+export async function createKycRequest({
+  userId,
+  requestingUserId,
+  applicationId,
+  provider,
+  type,
+  email,
+  firstName,
+  lastName,
+  businessName,
+  roundId,
+}: {
+  userId: string,
+  requestingUserId: string,
+  applicationId: string,
+  provider: KycProvider,
+  type: KycType,
+  email?: string,
+  firstName?: string,
+  lastName?: string,
+  businessName?: string,
+  roundId: string,
+}, tx: Transaction): Promise<KycRequest> {
+  _assertCanKyc();
+
+  const kycConfiguration = await tx.query.roundKycConfigurations.findFirst({
+    where: eq(roundKycConfigurations.roundId, roundId),
+  });
+  if (!kycConfiguration) {
+    throw new BadRequestError("KYC is not configured for this round");
+  }
+
+  let kycLink: string | null = null;
+  let customerId: string | null = null;
+  let organizationId: string | null = null;
+
+  switch (provider) {
+    case KycProvider.Fern: {
+      if (!email || !firstName || !lastName || (type === KycType.Business && !businessName)) {
+        throw new BadRequestError("Missing required fields for Fern KYC");
+      }
+
+      const res = await _createFernKycCustomer({
+        email,
+        firstName,
+        lastName,
+        businessName,
+        type,
+      });
+
+      kycLink = res.kycLink;
+      customerId = res.customerId;
+      organizationId = res.organizationId;
+      break;
+    }
+
+    case KycProvider.Treova: {
+      // Treova does not create customers in advance, instead everyone gets the same link.
+      // As a result, nothing needs to be done here - we just wait for a webhook to update the status
+      // of a particular user.
+
+      throw new Error("Treova does not support creating KYC requests via the API yet");
+    }
+  }
+
+  const inserted = await tx.insert(kycRequests).values({
     userId,
     status: KycStatus.Created,
     roundId,
@@ -144,7 +219,7 @@ export async function createKycRequest({
     tx,
   });
 
-  return _mapDbKycToDto(inserted[0]);
+  return _mapDbKycToDto(inserted[0], kycConfiguration);
 }
 
 export async function createKycRequestForApplication(
@@ -162,6 +237,7 @@ export async function createKycRequestForApplication(
         round: {
           with: {
             admins: true,
+            kycConfiguration: true,
           }
         },
       }
@@ -169,8 +245,12 @@ export async function createKycRequestForApplication(
     if (!application) {
       throw new NotFoundError("Application not found");
     }
-    if (!application.round.kycProvider) {
+    if (!application.round.kycConfiguration) {
       throw new BadRequestError("KYC is not required for this application");
+    }
+
+    if (application.round.kycConfiguration.kycProvider !== KycProvider.Fern) {
+      throw new BadRequestError(`KYC provider ${application.round.kycConfiguration.kycProvider} is not supported for creating KYC requests via the API`);
     }
 
     const isSubmitter = application.submitterUserId === requestingUserId;
@@ -216,6 +296,7 @@ export async function getKycRequestForApplication(
           round: {
             with: {
               admins: true,
+              kycConfiguration: true,
             }
           }
         }
@@ -234,7 +315,7 @@ export async function getKycRequestForApplication(
     throw new UnauthorizedError("You are not allowed to view this KYC status");
   }
 
-  return _mapDbKycToDto(applicationKycRequest.kycRequest);
+  return _mapDbKycToDto(applicationKycRequest.kycRequest, applicationKycRequest.application.round.kycConfiguration);
 }
 
 export async function getKycRequestsForRound(
@@ -248,9 +329,17 @@ export async function getKycRequestsForRound(
       eq(kycRequests.userId, requestingUserId),
       eq(kycRequests.roundId, roundId),
     ),
+    with: {
+      round: {
+        columns: {},
+        with: {
+          kycConfiguration: true,
+        }
+      }
+    }
   });
 
-  return kycRecords.map(_mapDbKycToDto);
+  return kycRecords.map((v) => _mapDbKycToDto(v, v.round.kycConfiguration));
 }
 
 export async function linkExistingKycToApplication(
@@ -315,18 +404,113 @@ export async function updateKycStatus(
       .where(eq(kycRequests.providerUserId, providerUserId))
       .returning();
 
+    if (kycRequest.length === 0) {
+      console.warn(`No KYC request found for providerUserId ${providerUserId}, ignoring status update`);
+      return;
+    }
+
     await createLog({
       type: AuditLogAction.KycRequestUpdated,
       roundId: kycRequest[0].roundId,
       actor: { type: AuditLogActorType.KycProvider, provider },
-      payload: { 
-        kycRequestId: kycRequest[0].id, 
-        previousStatus: kycRequest[0].status, 
-        newStatus 
+      payload: {
+        kycRequestId: kycRequest[0].id,
+        previousStatus: kycRequest[0].status,
+        newStatus
       },
       tx,
     })
   });
 
   return;
+}
+
+// Awkward doubling here but we need special logic to handle
+// Treova webhooks, for which a KYC request may not exist yet
+export async function updateKycStatusTreova(
+  newStatus: KycStatus,
+  applicantId: string,
+  walletAddress: string,
+  formId: string,
+  kycType: KycType,
+) {
+  await db.transaction(async (tx) => {
+    const kycConfiguration = await tx.query.roundKycConfigurations.findFirst({
+      where: eq(roundKycConfigurations.treovaFormId, formId),
+    });
+    if (!kycConfiguration) {
+      throw new NotFoundError("KYC configuration not found for this form ID");
+    }
+
+    const user = await tx.query.users.findFirst({
+      where: ilike(users.walletAddress, walletAddress),
+      columns: {
+        id: true,
+      }
+    });
+    if (!user) {
+      throw new NotFoundError("User not found for this wallet address");
+    }
+
+    // find all applications by the wallet address in the round
+    const apps = await tx.query.applications.findMany({
+      where: and(
+        eq(applications.roundId, kycConfiguration.roundId),
+        eq(applications.submitterUserId, user.id),
+      ),
+      with: {
+        kycRequestMapping: {
+          with: {
+            kycRequest: true,
+          }
+        }
+      }
+    });
+
+    for (const app of apps) {
+      const existingKycRequest = app.kycRequestMapping?.kycRequest;
+      if (existingKycRequest) {
+        // If a KYC request already exists for this application, just update it
+        await tx.update(kycRequests)
+          .set({ status: newStatus, updatedAt: new Date() })
+          .where(eq(kycRequests.id, existingKycRequest.id))
+          .returning();
+
+        await createLog({
+          type: AuditLogAction.KycRequestUpdated,
+          roundId: kycConfiguration.roundId,
+          actor: { type: AuditLogActorType.KycProvider, provider: KycProvider.Treova },
+          payload: {
+            kycRequestId: existingKycRequest.id,
+            previousStatus: existingKycRequest.status,
+            newStatus
+          },
+          tx,
+        });
+      } else {
+        // If not, create a new KYC request and link it to the application
+        const inserted = await tx.insert(kycRequests).values({
+          userId: user.id,
+          status: newStatus,
+          roundId: kycConfiguration.roundId,
+          kycType,
+          kycProvider: KycProvider.Treova,
+          providerUserId: applicantId,
+        }).returning();
+
+        await tx.insert(applicationKycRequests).values({
+          applicationId: app.id,
+          kycRequestId: inserted[0].id,
+        });
+
+        await createLog({
+          type: AuditLogAction.KycRequestCreated,
+          roundId: kycConfiguration.roundId,
+          actor: { type: AuditLogActorType.KycProvider, provider: KycProvider.Treova },
+          payload: { kycRequestId: inserted[0].id },
+          tx,
+        });
+      }
+    }
+  });
 }

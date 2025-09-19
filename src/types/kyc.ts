@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export enum KycProvider {
   Fern = "Fern",
+  Treova = "Treova",
 }
 
 export enum KycStatus {
@@ -20,10 +21,10 @@ export enum KycType {
 
 export type KycRequest = {
   id: string;
+  kycProvider: KycProvider;
   kycType: KycType;
-  kycRequestId: string;
   kycFormUrl: string;
-  kycEmail: string;
+  kycEmail: string | null;
   status: KycStatus;
   updatedAt: Date;
 }

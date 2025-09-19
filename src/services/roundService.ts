@@ -23,6 +23,7 @@ import { UnauthorizedError } from "../errors/auth.ts";
 import { z } from "zod";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+import { KycProvider } from "../types/kyc.ts";
 
 export function isUserRoundAdmin(
   roundWithAdmins: {
@@ -61,6 +62,7 @@ const defaultRoundSelectFields = {
     },
   },
   createdBy: true,
+  kycConfiguration: true,
 } as const;
 
 type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
@@ -70,6 +72,7 @@ type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
   createdBy: { id: string, walletAddress: string };
   chain: { chainId: number };
   applicationCategories: { id: string, name: string, applicationFormId: string, description: string | null }[];
+  kycConfiguration: { kycProvider: KycProvider, treovaFormId: string | null } | null;
 };
 
 function mapDbRoundToDto(
@@ -88,6 +91,27 @@ function mapDbRoundToDto(
     readyToPublish: validateRoundReadyForPublishing(round),
     applicationFormValid: round.applicationCategories.length > 0,
   };
+
+  let kycConfig: Round<boolean>["kycConfig"] | null = null;
+  if (round.kycConfiguration) {
+    switch (round.kycConfiguration.kycProvider) {
+      case KycProvider.Fern: {
+        kycConfig = { provider: KycProvider.Fern };
+        break;
+      }
+      case KycProvider.Treova: {
+        if (!round.kycConfiguration.treovaFormId) {
+          throw new Error(`Round ${round.id} has Treova KYC provider but missing form ID in configuration.`);
+        }
+
+        kycConfig = {
+          provider: KycProvider.Treova,
+          formId: round.kycConfiguration.treovaFormId,
+        };
+        break;
+      }
+    }
+  }
 
   return {
     id: round.id,
@@ -130,7 +154,7 @@ function mapDbRoundToDto(
     isAdmin,
     validation,
     adminCount,
-    kycProvider: round.kycProvider,
+    kycConfig,
   };
 };
 

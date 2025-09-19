@@ -3,19 +3,25 @@ import { AppState, AuthenticatedAppState } from "../../main.ts";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { z } from "zod";
-import { createKycRequestForApplication, getKycRequestForApplication, getKycRequestsForRound, linkExistingKycToApplication, updateKycStatus } from "../services/kycService.ts";
-import { createKycRequestForApplicationDtoSchema, KycProvider, KycStatus } from "../types/kyc.ts";
+import { createKycRequestForApplication, getKycRequestForApplication, getKycRequestsForRound, linkExistingKycToApplication, updateKycStatus, updateKycStatusTreova } from "../services/kycService.ts";
+import { createKycRequestForApplicationDtoSchema, KycProvider, KycStatus, KycType } from "../types/kyc.ts";
 import parseDto from "../utils/parseDto.ts";
+import { ethereumAddressSchema } from "../types/shared.ts";
 
 const FERN_WEBHOOK_SECRET = Deno.env.get("FERN_KYC_WEBHOOK_SECRET") || "";
 if (Deno.env.get("DENO_ENV") === "production" && !FERN_WEBHOOK_SECRET) {
   throw new Error("FERN_KYC_WEBHOOK_SECRET is not set");
 }
 
+const TREOVA_KYC_WEBHOOK_SECRET = Deno.env.get("TREOVA_KYC_WEBHOOK_SECRET");
+if (Deno.env.get("DENO_ENV") === "production" && !TREOVA_KYC_WEBHOOK_SECRET) {
+  throw new Error("TREOVA_KYC_WEBHOOK_SECRET is not set");
+}
+
 const generateFernWebhookSig = (
-  body: string,       // raw JSON string of the request body
-  timestamp: string,  // timestamp string from header
-  secret: string      // your webhook secret
+  body: string,
+  timestamp: string,
+  secret: string
 ): string => {
   const payloadToSign = `${timestamp}.${body}`;
 
@@ -25,18 +31,36 @@ const generateFernWebhookSig = (
 };
 
 const isValidFernWebhookSig = (
-  body: string,       // raw JSON string of the request body
-  timestamp: string,  // timestamp string from X-Api-Timestamp header
-  signature: string,  // hex string from X-Api-Signature header
-  secret: string      // your webhook secret
+  body: string,
+  timestamp: string,
+  signature: string,
+  secret: string
 ): boolean => {
   const expectedSignature = generateFernWebhookSig(body, timestamp, secret);
-  // Use timing-safe comparison to avoid timing attack vulnerability
   const sigBuffer = Buffer.from(signature, "hex");
   const expectedSigBuffer = Buffer.from(expectedSignature, "hex");
   return (
     sigBuffer.length === expectedSigBuffer.length &&
     timingSafeEqual(sigBuffer, expectedSigBuffer)
+  );
+};
+
+const isValidTreovaWebhookSig = (
+  body: string,
+  signature: string,
+  secret: string,
+): boolean => {
+  const expectedSignature = createHmac("sha256", secret)
+    .update(body)
+    .digest("hex");
+
+  if (expectedSignature.length !== signature.length) {
+    return false;
+  }
+
+  return timingSafeEqual(
+    Buffer.from(signature, "hex"),
+    Buffer.from(expectedSignature, "hex"),
   );
 };
 
@@ -65,7 +89,7 @@ export async function fernUpdateWebhookController(
 
   const now = Date.now();
   const reqTime = Number(timestamp);
-  if (isNaN(reqTime) || Math.abs(now - reqTime*1000) > 5 * 60 * 1000) { // 5 minute tolerance
+  if (isNaN(reqTime) || Math.abs(now - reqTime * 1000) > 5 * 60 * 1000) { // 5 minute tolerance
     console.error("Webhook timestamp outside of tolerance – possible replay attack!");
     return ctx.response.status = 400;
   }
@@ -96,6 +120,69 @@ export async function fernUpdateWebhookController(
 
   await updateKycStatus(customerStatus as KycStatus, customerId, KycProvider.Fern);
 }
+
+export async function treovaUpdateWebhookController(
+  ctx: RouterContext<
+    "/api/kyc/status-updated-webhook/treova",
+    RouteParams<"/api/kyc/status-updated-webhook/treova">,
+    AppState
+  >,
+) {
+  if (!TREOVA_KYC_WEBHOOK_SECRET) {
+    console.error("TREOVA_KYC_WEBHOOK_SECRET not set – cannot verify Treova webhooks!");
+    return ctx.response.status = 500;
+  }
+
+  const signature = ctx.request.headers.get("x-webhook-signature");
+  const rawBody = await ctx.request.body.text();
+
+  console.log("Received Treova KYC webhook", rawBody);
+
+  if (!signature || !isValidTreovaWebhookSig(rawBody, signature, TREOVA_KYC_WEBHOOK_SECRET)) {
+    console.error("Invalid webhook signature – request possibly forged!");
+    return ctx.response.status = 401;
+  }
+
+  const parsedPayload = z.object({
+    event: z.literal("kyc.status.updated"),
+    data: z.object({
+      wallet_address: ethereumAddressSchema,
+      applicantId: z.string().max(256),
+      status: z.enum([
+        "PENDING",
+        "OUTREACH",
+        "VERIFIED",
+        "REJECTED",
+      ]),
+    }),
+  }).safeParse(JSON.parse(rawBody));
+
+  if (!parsedPayload.success) {
+    return ctx.response.status = 200; // return 200 to avoid retries, assuming we got an event we cannot handle.
+  }
+
+  const { data: { applicantId, status, wallet_address } } = parsedPayload.data;
+
+  // TODO: pull this from the webhook once it's added
+  const treovaFormId = 'cmp_67e3ab21';
+  const kycType = KycType.Individual;
+
+  const TREOVA_STATUS_TO_KYC_STATUS: Record<string, KycStatus> = {
+    "PENDING": KycStatus.UnderReview,
+    "OUTREACH": KycStatus.NeedsAdditionalInformation,
+    "VERIFIED": KycStatus.Active,
+    "REJECTED": KycStatus.Rejected,
+  };
+  const kycStatus = TREOVA_STATUS_TO_KYC_STATUS[status];
+
+  await updateKycStatusTreova(
+    kycStatus,
+    applicantId,
+    wallet_address,
+    treovaFormId,
+    kycType,
+  )
+};
 
 export async function createKycRequestForApplicationController(
   ctx: RouterContext<

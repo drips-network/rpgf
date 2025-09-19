@@ -12,5 +12,6 @@ router.get("/api/kyc/applications/:applicationId/request", enforceAuthentication
 router.post("/api/kyc/applications/:applicationId/link-existing", enforceAuthenticationMiddleware, c.linkExistingKycToApplicationController);
 
 router.post("/api/kyc/status-updated-webhook/fern", c.fernUpdateWebhookController);
+router.post("/api/kyc/status-updated-webhook/treova", c.treovaUpdateWebhookController);
 
 export default router;

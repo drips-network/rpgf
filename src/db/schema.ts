@@ -74,6 +74,7 @@ export const kycStatus = pgEnum('kyc_status', [
 
 export const kycProvider = pgEnum('kyc_provider', [
   'Fern',
+  'Treova',
 ]);
 
 export const kycType = pgEnum('kyc_type', [
@@ -116,7 +117,6 @@ export const rounds = pgTable("rounds", {
   resultsCalculated: boolean("results_calculated").notNull().default(false),
   resultsPublished: boolean("results_published").notNull().default(false),
   customAvatarCid: varchar("custom_avatar_cid", { length: 255 }),
-  kycProvider: kycProvider("kyc_provider").$type<KycProvider>(),
 }, (table => [
   uniqueIndex('url_slug_unique_index').on(lower(table.urlSlug)),
 ]
@@ -132,6 +132,16 @@ export const roundsRelations = relations(rounds, ({ one, many }) => ({
   applicationForms: many(applicationForms),
   applicationCategories: many(applicationCategories),
   results: many(results),
+  kycConfiguration: one(roundKycConfigurations, { fields: [rounds.id], references: [roundKycConfigurations.roundId] }),
+}));
+
+export const roundKycConfigurations = pgTable("round_kyc_configurations", {
+  roundId: uuid("round_id").primaryKey().references(() => rounds.id),
+  kycProvider: kycProvider("kyc_provider").notNull().$type<KycProvider>(),
+  treovaFormId: varchar("treova_form_id", { length: 255 }),
+});
+export const roundKycConfigurationsRelations =  relations(roundKycConfigurations, ({ one }) => ({
+  round: one(rounds, { fields: [roundKycConfigurations.roundId], references: [rounds.id] }),
 }));
 
 export const roundAdmins = pgTable("round_admins", {
@@ -349,12 +359,12 @@ export const kycRequests = pgTable("kyc_requests", {
   userId: uuid("user_id").notNull().references(() => users.id),
   status: kycStatus("status").notNull().default('CREATED').$type<KycStatus>(),
   roundId: uuid("round_id").notNull().references(() => rounds.id),
-  kycEmail: varchar("kyc_email", { length: 255 }).notNull(),
+  kycEmail: varchar("kyc_email", { length: 255 }),
   kycType: kycType("kyc_type").notNull().$type<KycType>(),
   kycProvider: kycProvider("kyc_provider").notNull().$type<KycProvider>(),
-  kycFormUrl: varchar("kyc_form_url", { length: 510 }).notNull(),
+  kycFormUrl: varchar("kyc_form_url", { length: 510 }),
   providerUserId: varchar("provider_user_id", { length: 255 }).notNull(),
-  providerOrgId: varchar("provider_org_id", { length: 255 }).notNull(),
+  providerOrgId: varchar("provider_org_id", { length: 255 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });

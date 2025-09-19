@@ -32,6 +32,13 @@ export const possibleColorSchema = z.union([
 ]);
 export type PossibleColor = z.infer<typeof possibleColorSchema>;
 
+export type KycConfig = {
+  provider: KycProvider.Fern;
+} | {
+  provider: KycProvider.Treova;
+  formId: string;
+}
+
 export type Round<IsPublished extends boolean> = {
   id: string;
   published: IsPublished;
@@ -71,7 +78,7 @@ export type Round<IsPublished extends boolean> = {
     readyToPublish: boolean;
   }
   adminCount: number | null;
-  kycProvider: KycProvider | null;
+  kycConfig: KycConfig | null;
 }
 
 export const createRoundDtoSchema = z.object({
