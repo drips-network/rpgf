@@ -1,6 +1,7 @@
 import { desc, eq, lt } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
 import { auditLogs, DbAuditLogActor, rounds } from "../db/schema.ts";
+import { log, LogLevel } from "./loggingService.ts";
 import { AuditLog, AuditLogAction, AuditLogActor, AuditLogActorType, PayloadByAction } from "../types/auditLog.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 
@@ -17,6 +18,11 @@ export async function createLog<TAction extends AuditLogAction>({
   payload: PayloadByAction[TAction];
   tx: Transaction;
 }) {
+  log(LogLevel.Info, "Creating audit log", {
+    type,
+    roundId,
+    actor,
+  });
   await (tx ?? db).insert(auditLogs).values({
     action: type,
     roundId,
@@ -32,6 +38,12 @@ export async function getLogsByRoundId(
   next: string | undefined,
   requestingUserId: string,
 ): Promise<{ logs: AuditLog<AuditLogAction>[]; next: string | null }> {
+  log(LogLevel.Info, "Getting logs by round ID", {
+    roundId,
+    limit,
+    next,
+    requestingUserId,
+  });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -39,9 +51,14 @@ export async function getLogsByRoundId(
     },
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new Error("Round not found.");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
+    log(LogLevel.Error, "You are not authorized to view this round's logs.", {
+      roundId,
+      requestingUserId,
+    });
     throw new Error("You are not authorized to view this round's logs.");
   }
 

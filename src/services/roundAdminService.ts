@@ -1,6 +1,7 @@
 import type { RoundVoter } from '$app/types/roundVoter.ts';
 import { eq } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
+import { log, LogLevel } from "./loggingService.ts";
 import { roundAdmins, rounds } from "../db/schema.ts";
 import { createOrGetUser } from "./userService.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
@@ -15,6 +16,10 @@ export async function setRoundAdmins(
   requestingUserId: string,
   roundId: string,
 ): Promise<RoundVoter[]> {
+  log(LogLevel.Info, "Setting round admins", {
+    requestingUserId,
+    roundId,
+  });
   const result = await db.transaction(async (tx) => {
     const round = await db.query.rounds.findFirst({
       where: eq(rounds.id, roundId),
@@ -23,14 +28,20 @@ export async function setRoundAdmins(
       }
     });
     if (!round) {
+      log(LogLevel.Error, "Round not found", { roundId });
       throw new NotFoundError("Round not found.");
     }
     if (!isUserRoundAdmin(round, requestingUserId)) {
+      log(LogLevel.Error, "User is not authorized to modify this round", {
+        requestingUserId,
+        roundId,
+      });
       throw new UnauthorizedError("You are not authorized to modify this round.");
     }
 
     const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
     if (uniqueAddresses.size !== dto.walletAddresses.length) {
+      log(LogLevel.Error, "Duplicate wallet addresses are not allowed");
       throw new BadRequestError("Duplicate wallet addresses are not allowed.");
     }
 
@@ -77,6 +88,10 @@ export async function setRoundAdmins(
 }
 
 export async function getRoundAdminsByRoundId(roundId: string, requestingUserId: string): Promise<RoundVoter[]> {
+  log(LogLevel.Info, "Getting round admins by round ID", {
+    roundId,
+    requestingUserId,
+  });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -84,9 +99,14 @@ export async function getRoundAdminsByRoundId(roundId: string, requestingUserId:
     }
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new Error("Round not found.");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
+    log(LogLevel.Error, "User is not authorized to view this round's admins", {
+      requestingUserId,
+      roundId,
+    });
     throw new Error("You are not authorized to view this round's admins.");
   }
 

@@ -1,6 +1,7 @@
 import type { SetRoundVotersDto, RoundVoter } from '$app/types/roundVoter.ts';
 import { eq } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
+import { log, LogLevel } from "./loggingService.ts";
 import { rounds, roundVoters } from "../db/schema.ts";
 import { createOrGetUser } from "./userService.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
@@ -14,6 +15,10 @@ export async function setRoundVoters(
   requestingUserId: string,
   roundId: string,
 ): Promise<RoundVoter[]> {
+  log(LogLevel.Info, "Setting round voters", {
+    requestingUserId,
+    roundId,
+  });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -21,17 +26,26 @@ export async function setRoundVoters(
     }
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found.");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
+    log(LogLevel.Error, "User is not authorized to modify this round", {
+      requestingUserId,
+      roundId,
+    });
     throw new UnauthorizedError("You are not authorized to modify this round.");
   }
   if (round.published) {
+    log(LogLevel.Error, "Cannot modify voters for a published round", {
+      roundId,
+    });
     throw new BadRequestError("Cannot modify voters for a published round.");
   }
 
   const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
   if (uniqueAddresses.size !== dto.walletAddresses.length) {
+    log(LogLevel.Error, "Duplicate wallet addresses are not allowed");
     throw new BadRequestError("Duplicate wallet addresses are not allowed.");
   }
 
@@ -114,6 +128,10 @@ export async function setRoundVoters(
 }
 
 export async function getRoundVotersByRoundId(roundId: string, requestingUserId: string): Promise<RoundVoter[]> {
+  log(LogLevel.Info, "Getting round voters by round ID", {
+    roundId,
+    requestingUserId,
+  });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -121,9 +139,14 @@ export async function getRoundVotersByRoundId(roundId: string, requestingUserId:
     }
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new Error("Round not found.");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
+    log(LogLevel.Error, "User is not authorized to view this round's voters", {
+      requestingUserId,
+      roundId,
+    });
     throw new Error("You are not authorized to view this round's voters.");
   }
 

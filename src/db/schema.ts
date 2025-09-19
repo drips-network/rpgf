@@ -145,7 +145,7 @@ export const roundKycConfigurationsRelations =  relations(roundKycConfigurations
 }));
 
 export const roundAdmins = pgTable("round_admins", {
-  roundId: uuid("round_id").references(() => rounds.id).notNull(),
+  roundId: uuid("round_id").references(() => rounds.id, { onDelete: 'cascade' }).notNull(),
   userId: uuid("user_id").notNull().references(() => users.id),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).defaultNow(),
 }, (table) => [
@@ -157,8 +157,8 @@ export const roundAdminsRelations = relations(roundAdmins, ({ one }) => ({
 }));
 
 export const roundVoters = pgTable("round_voters", {
-  roundId: uuid("round_id").notNull(),
-  userId: uuid("user_id").notNull(),
+  roundId: uuid("round_id").references(() => rounds.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).defaultNow(),
 }, (table) => [
   primaryKey({ columns: [table.roundId, table.userId] }),
@@ -170,7 +170,7 @@ export const roundVotersRelations = relations(roundVoters, ({ one }) => ({
 
 export const applicationCategories = pgTable("application_categories", {
   id: uuid("id").primaryKey().defaultRandom(),
-  roundId: uuid("round_id").references(() => rounds.id).notNull(),
+  roundId: uuid("round_id").references(() => rounds.id, { onDelete: 'cascade' }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   applicationFormId: uuid("application_form_id").notNull().references(() => applicationForms.id),
@@ -187,7 +187,7 @@ export const applicationCategoriesRelations = relations(applicationCategories, (
 
 export const applicationForms = pgTable("application_forms", {
   id: uuid("id").primaryKey().defaultRandom(),
-  roundId: uuid("round_id").references(() => rounds.id).notNull(),
+  roundId: uuid("round_id").references(() => rounds.id, { onDelete: 'cascade' }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -200,7 +200,7 @@ export const applicationFormsRelations = relations(applicationForms, ({ one, man
 
 export const applicationFormFields = pgTable("application_form_fields", {
   id: uuid("id").primaryKey().defaultRandom(),
-  formId: uuid("form_id").notNull().references(() => applicationForms.id),
+  formId: uuid("form_id").notNull().references(() => applicationForms.id, { onDelete: 'cascade' }),
   type: varchar("type", { length: 255 }).notNull().$type<ApplicationFormFields[number]['type']>(),
   slug: varchar("slug", { length: 255 }),
   order: integer("order").notNull(),
@@ -241,7 +241,7 @@ export const applicationsRelations = relations(applications, ({ one, many }) => 
 
 export const applicationVersions = pgTable("application_versions", {
   id: uuid("id").primaryKey().defaultRandom(),
-  applicationId: uuid("application_id").notNull().references(() => applications.id),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
   projectName: varchar("project_name", { length: 255 }).notNull(),
   dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
   dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectData>().notNull(),
@@ -258,7 +258,7 @@ export const applicationVersionsRelations = relations(applicationVersions, ({ on
 }));
 
 export const applicationAnswers = pgTable("application_answers", {
-  applicationVersionId: uuid("application_version_id").notNull().references(() => applicationVersions.id),
+  applicationVersionId: uuid("application_version_id").notNull().references(() => applicationVersions.id, { onDelete: 'cascade' }),
   fieldId: uuid("field_id").notNull().references(() => applicationFormFields.id),
   answer: jsonb("answer").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -272,7 +272,7 @@ export const applicationAnswersRelations = relations(applicationAnswers, ({ one 
 
 export const ballots = pgTable("ballots", {
   id: uuid("id").primaryKey().defaultRandom(),
-  roundId: uuid("round_id").notNull().references(() => rounds.id),
+  roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: 'cascade' }),
   voterUserId: uuid("voter_user_id").notNull().references(() => users.id),
   ballot: jsonb("ballot").notNull().$type<SubmitBallotDto['ballot']>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -284,7 +284,7 @@ export const votesRelations = relations(ballots, ({ one }) => ({
 }));
 
 export const linkedDripLists = pgTable("linked_drip_lists", {
-  roundId: uuid("round_id").notNull().references(() => rounds.id),
+  roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: 'cascade' }),
   dripListAccountId: varchar("drip_list_id", { length: 255 }).notNull(),
 }, (table) => [
   primaryKey({ columns: [table.roundId, table.dripListAccountId] }),
@@ -298,7 +298,7 @@ export const linkedDripListsRelations = relations(linkedDripLists, ({ one }) => 
 // stored in this table for later retrieval and analysis.
 export const results = pgTable("results", {
   roundId: uuid("round_id").notNull().references(() => rounds.id),
-  applicationId: uuid("application_id").notNull().references(() => applications.id),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
   method: varchar("method", { length: 255 }).notNull().$type<'median' | 'avg' | 'sum'>(),
   result: integer("result").notNull(),
   calculatedAt: timestamp("calculated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -358,7 +358,7 @@ export const kycRequests = pgTable("kyc_requests", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id),
   status: kycStatus("status").notNull().default('CREATED').$type<KycStatus>(),
-  roundId: uuid("round_id").notNull().references(() => rounds.id),
+  roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: 'cascade' }),
   kycEmail: varchar("kyc_email", { length: 255 }),
   kycType: kycType("kyc_type").notNull().$type<KycType>(),
   kycProvider: kycProvider("kyc_provider").notNull().$type<KycProvider>(),
@@ -374,8 +374,8 @@ export const kycRequestsRelations = relations(kycRequests, ({ one }) => ({
 }));
 
 export const applicationKycRequests = pgTable("application_kyc_requests", {
-  applicationId: uuid("application_id").notNull().unique().references(() => applications.id),
-  kycRequestId: uuid("kyc_request_id").notNull().references(() => kycRequests.id),
+  applicationId: uuid("application_id").notNull().unique().references(() => applications.id, { onDelete: 'cascade' }),
+  kycRequestId: uuid("kyc_request_id").notNull().references(() => kycRequests.id, { onDelete: 'cascade' }),
 }, (table) => [
   primaryKey({ columns: [table.applicationId, table.kycRequestId] }),
 ]);

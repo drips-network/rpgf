@@ -3,7 +3,7 @@
 
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
-import { applicationCategories, applicationFormFields, applicationForms, applications, ballots, results, roundAdmins, rounds, roundVoters } from "../db/schema.ts";
+import { applicationCategories, applicationFormFields, applicationForms, applications, applicationVersions, ballots, results, roundAdmins, rounds, roundVoters } from "../db/schema.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { roundStateSchema } from "../types/round.ts";
 import { UnauthenticatedAppState } from "../../main.ts";
@@ -135,39 +135,7 @@ export async function dangerouslyForceDeleteRoundController(
   }), ctx);
 
   await db.transaction(async (tx) => {
-    const { id } = await tx.query.rounds.findFirst({
-      where: eq(rounds.urlSlug, roundSlug),
-      columns: { id: true },
-    }) ?? {};
-    if (!id) {
-      ctx.response.status = 404;
-      ctx.response.body = { error: `Round with slug ${roundSlug} not found` };
-      return;
-    }
-
-    await tx.delete(results).where(eq(results.roundId, id));
-    await tx.delete(applications).where(eq(applications.roundId, id));
-    await tx.delete(ballots).where(eq(ballots.roundId, id));
-    await tx.delete(roundAdmins).where(eq(roundAdmins.roundId, id));
-    await tx.delete(roundVoters).where(eq(roundVoters.roundId, id));
-
-    const applicationFormsRelatedToRound = await tx.query.applicationForms.findMany({
-      where: eq(applicationForms.roundId, id),
-      columns: { id: true },
-    });
-    await tx.delete(applicationFormFields).where(
-      inArray(applicationFormFields.formId, applicationFormsRelatedToRound.map((f) => f.id)),
-    );
-
-    await tx.delete(applicationCategories).where(
-      eq(applicationCategories.roundId, id),
-    );
-
-    await tx.delete(applicationForms).where(
-      eq(applicationForms.roundId, id),
-    );
-  
-    await tx.delete(rounds).where(eq(rounds.id, id));
+    await tx.delete(rounds).where(eq(rounds.urlSlug, roundSlug));
   });
 
   ctx.response.status = 200;

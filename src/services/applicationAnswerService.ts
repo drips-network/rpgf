@@ -1,5 +1,6 @@
 import { InferSelectModel } from "drizzle-orm/table";
 import { applicationAnswers, applicationFormFields } from "../db/schema.ts";
+import { log, LogLevel } from "./loggingService.ts";
 import { 
   ApplicationAnswerDto,
   applicationUrlAnswerDtoSchema,
@@ -19,10 +20,17 @@ export function validateAnswers(
   dto: ApplicationAnswerDto,
   applicationFields: InferSelectModel<typeof applicationFormFields>[],
 ): boolean {
+  log(LogLevel.Info, "Validating answers", {
+    answerCount: dto.length,
+    fieldCount: applicationFields.length,
+  });
   // ensure all required fields are present in the answers
   const requiredFields = applicationFields.filter((f) => f.required).map((f) => f.id);
   for (const requiredFieldId of requiredFields) {
     if (!dto.find((a) => a.fieldId === requiredFieldId && a.value.toString().trim() !== "")) {
+      log(LogLevel.Warn, "Required field not found in answers", {
+        requiredFieldId,
+      });
       return false;
     }
   }
@@ -31,6 +39,9 @@ export function validateAnswers(
   const fieldIdSet = new Set<string>();
   for (const answer of dto) {
     if (fieldIdSet.has(answer.fieldId)) {
+      log(LogLevel.Warn, "Duplicate field ID in answers", {
+        fieldId: answer.fieldId,
+      });
       return false;
     }
     fieldIdSet.add(answer.fieldId);
@@ -40,6 +51,9 @@ export function validateAnswers(
   const formFieldIds = new Set(applicationFields.map((f) => f.id));
   for (const answer of dto) {
     if (!formFieldIds.has(answer.fieldId)) {
+      log(LogLevel.Warn, "Answered field ID not found in form", {
+        fieldId: answer.fieldId,
+      });
       return false;
     }
   }
@@ -78,6 +92,9 @@ export function validateAnswers(
   for (const answer of dto) {
     const schema = fieldSchemaMap[answer.fieldId];
     if (!schema || !schema.safeParse(answer).success) {
+      log(LogLevel.Warn, "Answer validation failed", {
+        fieldId: answer.fieldId,
+      });
       return false;
     }
 
@@ -86,9 +103,11 @@ export function validateAnswers(
 
   // ensure no fields unvalidated
   if (validatedFieldIds.size !== dto.length) {
+    log(LogLevel.Warn, "Not all fields were validated");
     return false;
   }
 
+  log(LogLevel.Info, "Answers validated successfully");
   return true;
 }
 
@@ -147,6 +166,10 @@ export function mapDbAnswersToDto(
 }
 
 export async function getAnswersByApplicationVersionId(applicationVersionId: string, dropPrivateFields = true, tx?: Transaction): Promise<ApplicationAnswer[]> {
+  log(LogLevel.Info, "Getting answers by application version ID", {
+    applicationVersionId,
+    dropPrivateFields,
+  });
   const answers = await (tx ?? db).query.applicationAnswers.findMany({
     where: (answers, { eq }) => eq(answers.applicationVersionId, applicationVersionId),
     with: {
@@ -162,6 +185,10 @@ export async function recordAnswers(
   applicationVersionId: string,
   tx: Transaction,
 ): Promise<ApplicationAnswer[]> {
+  log(LogLevel.Info, "Recording answers", {
+    applicationVersionId,
+    answerCount: dto.length,
+  });
   const applicationVersion = await tx.query.applicationVersions.findFirst({
     where: (versions, { eq }) => eq(versions.id, applicationVersionId),
     with: {
@@ -179,6 +206,9 @@ export async function recordAnswers(
     }
   });
   if (!applicationVersion) {
+    log(LogLevel.Error, "Application version not found", {
+      applicationVersionId,
+    });
     throw new BadRequestError("Application version not found");
   }
 
@@ -186,6 +216,7 @@ export async function recordAnswers(
 
   const valid = validateAnswers(dto, fields);
   if (!valid) {
+    log(LogLevel.Error, "Invalid answers", { applicationVersionId });
     throw new BadRequestError("Invalid answers");
   }
 

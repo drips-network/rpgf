@@ -1,6 +1,7 @@
 import { and, count, eq, InferSelectModel } from "drizzle-orm";
 import { applications as applicationsModel, ballots, rounds, roundVoters, users } from "../db/schema.ts";
 import { db, Transaction } from "../db/postgres.ts";
+import { log, LogLevel } from "./loggingService.ts";
 import { Ballot, SubmitBallotDto, WrappedBallot } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { getRound, isUserRoundAdmin } from "./roundService.ts";
@@ -37,6 +38,7 @@ export async function getBallot(
   userId: string,
   tx?: Transaction,
 ): Promise<WrappedBallot | null> {
+  log(LogLevel.Info, "Getting ballot", { roundId, userId });
   const round = await (tx ?? db).query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -44,6 +46,7 @@ export async function getBallot(
     },
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
 
@@ -105,25 +108,39 @@ export async function submitBallot(
   roundId: string,
   ballotDto: SubmitBallotDto,
 ): Promise<WrappedBallot> {
+  log(LogLevel.Info, "Submitting ballot", { userId, roundId });
   const result = await db.transaction(async (tx) => {
     const round = await getRound(roundId, userId);
     if (!round) {
+      log(LogLevel.Error, "Round not found", { roundId });
       throw new NotFoundError("Round not found");
     }
     if (!round.isVoter) {
+      log(LogLevel.Error, "User is not a voter for this round", {
+        userId,
+        roundId,
+      });
       throw new UnauthorizedError(
         "You are not authorized to submit a ballot for this round",
       );
     }
     if (round.state !== "voting") {
+      log(LogLevel.Error, "Round is not in voting state", { roundId });
       throw new BadRequestError("Round is not in voting state");
     }
     if (!round.published || !round.maxVotesPerProjectPerVoter || !round.maxVotesPerVoter) {
+      log(LogLevel.Error, "Round is not properly configured for voting", {
+        roundId,
+      });
       throw new BadRequestError("Round is not properly configured for voting");
     }
 
     const existingBallot = await getBallot(roundId, userId, tx);
     if (existingBallot) {
+      log(LogLevel.Error, "User has already submitted a ballot for this round", {
+        userId,
+        roundId,
+      });
       throw new BadRequestError(
         "You have already submitted a ballot for this round",
       );
@@ -161,18 +178,28 @@ export async function patchBallot(
   roundId: string,
   ballotDto: SubmitBallotDto,
 ): Promise<WrappedBallot> {
+  log(LogLevel.Info, "Patching ballot", { userId, roundId });
   const result = await db.transaction(async (tx) => {
     const round = await getRound(roundId, userId);
     if (!round) {
+      log(LogLevel.Error, "Round not found", { roundId });
       throw new NotFoundError("Round not found");
     }
     if (!round.isVoter) {
+      log(LogLevel.Error, "User is not a voter for this round", {
+        userId,
+        roundId,
+      });
       throw new UnauthorizedError("You are not a voter for this round");
     }
     if (round.state !== "voting") {
+      log(LogLevel.Error, "Round is not in voting state", { roundId });
       throw new BadRequestError("Round is not in voting state");
     }
     if (!round.published || !round.maxVotesPerProjectPerVoter || !round.maxVotesPerVoter) {
+      log(LogLevel.Error, "Round is not properly configured for voting", {
+        roundId,
+      });
       throw new BadRequestError("Round is not properly configured for voting");
     }
 
@@ -183,6 +210,7 @@ export async function patchBallot(
 
     const existingBallot = await getBallot(roundId, userId);
     if (!existingBallot) {
+      log(LogLevel.Error, "Ballot not found", { userId, roundId });
       throw new BadRequestError("Ballot not found");
     }
 
@@ -259,6 +287,13 @@ export async function getBallots(
   offset = 0,
   format: "json" | "csv" = "json",
 ): Promise<WrappedBallot[] | string> {
+  log(LogLevel.Info, "Getting ballots", {
+    roundId,
+    requestingUserId,
+    limit,
+    offset,
+    format,
+  });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -273,9 +308,15 @@ export async function getBallots(
   });
 
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
+    log(
+      LogLevel.Error,
+      "You are not authorized to view the ballots for this round",
+      { roundId, requestingUserId },
+    );
     throw new UnauthorizedError(
       "You are not authorized to view the ballots for this round",
     );
@@ -313,14 +354,21 @@ export async function getBallotStats(
   roundId: string,
   requestingUserId: string,
 ) {
+  log(LogLevel.Info, "Getting ballot stats", { roundId, requestingUserId });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: { admins: true },
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
+    log(
+      LogLevel.Error,
+      "You are not authorized to view the ballots for this round",
+      { roundId, requestingUserId },
+    );
     throw new UnauthorizedError(
       "You are not authorized to view the ballots for this round",
     );

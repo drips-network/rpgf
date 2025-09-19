@@ -1,6 +1,7 @@
 import { SiweMessage } from "siwe";
 import { create as createJwt, getNumericDate, verify } from "djwt";
 import { db, Transaction } from "$app/db/postgres.ts";
+import { log, LogLevel } from "./loggingService.ts";
 import { nonces, refreshTokens, users } from "$app/db/schema.ts";
 import { and, eq, lt } from "drizzle-orm";
 import type { AccessTokenJwtPayload, RefreshTokenJwtPayload } from "$app/types/auth.ts";
@@ -30,6 +31,7 @@ function generateSecureNonce(): string {
 }
 
 export async function generateNonce(): Promise<string> {
+  log(LogLevel.Info, "Generating nonce");
   const nonce = generateSecureNonce();
   const expiresAt = new Date(Date.now() + NONCE_EXPIRATION_MS);
 
@@ -113,10 +115,12 @@ export async function verifySignatureAndCreateRefreshToken(
   clientSiweMessage: Partial<SiweMessage>, // Fields sent by client
   signature: string,
 ): Promise<string> {
+  log(LogLevel.Info, "Verifying signature and creating refresh token");
   return await db.transaction(async (tx) => {
     const siweMessageInstance = new SiweMessage(clientSiweMessage);
 
     if (!(await consumeNonce(siweMessageInstance.nonce, tx))) {
+      log(LogLevel.Error, "Invalid or expired nonce");
       throw new BadRequestError("Invalid or expired nonce.");
     }
 
@@ -125,6 +129,7 @@ export async function verifySignatureAndCreateRefreshToken(
     );
 
     if (!success) {
+      log(LogLevel.Error, "Invalid SIWE signature");
       throw new UnauthorizedError("Invalid SIWE signature.");
     }
 
@@ -148,12 +153,14 @@ export async function verifySignatureAndCreateRefreshToken(
 export async function createAccessToken(
   refreshToken: string,
 ): Promise<string> {
+  log(LogLevel.Info, "Creating access token");
   return await db.transaction(async (tx) => {
     const jwtSecretKey = await getJwtSecret();
     const payload = await verify(refreshToken, jwtSecretKey) as RefreshTokenJwtPayload;
     const { userId, type, walletAddress } = payload ?? {};
 
     if (!payload || type !== 'refresh' || !walletAddress || !userId) {
+      log(LogLevel.Error, "Invalid refresh token");
       throw new Error("Invalid refresh token");
     }
 
@@ -165,6 +172,7 @@ export async function createAccessToken(
     });
 
     if (!storedRefreshToken || storedRefreshToken.revoked) {
+      log(LogLevel.Error, "Refresh token not found or revoked");
       throw new UnauthorizedError();
     }
 
@@ -186,6 +194,7 @@ export async function createAccessToken(
 export async function rotateRefreshToken(
   oldRefreshToken: string,
 ): Promise<string | null> {
+  log(LogLevel.Info, "Rotating refresh token");
   return await db.transaction(async (tx) => {
     const jwtSecretKey = await getJwtSecret();
 
@@ -198,6 +207,7 @@ export async function rotateRefreshToken(
     }
 
     if (!payload || payload.type !== 'refresh') {
+      log(LogLevel.Error, "Invalid refresh token");
       throw new UnauthorizedError("Invalid refresh token");
     }
 
@@ -214,10 +224,12 @@ export async function rotateRefreshToken(
 export async function revokeRefreshToken(
   refreshToken: string,
 ): Promise<void> {
+  log(LogLevel.Info, "Revoking refresh token");
   const jwtSecretKey = await getJwtSecret();
   const payload = await verify(refreshToken, jwtSecretKey) as RefreshTokenJwtPayload;
 
   if (!payload || payload.type !== 'refresh') {
+    log(LogLevel.Error, "Invalid refresh token");
     throw new UnauthorizedError("Invalid refresh token");
   }
 

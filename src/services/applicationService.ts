@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, InferSelectModel, isNull, or } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
 import { applicationCategories, applicationFormFields, applications, applicationVersions, results, rounds, users } from "../db/schema.ts";
+import { log, LogLevel } from "./loggingService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
   Application,
@@ -216,6 +217,10 @@ export async function createApplication(
   submitterWalletAddress: string,
   applicationDto: CreateApplicationDto,
 ): Promise<Application> {
+  log(LogLevel.Info, "Creating application", {
+    roundId,
+    submitterUserId,
+  });
   // Validate round in 'intake' state
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
@@ -224,9 +229,13 @@ export async function createApplication(
     },
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
   if (inferRoundState(round) !== 'intake') {
+    log(LogLevel.Error, "Round is not currently accepting applications", {
+      roundId,
+    });
     throw new BadRequestError("Round is not currently accepting applications");
   }
 
@@ -249,6 +258,9 @@ export async function createApplication(
   });
 
   if (!applicationCategory) {
+    log(LogLevel.Error, "Invalid application category", {
+      categoryId: applicationDto.categoryId,
+    });
     throw new BadRequestError("Invalid application category");
   }
 
@@ -262,6 +274,9 @@ export async function createApplication(
     chainGqlName,
   );
   if (!onChainProject) {
+    log(LogLevel.Error, "Drips Account ID is not for a valid, claimed project", {
+      dripsAccountId: applicationDto.dripsAccountId,
+    });
     throw new BadRequestError(
       "Drips Account ID is not for a valid, claimed project",
     );
@@ -270,6 +285,11 @@ export async function createApplication(
     onChainProject.owner.address.toLowerCase() !==
     submitterWalletAddress.toLowerCase()
   ) {
+    log(
+      LogLevel.Error,
+      "Drips Account ID is pointing at a project not currently owned by the submitter",
+      { dripsAccountId: applicationDto.dripsAccountId, submitterWalletAddress },
+    );
     throw new BadRequestError(
       "Drips Account ID is pointing at a project not currently owned by the submitter",
     );
@@ -355,6 +375,11 @@ export async function updateApplication(
   submitterWalletAddress: string,
   applicationDto: UpdateApplicationDto,
 ): Promise<Application> {
+  log(LogLevel.Info, "Updating application", {
+    applicationId,
+    roundId,
+    submitterUserId,
+  });
   const application = await db.query.applications.findFirst({
     where: and(
       eq(applications.id, applicationId),
@@ -369,12 +394,20 @@ export async function updateApplication(
   });
 
   if (!application) {
+    log(LogLevel.Error, "Application not found", { applicationId });
     throw new NotFoundError("Application not found");
   }
   if (application.submitterUserId !== submitterUserId) {
+    log(LogLevel.Error, "Not authorized to update this application", {
+      applicationId,
+      submitterUserId,
+    });
     throw new UnauthorizedError("Not authorized to update this application");
   }
   if (inferRoundState(application.round) !== 'intake') {
+    log(LogLevel.Error, "Round is not currently accepting applications", {
+      roundId,
+    });
     throw new BadRequestError("Round is not currently accepting applications");
   }
 
@@ -385,9 +418,13 @@ export async function updateApplication(
     },
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
   if (inferRoundState(round) !== 'intake') {
+    log(LogLevel.Error, "Round is not currently accepting applications", {
+      roundId,
+    });
     throw new BadRequestError("Round is not currently accepting applications");
   }
 
@@ -409,6 +446,9 @@ export async function updateApplication(
   });
 
   if (!applicationCategory) {
+    log(LogLevel.Error, "Invalid application category", {
+      categoryId: applicationDto.categoryId,
+    });
     throw new BadRequestError("Invalid application category");
   }
 
@@ -421,6 +461,9 @@ export async function updateApplication(
     chainGqlName,
   );
   if (!onChainProject) {
+    log(LogLevel.Error, "Drips Account ID is not for a valid, claimed project", {
+      dripsAccountId: applicationDto.dripsAccountId,
+    });
     throw new BadRequestError(
       "Drips Account ID is not for a valid, claimed project",
     );
@@ -429,6 +472,11 @@ export async function updateApplication(
     onChainProject.owner.address.toLowerCase() !==
     submitterWalletAddress.toLowerCase()
   ) {
+    log(
+      LogLevel.Error,
+      "Drips Account ID is pointing at a project not currently owned by the submitter",
+      { dripsAccountId: applicationDto.dripsAccountId, submitterWalletAddress },
+    );
     throw new BadRequestError(
       "Drips Account ID is pointing at a project not currently owned by the submitter",
     );
@@ -525,6 +573,11 @@ export async function getApplicationHistory(
   roundId: string,
   requestingUserId: string | null,
 ): Promise<ApplicationVersion[]> {
+  log(LogLevel.Info, "Getting application history", {
+    applicationId,
+    roundId,
+    requestingUserId,
+  });
   const application = await db.query.applications.findFirst({
     where: eq(applications.id, applicationId),
     with: {
@@ -550,9 +603,14 @@ export async function getApplicationHistory(
   });
 
   if (!application) {
+    log(LogLevel.Error, "Application not found", { applicationId });
     throw new NotFoundError("Application not found");
   }
   if (application.roundId !== roundId) {
+    log(LogLevel.Error, "Application does not belong to the specified round", {
+      applicationId,
+      roundId,
+    });
     throw new NotFoundError("Application does not belong to the specified round");
   }
 
@@ -560,6 +618,10 @@ export async function getApplicationHistory(
   const userIsSubmitter = application.submitter.id === requestingUserId;
 
   if (!userIsAdmin && !userIsSubmitter && application.state !== "approved") {
+    log(LogLevel.Error, "Not authorized to view this application", {
+      applicationId,
+      requestingUserId,
+    });
     throw new UnauthorizedError("Not authorized to view this application");
   }
 
@@ -590,6 +652,11 @@ export async function getApplication(
   roundId: string,
   requestingUserId: string | null,
 ): Promise<Application | null> {
+  log(LogLevel.Info, "Getting application", {
+    applicationId,
+    roundId,
+    requestingUserId,
+  });
   const application = await db.query.applications.findFirst({
     where: eq(applications.id, applicationId),
     with: {
@@ -632,6 +699,10 @@ export async function getApplication(
     return null;
   }
   if (application.roundId !== roundId) {
+    log(LogLevel.Error, "Application does not belong to the specified round", {
+      applicationId,
+      roundId,
+    });
     throw new NotFoundError("Application does not belong to the specified round");
   }
 
@@ -640,6 +711,10 @@ export async function getApplication(
 
   // If the application is not in a public state, only admins and the submitter can view it
   if (application.state !== "approved" && !userIsAdmin && !userIsSubmitter) {
+    log(LogLevel.Error, "Not authorized to view this application", {
+      applicationId,
+      requestingUserId,
+    });
     throw new UnauthorizedError("Not authorized to view this application");
   }
 
@@ -676,6 +751,14 @@ export async function getApplications(
   limit = 20,
   offset = 0,
 ): Promise<ListingApplication[]> {
+  log(LogLevel.Info, "Getting applications", {
+    roundId,
+    requestingUserId,
+    filterConfig,
+    sortConfig,
+    limit,
+    offset,
+  });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -683,6 +766,7 @@ export async function getApplications(
     }
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
 
@@ -753,6 +837,10 @@ export async function getApplicationsCsv(
   roundId: string,
   requestingUserId: string | null,
 ) {
+  log(LogLevel.Info, "Getting applications CSV", {
+    roundId,
+    requestingUserId,
+  });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -760,6 +848,7 @@ export async function getApplicationsCsv(
     }
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
 
@@ -857,6 +946,10 @@ export async function setApplicationsState(
   applicationIds: string[],
   newState: ApplicationState,
 ): Promise<ListingApplication[]> {
+  log(LogLevel.Info, "Setting applications state", {
+    applicationIds,
+    newState,
+  });
   if (applicationIds.length === 0) {
     return [];
   }
@@ -876,6 +969,9 @@ export async function setApplicationsState(
     ).returning();
 
   if (updatedApplications.length !== applicationIds.length) {
+    log(LogLevel.Error, "Some applications were not in pending state", {
+      applicationIds,
+    });
     throw new BadRequestError("Some applications were not in pending state");
   }
 
@@ -890,6 +986,10 @@ export async function applyApplicationReview(
   requestingUserId: string,
   review: ApplicationReviewDto,
 ): Promise<ListingApplication[]> {
+  log(LogLevel.Info, "Applying application review", {
+    roundId,
+    requestingUserId,
+  });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -897,9 +997,15 @@ export async function applyApplicationReview(
     }
   });
   if (!round) {
+    log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
+    log(
+      LogLevel.Error,
+      "Not authorized to review applications for this round",
+      { roundId, requestingUserId },
+    );
     throw new UnauthorizedError("Not authorized to review applications for this round");
   }
 
