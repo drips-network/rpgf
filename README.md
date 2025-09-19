@@ -127,3 +127,7 @@ The project uses Drizzle ORM for database interactions and migrations.
     deno task db:studio
     ```
     This will open a web interface to browse and manage your database.
+
+## Tests
+
+RetroPGF on Drips functionality is covered by the drips-app's E2E test suite.
