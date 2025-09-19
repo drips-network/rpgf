@@ -7,10 +7,13 @@ This is the backend service for handling Retroactive Public Goods Funding (RPGF)
 ## Features
 
 *   **Authentication:** Uses Sign-In with Ethereum (SIWE) for secure user authentication.
+*   **User Management:** Manages user data and authentication status.
 *   **Rounds Management:** Handles the creation, updating, and retrieval of RPGF rounds.
 *   **Applications Management:** Allows users to submit and manage applications for RPGF rounds.
 *   **Ballot Management:** Supports the creation and management of ballots for voting on applications.
 *   **Results Calculation:** Calculates and provides the results of RPGF rounds.
+*   **KYC Integration:** Manages KYC processes for users and applications.
+*   **Audit Logging:** Logs all significant actions for transparency and security.
 *   **Database:** Uses PostgreSQL with Drizzle ORM for data persistence.
 
 ## Prerequisites
@@ -100,11 +103,12 @@ deno task dev
 
 The application exposes the following main sets of API endpoints:
 
-*   `/auth`: Authentication related endpoints (e.g., SIWE challenge, login).
-*   `/rounds`: Endpoints for managing RPGF rounds.
-*   `/applications`: Endpoints for managing applications to RPGF rounds.
-*   `/ballots`: Endpoints for managing voting ballots.
-*   `/results`: Endpoints for retrieving RPGF results.
+*   `/api/health`: Health check endpoint.
+*   `/api/auth`: Authentication related endpoints (e.g., SIWE challenge, login, logout, refresh token).
+*   `/api/users`: User-related endpoints (e.g., retrieving user data).
+*   `/api/rounds`: Endpoints for managing RPGF rounds, including admins, voters, and applications.
+*   `/api/kyc`: Endpoints for managing KYC processes.
+*   `/api/audit-logs`: Endpoints for retrieving audit logs.
 
 Refer to the route definitions in `src/routes/` for detailed endpoint paths and functionalities.
 
