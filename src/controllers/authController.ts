@@ -1,6 +1,6 @@
 import { Context, Status } from "oak";
 import * as authService from "$app/services/authService.ts";
-import type { SiweVerifyRequest } from "$app/types/auth.ts";
+import { z } from "zod";
 import { UnauthorizedError } from "../errors/auth.ts";
 
 export async function getNonceController(ctx: Context) {
@@ -15,12 +15,31 @@ export async function getNonceController(ctx: Context) {
   }
 }
 
+const siweVerifyRequestSchema = z.object({
+  message: z.object({
+    domain: z.string(),
+    address: z.string(),
+    statement: z.string().optional(),
+    uri: z.string(),
+    version: z.string(),
+    chainId: z.number(),
+    nonce: z.string(),
+    issuedAt: z.string(),
+    expirationTime: z.string().optional(),
+    notBefore: z.string().optional(),
+    requestId: z.string().optional(),
+    resources: z.array(z.string()).optional(),
+  }).partial(),
+  signature: z.string(),
+});
+
 export async function logInController(ctx: Context) {
   if (!ctx.request.hasBody) {
     ctx.throw(Status.BadRequest, "Missing request body");
   }
   const body = await ctx.request.body.json();
-  const { message: clientSiweMessageFields, signature } = body as SiweVerifyRequest;
+  const { message: clientSiweMessageFields, signature } = siweVerifyRequestSchema
+    .parse(body);
 
   if (!clientSiweMessageFields || !signature) {
     ctx.throw(Status.BadRequest, "Missing SIWE message or signature in request body.");

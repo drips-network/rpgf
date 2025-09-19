@@ -89,7 +89,9 @@ export async function getRoundController(
   >,
 ) {
   const roundId = ctx.params.id;
-  const chainId = Number(ctx.request.url.searchParams.get("chainId")) || undefined;
+  const chainId = z.coerce.number().optional().parse(
+    ctx.request.url.searchParams.get("chainId"),
+  );
   const userId = ctx.state.user?.userId;
 
   const round = await getRound(roundId, userId ?? null);
@@ -106,9 +108,15 @@ export async function getRoundController(
 
 export async function getRoundsController(ctx: Context<AppState>) {
   const userId = ctx.state.user?.userId;
-  const limit = Number(ctx.request.url.searchParams.get("limit")) || 20;
-  const offset = Number(ctx.request.url.searchParams.get("offset")) || 0;
-  const chainId = Number(ctx.request.url.searchParams.get("chainId"));
+  const limit = z.coerce.number().optional().default(20).parse(
+    ctx.request.url.searchParams.get("limit"),
+  );
+  const offset = z.coerce.number().optional().default(0).parse(
+    ctx.request.url.searchParams.get("offset"),
+  );
+  const chainId = z.coerce.number().optional().parse(
+    ctx.request.url.searchParams.get("chainId"),
+  );
 
   const rounds = await getRounds(userId ?? null, { chainId }, limit, offset);
 
@@ -118,7 +126,9 @@ export async function getRoundsController(ctx: Context<AppState>) {
 
 export async function getOwnRoundsController(ctx: Context<AuthenticatedAppState>) {
   const userId = ctx.state.user.userId;
-  const chainId = Number(ctx.request.url.searchParams.get("chainId"));
+  const chainId = z.coerce.number().optional().parse(
+    ctx.request.url.searchParams.get("chainId"),
+  );
 
   const rounds = await getRoundsByUser(userId, { chainId});
 
