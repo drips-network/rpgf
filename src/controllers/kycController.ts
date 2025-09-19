@@ -126,40 +126,38 @@ export async function treovaUpdateWebhookController(
   }
 
   const parsedPayload = z.object({
-    event: z.literal("kyc.status.updated"),
-    data: z.object({
-      wallet_address: ethereumAddressSchema,
-      applicantId: z.string().max(256),
-      status: z.enum([
-        "PENDING",
-        "OUTREACH",
-        "VERIFIED",
-        "REJECTED",
-      ]),
-    }),
+    wallet_address: ethereumAddressSchema,
+    applicant_id: z.string().max(256),
+    status: z.enum([
+      "pending",
+      "outreach",
+      "verified",
+      "rejected",
+    ]),
   }).safeParse(JSON.parse(rawBody));
 
   if (!parsedPayload.success) {
+    console.warn(`Received Treova webhook with unhandled event type or malformed payload: ${JSON.stringify(parsedPayload.error.issues)}`);
     return ctx.response.status = 200; // return 200 to avoid retries, assuming we got an event we cannot handle.
   }
 
-  const { data: { applicantId, status, wallet_address } } = parsedPayload.data;
+  const { applicant_id, status, wallet_address } = parsedPayload.data;
 
   // TODO: pull this from the webhook once it's added
   const treovaFormId = 'cmp_67e3ab21';
   const kycType = KycType.Individual;
 
   const TREOVA_STATUS_TO_KYC_STATUS: Record<string, KycStatus> = {
-    "PENDING": KycStatus.UnderReview,
-    "OUTREACH": KycStatus.NeedsAdditionalInformation,
-    "VERIFIED": KycStatus.Active,
-    "REJECTED": KycStatus.Rejected,
+    "pending": KycStatus.UnderReview,
+    "outreach": KycStatus.NeedsAdditionalInformation,
+    "verified": KycStatus.Active,
+    "rejected": KycStatus.Rejected,
   };
   const kycStatus = TREOVA_STATUS_TO_KYC_STATUS[status];
 
   await updateKycStatusTreova(
     kycStatus,
-    applicantId,
+    applicant_id,
     wallet_address,
     treovaFormId,
     kycType,

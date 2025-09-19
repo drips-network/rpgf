@@ -469,6 +469,7 @@ export async function updateKycStatusTreova(
 
     for (const app of apps) {
       const existingKycRequest = app.kycRequestMapping?.kycRequest;
+
       if (existingKycRequest) {
         // If a KYC request already exists for this application, just update it
         await tx.update(kycRequests)

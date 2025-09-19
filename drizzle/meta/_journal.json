@@ -15,6 +15,13 @@
       "when": 1758273388028,
       "tag": "0001_awesome_bromley",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1758289448984,
+      "tag": "0002_public_satana",
+      "breakpoints": true
     }
   ]
 }

@@ -363,7 +363,7 @@ export const kycRequests = pgTable("kyc_requests", {
   kycType: kycType("kyc_type").notNull().$type<KycType>(),
   kycProvider: kycProvider("kyc_provider").notNull().$type<KycProvider>(),
   kycFormUrl: varchar("kyc_form_url", { length: 510 }),
-  providerUserId: varchar("provider_user_id", { length: 255 }).notNull(),
+  providerUserId: varchar("provider_user_id", { length: 255 }).notNull().unique(),
   providerOrgId: varchar("provider_org_id", { length: 255 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),

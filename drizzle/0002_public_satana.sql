@@ -1,0 +1,1 @@
+ALTER TABLE "kyc_requests" ADD CONSTRAINT "kyc_requests_provider_user_id_unique" UNIQUE("provider_user_id");
