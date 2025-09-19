@@ -1,9 +1,9 @@
 /** Includes functionality only intended for testing.
  * These routes are all disabled unless ENABLE_DANGEROUS_TEST_ROUTES is set to true in env */
 
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
-import { applicationCategories, applicationFormFields, applicationForms, applications, applicationVersions, ballots, results, roundAdmins, rounds, roundVoters } from "../db/schema.ts";
+import { rounds } from "../db/schema.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { roundStateSchema } from "../types/round.ts";
 import { UnauthenticatedAppState } from "../../main.ts";
