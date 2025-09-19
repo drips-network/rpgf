@@ -1,7 +1,5 @@
 # 💦 Drips RetroPGF Service
 
-Attention: This project is in active development and not yet production-ready.
-
 This is the backend service for handling Retroactive Public Goods Funding (RPGF) related functionality for the Drips application. It is built with Deno, Oak, PostgreSQL, and uses SIWE for Ethereum-based authentication.
 
 ## Features
