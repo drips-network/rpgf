@@ -17,6 +17,14 @@ import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
 import { AuthError, ExpiredJwtError } from "$app/errors/auth.ts";
+import { registerInstrumentations } from "npm:@opentelemetry/instrumentation";
+import { PgInstrumentation } from "npm:@opentelemetry/instrumentation-pg";
+
+registerInstrumentations({
+  instrumentations: [
+    new PgInstrumentation(),
+  ],
+});
 
 export interface UnauthenticatedAppState {
   user: undefined;
