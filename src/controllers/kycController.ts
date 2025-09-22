@@ -101,6 +101,8 @@ export async function fernUpdateWebhookController(
   const { resource: { customerId, customerStatus } } = parsedPayload.data;
 
   await updateKycStatus(customerStatus as KycStatus, customerId, KycProvider.Fern);
+
+  return ctx.response.status = 200;
 }
 
 export async function treovaUpdateWebhookController(
@@ -174,6 +176,8 @@ export async function treovaUpdateWebhookController(
     idempotencyKey,
     kycType,
   )
+
+  return ctx.response.status = 200;
 };
 
 export async function createKycRequestForApplicationController(
