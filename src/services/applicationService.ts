@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, InferSelectModel, isNull, or } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
-import { applicationCategories, applicationFormFields, applications, applicationVersions, results, rounds, users } from "../db/schema.ts";
+import { applicationCategories, applicationFormFields, applicationKycRequests, applications, applicationVersions, kycRequests, results, rounds, users } from "../db/schema.ts";
 import { log, LogLevel } from "./loggingService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
@@ -27,6 +27,7 @@ import { UnauthorizedError } from "../errors/auth.ts";
 import { stringify } from "jsr:@std/csv";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+import { KycProvider } from "../types/kyc.ts";
 
 async function validateEasAttestation(
   applicationDto: CreateApplicationDto | UpdateApplicationDto,
@@ -226,6 +227,7 @@ export async function createApplication(
     where: eq(rounds.id, roundId),
     with: {
       chain: true,
+      kycConfiguration: true,
     },
   });
   if (!round) {
@@ -332,6 +334,58 @@ export async function createApplication(
       tx,
     );
 
+    // **Handle Treova KYC**
+    // Treova tracks KYC status per wallet address. We internally create a
+    // KYC Request entity when we receive a webhook from Treova updating
+    // us about the KYC status for a wallet address changing.
+    // If such a KYC Request already exists for this wallet address,
+    // we link it to the new application.
+
+    if (round.kycConfiguration?.kycProvider === KycProvider.Treova) {
+      const existingKycRequest = await tx.query.kycRequests.findFirst({
+        where: and(
+          eq(kycRequests.userId, submitterUserId),
+          eq(kycRequests.roundId, round.id),
+        )
+      });
+
+      if (existingKycRequest) {
+        await tx.insert(applicationKycRequests).values({
+          applicationId: newApplication.id,
+          kycRequestId: existingKycRequest.id,
+        });
+
+        await createLog({
+          type: AuditLogAction.KycRequestLinkedToApplication,
+          roundId: round.id,
+          actor: { type: AuditLogActorType.System },
+          payload: {
+            kycRequestId: existingKycRequest.id,
+            applicationId: newApplication.id,
+          },
+          tx,
+        });
+
+        log(LogLevel.Info, "Linked existing KYC Request to new application", {
+          userId: submitterUserId,
+          roundId: round.id,
+          applicationId: newApplication.id,
+          kycRequestId: existingKycRequest.id,
+        });
+      } else {
+        log(LogLevel.Info, "No existing KYC Request for user and round, not linking", {
+          userId: submitterUserId,
+          roundId: round.id,
+          applicationId: newApplication.id,
+        });
+
+        // If no existing KYC Request exists, we don't do anything here.
+        // The incoming webhook handler will create the KYC Request entity
+        // and link any existing applications for that wallet address to it.
+      }
+
+    }
+
     await createLog({
       type: AuditLogAction.ApplicationSubmitted,
       roundId: round.id,
@@ -344,6 +398,12 @@ export async function createApplication(
         id: newApplication.id,
       },
       tx,
+    });
+
+    log(LogLevel.Info, "Created new application", {
+      applicationId: newApplication.id,
+      submitterUserId,
+      roundId,
     });
 
     return {

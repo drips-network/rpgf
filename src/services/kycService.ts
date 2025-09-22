@@ -541,6 +541,52 @@ export async function updateKycStatusTreova(
       throw new NotFoundError("User not found for this wallet address");
     }
 
+    // update or create an existing KYC request for the user
+    let kycRequest = await tx.query.kycRequests.findFirst({
+      where: and(
+        eq(kycRequests.userId, user.id),
+        eq(kycRequests.roundId, kycConfiguration.roundId),
+        eq(kycRequests.kycProvider, KycProvider.Treova),
+      )
+    });
+    if (!kycRequest) {
+      const inserted = await tx.insert(kycRequests).values({
+        userId: user.id,
+        status: newStatus,
+        roundId: kycConfiguration.roundId,
+        kycType,
+        kycProvider: KycProvider.Treova,
+        providerUserId: applicantId,
+      }).returning();
+
+      kycRequest = inserted[0];
+
+      await createLog({
+        type: AuditLogAction.KycRequestCreated,
+        roundId: kycConfiguration.roundId,
+        actor: { type: AuditLogActorType.KycProvider, provider: KycProvider.Treova },
+        payload: { kycRequestId: inserted[0].id },
+        tx,
+      });
+    } else {
+      await tx.update(kycRequests)
+        .set({ status: newStatus })
+        .where(eq(kycRequests.id, kycRequest.id))
+        .returning();
+
+      await createLog({
+        type: AuditLogAction.KycRequestUpdated,
+        roundId: kycConfiguration.roundId,
+        actor: { type: AuditLogActorType.KycProvider, provider: KycProvider.Treova },
+        payload: {
+          kycRequestId: kycRequest.id,
+          previousStatus: kycRequest.status,
+          newStatus
+        },
+        tx,
+      });
+    }
+
     // find all applications by the wallet address in the round
     const apps = await tx.query.applications.findMany({
       where: and(
@@ -548,59 +594,32 @@ export async function updateKycStatusTreova(
         eq(applications.submitterUserId, user.id),
       ),
       with: {
-        kycRequestMapping: {
-          with: {
-            kycRequest: true,
-          }
-        }
+        kycRequestMapping: true,
       }
     });
 
+    // for each application, if it doesn't have the KYC request linked, link it
+
     for (const app of apps) {
-      const existingKycRequest = app.kycRequestMapping?.kycRequest;
-
-      if (existingKycRequest) {
-        // If a KYC request already exists for this application, just update it
-        await tx.update(kycRequests)
-          .set({ status: newStatus, updatedAt: new Date() })
-          .where(eq(kycRequests.id, existingKycRequest.id))
-          .returning();
-
-        await createLog({
-          type: AuditLogAction.KycRequestUpdated,
-          roundId: kycConfiguration.roundId,
-          actor: { type: AuditLogActorType.KycProvider, provider: KycProvider.Treova },
-          payload: {
-            kycRequestId: existingKycRequest.id,
-            previousStatus: existingKycRequest.status,
-            newStatus
-          },
-          tx,
-        });
-      } else {
-        // If not, create a new KYC request and link it to the application
-        const inserted = await tx.insert(kycRequests).values({
-          userId: user.id,
-          status: newStatus,
-          roundId: kycConfiguration.roundId,
-          kycType,
-          kycProvider: KycProvider.Treova,
-          providerUserId: applicantId,
-        }).returning();
-
-        await tx.insert(applicationKycRequests).values({
-          applicationId: app.id,
-          kycRequestId: inserted[0].id,
-        });
-
-        await createLog({
-          type: AuditLogAction.KycRequestCreated,
-          roundId: kycConfiguration.roundId,
-          actor: { type: AuditLogActorType.KycProvider, provider: KycProvider.Treova },
-          payload: { kycRequestId: inserted[0].id },
-          tx,
-        });
+      if (app.kycRequestMapping) {
+        continue;
       }
+
+      await tx.insert(applicationKycRequests).values({
+        applicationId: app.id,
+        kycRequestId: kycRequest.id,
+      });
+
+      await createLog({
+        type: AuditLogAction.KycRequestLinkedToApplication,
+        roundId: kycConfiguration.roundId,
+        actor: { type: AuditLogActorType.System },
+        payload: {
+          kycRequestId: kycRequest.id,
+          applicationId: app.id,
+        },
+        tx,
+      });
     }
   });
 }
