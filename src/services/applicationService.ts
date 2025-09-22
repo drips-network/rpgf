@@ -59,19 +59,26 @@ async function validateEasAttestation(
         break;
       }
     } catch (error) {
-      console.warn(`Attempt to fetch attestation failed: ${error}. Retrying...`);
+      log(LogLevel.Error, `Attempt to fetch attestation failed: ${error}. Retrying...`);
     }
 
     await new Promise((resolve) => setTimeout(resolve, retryInterval));
   }
 
   if (!attestation) {
+    log(LogLevel.Error, "EAS attestation not found", { uid });
     throw new BadRequestError("EAS attestation not found");
   }
 
   if (
     attestation.attester.toLowerCase() !== submitterWalletAddress.toLowerCase()
   ) {
+    log(LogLevel.Error, "EAS attestation attester does not match submitter", {
+      uid,
+      attester: attestation.attester,
+      submitterWalletAddress,
+    });
+
     throw new BadRequestError(
       "EAS attestation does not match the submitter's wallet address",
     );
@@ -86,6 +93,11 @@ async function validateEasAttestation(
     decoded.find((v) => v.name === "applicationDataIpfs")?.value.value,
   );
   if (!ipfsHashParse.success) {
+    log(LogLevel.Error, "EAS attestation missing or invalid applicationDataIpfs", {
+      uid,
+      decodedData: decoded,
+    });
+
     throw new BadRequestError(
       "EAS attestation does not contain applicationDataIpfs, or is invalid",
     );
@@ -95,6 +107,12 @@ async function validateEasAttestation(
 
   const attestedApplicationDtoParse = createApplicationDtoSchema.or(updateApplicationDtoSchema).safeParse(JSON.parse(ipfsData));
   if (!attestedApplicationDtoParse.success) {
+    log(LogLevel.Error, "EAS attestation data is not a valid application DTO", {
+      uid,
+      ipfsData,
+      validationErrors: attestedApplicationDtoParse.error.issues,
+    });
+
     throw new BadRequestError(
       "EAS attestation data is not a valid application DTO for this round",
     );
@@ -103,12 +121,24 @@ async function validateEasAttestation(
   const attestedApplicationDto = attestedApplicationDtoParse.data;
 
   if (attestedApplicationDto.projectName !== projectName) {
+    log(LogLevel.Error, "EAS attestation project name does not match submitted application", {
+      uid,
+      attestedProjectName: attestedApplicationDto.projectName,
+      submittedProjectName: projectName,
+    });
+
     throw new BadRequestError(
       "EAS attestation project name does not match the submitted application",
     );
   }
 
   if (attestedApplicationDto.dripsAccountId !== dripsAccountId) {
+    log(LogLevel.Error, "EAS attestation drips account ID does not match submitted application", {
+      uid,
+      attestedDripsAccountId: attestedApplicationDto.dripsAccountId,
+      submittedDripsAccountId: dripsAccountId,
+    });
+
     throw new BadRequestError(
       "EAS attestation drips account ID does not match the submitted application",
     );
@@ -129,24 +159,44 @@ async function validateEasAttestation(
 
     if (field.private) {
       if (attestedAnswers.find((a) => a.fieldId === fieldId)) {
+        log(LogLevel.Error, "EAS attestation contains private field", {
+          uid,
+          fieldId,
+        });
         throw new BadRequestError(`EAS attestation must not contain private field ${fieldId}. The round organizers may have edited the application form. Please reload the page and try again.`);
       }
       continue;
     }
 
     if (!attestedAnswers.find((a) => a.fieldId === fieldId)) {
+      log(LogLevel.Error, "EAS attestation is missing non-private field", {
+        uid,
+        fieldId,
+      });
       throw new BadRequestError(`EAS attestation is missing field ${fieldId}. The round organizers may have edited the application form. Please reload the page and try again.`);
     }
 
     const attestedValue = attestedAnswers.find((a) => a.fieldId === fieldId);
 
     if (typeof attestedValue?.value !== typeof value) {
+      log(LogLevel.Error, "EAS attestation field type does not match submitted application", {
+        uid,
+        fieldId,
+        attestedType: typeof attestedValue?.value,
+        submittedType: typeof value,
+      });
       throw new BadRequestError(
         `EAS attestation field ${fieldId} type does not match the submitted application. The round organizers may have edited the application form. Please reload the page and try again.`,
       );
     }
 
     if (JSON.stringify(attestedValue?.value) !== JSON.stringify(value)) {
+      log(LogLevel.Error, "EAS attestation field value does not match submitted application", {
+        uid,
+        fieldId,
+        attestedValue: attestedValue?.value,
+        submittedValue: value,
+      });
       throw new BadRequestError(
         `EAS attestation field ${fieldId} value does not match the submitted application.`,
       );
