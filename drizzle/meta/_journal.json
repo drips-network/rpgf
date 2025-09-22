@@ -29,6 +29,13 @@
       "when": 1758295845437,
       "tag": "0003_lonely_spirit",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1758544358005,
+      "tag": "0004_yielding_punisher",
+      "breakpoints": true
     }
   ]
 }

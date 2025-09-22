@@ -383,3 +383,11 @@ export const applicationKycRequestsRelations = relations(applicationKycRequests,
   application: one(applications, { fields: [applicationKycRequests.applicationId], references: [applications.id] }),
   kycRequest: one(kycRequests, { fields: [applicationKycRequests.kycRequestId], references: [kycRequests.id] }),
 }));
+
+// Treova sends an idempotency key with each webhook to ensure we don't process the same event twice
+// we keep track of them here
+export const treovaWebhooks = pgTable("treova_webhooks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  treovaIdempotencyKey: varchar("treova_idempotency_key", { length: 255 }).notNull().unique(),
+  processedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+});

@@ -7,6 +7,7 @@ import { createKycRequestForApplication, getKycRequestForApplication, getKycRequ
 import { createKycRequestForApplicationDtoSchema, KycProvider, KycStatus, KycType } from "../types/kyc.ts";
 import parseDto from "../utils/parseDto.ts";
 import { ethereumAddressSchema } from "../types/shared.ts";
+import { log } from "node:console";
 
 const FERN_WEBHOOK_SECRET = Deno.env.get("FERN_KYC_WEBHOOK_SECRET") || "";
 if (Deno.env.get("DENO_ENV") === "production" && !FERN_WEBHOOK_SECRET) {
@@ -116,18 +117,26 @@ export async function treovaUpdateWebhookController(
 
   const signature = ctx.request.headers.get("x-webhook-signature");
   const timestamp = ctx.request.headers.get("x-webhook-timestamp");
+  const idempotencyKey = ctx.request.headers.get("x-idempotency-key");
   const rawBody = await ctx.request.body.text();
 
-  console.log("Received Treova KYC webhook", rawBody);
+  log("Received Treova KYC webhook", { idempotencyKey, rawBody });
 
   if (!signature || !timestamp || !isValidWebhookSig(rawBody, timestamp, signature, TREOVA_KYC_WEBHOOK_SECRET)) {
     console.error("Invalid webhook signature – request possibly forged!");
     return ctx.response.status = 401;
   }
 
+  if (!idempotencyKey) {
+    console.error("Missing idempotency key – cannot process webhook safely!");
+    return ctx.response.status = 400;
+  }
+
   const parsedPayload = z.object({
     wallet_address: ethereumAddressSchema,
     applicant_id: z.string().max(256),
+    campaign_id: z.string().max(256),
+    verification_type: z.enum(["kyc", "kyb"]),
     status: z.enum([
       "pending",
       "outreach",
@@ -141,11 +150,7 @@ export async function treovaUpdateWebhookController(
     return ctx.response.status = 200; // return 200 to avoid retries, assuming we got an event we cannot handle.
   }
 
-  const { applicant_id, status, wallet_address } = parsedPayload.data;
-
-  // TODO: pull this from the webhook once it's added
-  const treovaFormId = 'cmp_67e3ab21';
-  const kycType = KycType.Individual;
+  const { applicant_id, status, wallet_address, verification_type, campaign_id: treovaFormId } = parsedPayload.data;
 
   const TREOVA_STATUS_TO_KYC_STATUS: Record<string, KycStatus> = {
     "pending": KycStatus.UnderReview,
@@ -155,11 +160,18 @@ export async function treovaUpdateWebhookController(
   };
   const kycStatus = TREOVA_STATUS_TO_KYC_STATUS[status];
 
+  const TREOVA_VERIFICATION_TYPE_TO_KYC_TYPE: Record<string, KycType> = {
+    "kyc": KycType.Individual,
+    "kyb": KycType.Business,
+  };
+  const kycType = TREOVA_VERIFICATION_TYPE_TO_KYC_TYPE[verification_type];
+
   await updateKycStatusTreova(
     kycStatus,
     applicant_id,
     wallet_address,
     treovaFormId,
+    idempotencyKey,
     kycType,
   )
 };

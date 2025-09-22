@@ -2,7 +2,7 @@ import { z } from "zod";
 import { CreateKycRequestForApplicationDto, KycProvider, KycRequest, KycStatus, KycType } from "../types/kyc.ts";
 import { db, Transaction } from "../db/postgres.ts";
 import { log, LogLevel } from "./loggingService.ts";
-import { applicationKycRequests, applications, kycRequests, roundKycConfigurations, users } from "../db/schema.ts";
+import { applicationKycRequests, applications, kycRequests, roundKycConfigurations, treovaWebhooks, users } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
@@ -508,6 +508,7 @@ export async function updateKycStatusTreova(
   applicantId: string,
   walletAddress: string,
   formId: string,
+  idempotencyKey: string,
   kycType: KycType,
 ) {
   log(LogLevel.Info, "Updating KYC status for Treova", {
@@ -516,8 +517,21 @@ export async function updateKycStatusTreova(
     walletAddress,
     formId,
     kycType,
+    idempotencyKey,
   });
   await db.transaction(async (tx) => {
+    // first check if we've already processed this idempotency key
+    const existingWebhook = await tx.query.treovaWebhooks.findFirst({
+      where: eq(treovaWebhooks.treovaIdempotencyKey, idempotencyKey),
+    });
+
+    if (existingWebhook) {
+      log(LogLevel.Info, "Treova webhook with this idempotency key has already been processed, skipping", {
+        idempotencyKey,
+      });
+      return;
+    }
+
     const kycConfiguration = await tx.query.roundKycConfigurations.findFirst({
       where: eq(roundKycConfigurations.treovaFormId, formId),
     });
@@ -621,5 +635,9 @@ export async function updateKycStatusTreova(
         tx,
       });
     }
+
+    await tx.insert(treovaWebhooks).values({
+      treovaIdempotencyKey: idempotencyKey,
+    });
   });
 }
