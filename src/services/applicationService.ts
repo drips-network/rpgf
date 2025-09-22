@@ -984,17 +984,17 @@ export async function getApplicationsCsv(
       app.versions[0].form.id,
       app.versions[0].form.name,
       ...(includeKycData ? [
-        app.kycRequestMapping?.kycRequest.status ?? "N/A",
-        app.kycRequestMapping?.kycRequest.kycEmail ?? "N/A",
-        app.kycRequestMapping?.kycRequest.updatedAt.toISOString() ?? "N/A",
-        app.kycRequestMapping?.kycRequest.kycProvider ?? "N/A",
+        app.kycRequestMapping?.kycRequest.status ?? "",
+        app.kycRequestMapping?.kycRequest.kycEmail ?? "",
+        app.kycRequestMapping?.kycRequest.updatedAt.toISOString() ?? "",
+        app.kycRequestMapping?.kycRequest.kycProvider ?? "",
       ] : []),
       ...uniqueAnswerSlugs.map((slug) => {
         const answer = app.versions[0].answers.find((a) => a.field.slug === slug);
         return answer ? (typeof answer.answer === "string" ? answer.answer : JSON.stringify(answer.answer)) : "";
       }),
       app.createdAt.toISOString(),
-      includeVoteResult ? (app.result !== null ? app.result.result.toString() : "Not yet calculated") : "N/A",
+      includeVoteResult ? (app.result !== null ? app.result.result.toString() : "") : "",
     ])
   ];
 
