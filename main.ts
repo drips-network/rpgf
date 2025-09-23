@@ -30,8 +30,23 @@ export type AppState = UnauthenticatedAppState | AuthenticatedAppState;
 
 const app = new Application<AppState>({ state: { user: undefined } });
 
+if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
+  console.warn("----------------------------------------------------------------------")
+  console.warn("🔒 CORS DISABLED! 🔒");
+  console.warn("The CORS_ALLOW_ALL_ORIGINS environment variable is set to true, which is a security risk in production environments.");
+  console.warn("----------------------------------------------------------------------")
+}
+
 app.use((ctx, next) => {
-  ctx.response.headers.set('Access-Control-Allow-Origin', ctx.request.headers.get('Origin') || '*');
+  const origin = ctx.request.headers.get('Origin');
+  const allowedOriginRegex = /^https:\/\/.*\.drips\.network$/;
+
+  if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
+    ctx.response.headers.set('Access-Control-Allow-Origin', '*');
+  } else if (origin && allowedOriginRegex.test(origin)) {
+    ctx.response.headers.set('Access-Control-Allow-Origin', origin);
+  }
+
   ctx.response.headers.set('Access-Control-Allow-Credentials', 'true');
   ctx.response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Credentials');
   ctx.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
