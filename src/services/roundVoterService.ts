@@ -46,7 +46,7 @@ export async function setRoundVoters(
     'pending-voting',
   ];
 
-  if (!roundState || !editingAllowedInStates.includes(roundState)) {
+  if (roundState && !editingAllowedInStates.includes(roundState)) {
     log(LogLevel.Error, "Round voters can no longer be edited for this round", {
       roundId,
     });
