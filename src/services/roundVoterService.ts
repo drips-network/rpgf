@@ -4,11 +4,12 @@ import { db } from "../db/postgres.ts";
 import { log, LogLevel } from "./loggingService.ts";
 import { rounds, roundVoters } from "../db/schema.ts";
 import { createOrGetUser } from "./userService.ts";
-import { isUserRoundAdmin } from "./roundService.ts";
+import { inferRoundState, isUserRoundAdmin } from "./roundService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+import { RoundState } from "../types/round.ts";
 
 export async function setRoundVoters(
   dto: SetRoundVotersDto,
@@ -36,11 +37,20 @@ export async function setRoundVoters(
     });
     throw new UnauthorizedError("You are not authorized to modify this round.");
   }
-  if (round.published) {
-    log(LogLevel.Error, "Cannot modify voters for a published round", {
+
+  const roundState = inferRoundState(round);
+
+  const editingAllowedInStates: RoundState[] = [
+    'intake',
+    'pending-intake',
+    'pending-voting',
+  ];
+
+  if (!roundState || !editingAllowedInStates.includes(roundState)) {
+    log(LogLevel.Error, "Round voters can no longer be edited for this round", {
       roundId,
     });
-    throw new BadRequestError("Cannot modify voters for a published round.");
+    throw new BadRequestError("Round voters can no longer be edited for this round");
   }
 
   const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
