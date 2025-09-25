@@ -644,7 +644,7 @@ export async function updateApplication(
       tx,
     });
 
-    const fullApplication = (await db.query.applications.findFirst({
+    const fullApplication = (await tx.query.applications.findFirst({
       where: eq(applications.id, applicationId),
       with: {
         versions: {
