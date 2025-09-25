@@ -426,7 +426,7 @@ export async function deleteRound(roundId: string, requestingUserId: string): Pr
   });
 }
 
-function validateSchedule(
+export function validateSchedule(
   schedule:
     Pick<
       Round<boolean>,
@@ -452,6 +452,7 @@ function validateSchedule(
     !votingPeriodStart || !votingPeriodEnd ||
     !resultsPeriodStart
   ) {
+    log(LogLevel.Error, "Schedule dates are missing", { schedule });
     if (throwOnError) {
       throw new BadRequestError("All schedule dates must be provided.");
     }
@@ -461,16 +462,19 @@ function validateSchedule(
   if (
     applicationPeriodStart >= applicationPeriodEnd
   ) {
+    log(LogLevel.Error, "Application period start must be before end", { schedule });
     if (throwOnError) {
       throw new BadRequestError(
         "Application period start must be before end.",
       );
     }
+
     return false;
   }
   if (
     votingPeriodStart >= votingPeriodEnd
   ) {
+    log(LogLevel.Error, "Voting period start must be before end", { schedule });
     if (throwOnError) {
       throw new BadRequestError(
         "Voting period start must be before end.",
@@ -481,6 +485,7 @@ function validateSchedule(
   if (
     applicationPeriodEnd >= votingPeriodStart
   ) {
+    log(LogLevel.Error, "Voting period must start after application period ends", { schedule });
     if (throwOnError) {
       throw new BadRequestError(
         "Voting period must start after application period ends.",
@@ -491,6 +496,7 @@ function validateSchedule(
   if (
     votingPeriodEnd >= resultsPeriodStart
   ) {
+    log(LogLevel.Error, "Results period must start after voting period ends", { schedule });
     if (throwOnError) {
       throw new BadRequestError(
         "Results period must start after voting period ends.",
@@ -524,6 +530,7 @@ function validateRoundReadyForPublishing(
   round: RoundSelectModelWithRelations,
 ): boolean {
   if (!validateSchedule(round, false)) {
+    log(LogLevel.Info, "Round schedule is not valid", { roundId: round.id });
     return false;
   }
 
@@ -533,18 +540,27 @@ function validateRoundReadyForPublishing(
     !round.maxVotesPerProjectPerVoter ||
     !round.maxVotesPerVoter
   ) {
+    log(LogLevel.Info, "Round is missing required fields", {
+      name: round.name,
+      urlSlug: round.urlSlug,
+      maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
+      maxVotesPerVoter: round.maxVotesPerVoter 
+    });
     return false;
   }
 
   if (round.admins.length === 0) {
+    log(LogLevel.Info, "Round has no admins", { roundId: round.id });
     return false;
   }
 
   if (round.applicationCategories.length === 0) {
+    log(LogLevel.Info, "Round has no application categories", { roundId: round.id });
     return false;
   }
 
   if (round.voters.length === 0) {
+    log(LogLevel.Info, "Round has no voters", { roundId: round.id });
     return false;
   }
 

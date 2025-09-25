@@ -87,6 +87,9 @@ export async function createApplicationForm(
     throw new BadRequestError("An application form with the same name already exists for this round");
   }
 
+  // ensure no duplicate slugs in the fields
+  ensureUniqueSlugs(dto.fields);
+
   const result = await db.transaction(async (tx) => {
 
     // First, create the form itself

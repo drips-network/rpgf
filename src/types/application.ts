@@ -10,7 +10,7 @@ export const createApplicationDtoSchema = z.object({
   projectName: z.string().min(1).max(255),
   dripsAccountId: z.string().min(1).max(255),
   attestationUID: z.string().min(1).max(255).optional(),
-  categoryId: z.string().min(1).max(255),
+  categoryId: z.string().uuid().min(1).max(255),
   answers: applicationAnswerDtoSchema,
 });
 export type CreateApplicationDto = z.infer<typeof createApplicationDtoSchema>;
@@ -19,7 +19,7 @@ export const updateApplicationDtoSchema = z.object({
   projectName: z.string().min(1).max(255),
   dripsAccountId: z.string().min(1).max(255),
   attestationUID: z.string().min(1).max(255).optional(),
-  categoryId: z.string().min(1).max(255),
+  categoryId: z.string().uuid().min(1).max(255),
   answers: applicationAnswerDtoSchema,
 });
 export type UpdateApplicationDto = z.infer<typeof updateApplicationDtoSchema>;

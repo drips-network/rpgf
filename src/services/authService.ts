@@ -5,7 +5,6 @@ import { log, LogLevel } from "./loggingService.ts";
 import { nonces, refreshTokens, users } from "$app/db/schema.ts";
 import { and, eq, lt } from "drizzle-orm";
 import type { AccessTokenJwtPayload, RefreshTokenJwtPayload } from "$app/types/auth.ts";
-import { crypto } from "std/crypto"; // Updated import alias
 import { Context } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import { UnauthenticatedError, UnauthorizedError } from "../errors/auth.ts";

@@ -1,7 +1,7 @@
 import { InferSelectModel } from "drizzle-orm/table";
 import { applicationAnswers, applicationFormFields } from "../db/schema.ts";
 import { log, LogLevel } from "./loggingService.ts";
-import { 
+import {
   ApplicationAnswerDto,
   applicationUrlAnswerDtoSchema,
   applicationTextAnswerDtoSchema,
@@ -18,7 +18,7 @@ import { isNull } from "drizzle-orm";
 
 export function validateAnswers(
   dto: ApplicationAnswerDto,
-  applicationFields: InferSelectModel<typeof applicationFormFields>[],
+  applicationFields: Pick<InferSelectModel<typeof applicationFormFields>, "id" | "type" | "required" | "properties">[],
 ): boolean {
   log(LogLevel.Info, "Validating answers", {
     answerCount: dto.length,
@@ -60,7 +60,7 @@ export function validateAnswers(
 
   // build a map of fieldId with their respective schemas for validation
   const fieldSchemaMap: Record<string, ZodSchema> = {};
-  
+
   const fillableFields = applicationFields.filter((f) => ["url", "text", "textarea", "email", "list", "select"].includes(f.type));
 
   for (const field of fillableFields) {

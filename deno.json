@@ -4,11 +4,10 @@
     "ethers": "npm:ethers@^6.14.3",
     "graphql": "npm:graphql@^16.11.0",
     "graphql-request": "npm:graphql-request@^7.1.2",
-    "std/dotenv": "https://deno.land/std@0.224.0/dotenv/mod.ts",
-    "std/crypto": "https://deno.land/std@0.224.0/crypto/mod.ts",
-    "std/csv": "https://deno.land/std@0.224.0/csv/stringify.ts",
+    "std/crypto": "jsr:@std/crypto",
+    "std/csv": "jsr:@std/csv",
     "std/async": "jsr:@std/async",
-    "oak": "https://deno.land/x/oak@v16.0.0/mod.ts",
+    "oak": "https://deno.land/x/oak@v17.1.6/mod.ts",
     "siwe": "npm:siwe@^3.0.0",
     "djwt": "https://deno.land/x/djwt@v3.0.2/mod.ts",
     "drizzle-orm": "npm:drizzle-orm@^0.43.1",
@@ -16,7 +15,9 @@
     "drizzle-kit": "npm:drizzle-kit@^0.31.1",
     "$app/": "./src/",
     "zod": "npm:zod@^3.24.4",
-    "is-ipfs": "npm:is-ipfs@^8.0.4"
+    "is-ipfs": "npm:is-ipfs@^8.0.4",
+    "superoak": "https://deno.land/x/superoak/mod.ts",
+    "execa": "npm:execa@^9.6.0"
   },
   "fmt": {
     "options": {
@@ -38,7 +39,10 @@
     "configure-chain": "deno run --node-modules-dir --allow-net --allow-env --env-file ./scripts/add-chain.ts",
     "db:generate": "deno run -A --node-modules-dir npm:drizzle-kit generate",
     "db:migrate": "deno run -A --node-modules-dir npm:drizzle-kit migrate",
-    "db:studio": "deno run -A --node-modules-dir npm:drizzle-kit studio"
+    "db:studio": "deno run -A --node-modules-dir npm:drizzle-kit studio",
+    "test:db:migrate": "deno run -A --node-modules-dir --env-file=.env.test npm:drizzle-kit migrate",
+    "test:db:studio": "deno run -A --node-modules-dir --env-file=.env.test npm:drizzle-kit studio",
+    "test": "deno run --allow-run --env-file=.env.test --node-modules-dir --allow-net --allow-env --allow-read tests/run.ts"
   },
   "nodeModulesDir": "auto"
 }

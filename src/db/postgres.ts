@@ -1,14 +1,15 @@
-import { drizzle, NodePgDatabase, NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
+import { drizzle, NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import * as schema from "$app/db/schema.ts";
 import { PgTransaction } from "drizzle-orm/pg-core/session";
 import { ExtractTablesWithRelations } from "drizzle-orm";
 
 const connectionString = Deno.env.get("DB_CONNECTION_STRING");
+if (!connectionString) {
+  throw new Error("Missing database credentials in environment variables.");
+}
 
-// Initialize Drizzle ORM with the postgres.js client and schema
-// The schema import gives Drizzle access to your table definitions.
-export const db: NodePgDatabase<typeof schema> = drizzle({ 
-  connection: { 
+export const db = drizzle({
+  connection: {
     connectionString,
   },
   schema,
@@ -16,9 +17,21 @@ export const db: NodePgDatabase<typeof schema> = drizzle({
 
 export type Transaction = PgTransaction<NodePgQueryResultHKT, typeof schema, ExtractTablesWithRelations<typeof schema>>;
 
-// The old getDbClient() and ensureSchema() are no longer needed in the same way.
-// Drizzle uses its own migration system. We'll create a migration script later.
-// For now, db is the Drizzle instance you'll use in services.
+async function closeDbConnection() {
+  console.log("Closing database connection...");
 
-// You can export the pgClient if direct access is needed, but usually db is sufficient.
-// export { pgClient };
+  // What the fuck? Only way i could figure out to do this.
+  if ("end" in db.$client && typeof db.$client.end === "function") {
+    await db.$client.end();
+  };
+}
+
+Deno.addSignalListener("SIGINT", async () => {
+  await closeDbConnection();
+  Deno.exit();
+});
+
+Deno.addSignalListener("SIGTERM", async () => {
+  await closeDbConnection();
+  Deno.exit();
+});
