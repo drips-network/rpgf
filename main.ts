@@ -129,6 +129,10 @@ if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
   app.use(dangerousTestRoutes.allowedMethods());
 }
 
-const port = parseInt(Deno.env.get("PORT") || "8000");
-console.log(`Server listening on http://localhost:${port}`);
-await app.listen({ port, hostname: "[::]" });
+if (import.meta.main) {
+  const port = parseInt(Deno.env.get("PORT") || "8000");
+  console.log(`Server listening on http://localhost:${port}`);
+  await app.listen({ port, hostname: "[::]" });
+}
+
+export { app };

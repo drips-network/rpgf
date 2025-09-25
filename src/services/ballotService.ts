@@ -10,7 +10,7 @@ import { createLog } from "./auditLogService.ts";
 import { escapeCsvValue } from "../utils/csv.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 
-function validateBallot(ballot: Ballot, votingConfig: {
+export function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
   maxVotesPerProjectPerVoter: number;
 }) {
@@ -24,8 +24,8 @@ function validateBallot(ballot: Ballot, votingConfig: {
     );
   }
 
-  for (const projectId in Object.keys(ballot)) {
-    if (ballot[projectId] > votingConfig.maxVotesPerProjectPerVoter) {
+  for (const [projectId, voteCount] of Object.entries(ballot)) {
+    if (voteCount > votingConfig.maxVotesPerProjectPerVoter) {
       throw new BadRequestError(
         `Votes for project ${projectId} exceed the maximum allowed (${votingConfig.maxVotesPerProjectPerVoter})`,
       );

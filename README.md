@@ -132,4 +132,10 @@ The project uses Drizzle ORM for database interactions and migrations.
 
 ## Tests
 
-RetroPGF on Drips functionality is covered by the drips-app's E2E test suite.
+Run `deno task test` to: 
+1) Run a test DB using `docker compose`
+2) Migrate the test DB
+3) Run integrated unit & integration tests in the `/tests` dir
+4) Tear down the test DB
+
+RetroPGF on Drips functionality is additionally covered by the app's E2E test suite.

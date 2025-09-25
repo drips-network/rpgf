@@ -34,6 +34,39 @@ function getArgs() {
   return parsedArgs.data;
 }
 
+export async function addChain(
+  chainId: number,
+  gqlName: string,
+  rpcUrl: string,
+  whitelistMode: boolean,
+  easAddress?: string,
+  applicationAttestationSchemaUID?: string,
+  applicationReviewAttestationSchemaUID?: string,
+) {
+  const existingChain = await db.query.chains.findFirst({
+    where: (chains, { eq }) => eq(chains.chainId, chainId),
+  }); 
+  if (existingChain) {
+    throw new Error(`Chain with ID ${chainId} already exists.`);
+  }
+
+  const attestationSetup = easAddress && applicationAttestationSchemaUID && applicationReviewAttestationSchemaUID
+    ? {
+        easAddress,
+        applicationAttestationSchemaUID,
+        applicationReviewAttestationSchemaUID,
+      }
+    : null;
+
+  await db.insert(chains).values({
+    chainId,
+    gqlName,
+    rpcUrl,
+    whitelistMode,
+    attestationSetup,
+  });
+}
+
 async function main() {
   const {
     chainId,
@@ -53,21 +86,15 @@ async function main() {
     Deno.exit(1);
   }
 
-  const attestationSetup = easAddress && applicationAttestationSchemaUID && applicationReviewAttestationSchemaUID
-    ? {
-        easAddress,
-        applicationAttestationSchemaUID,
-        applicationReviewAttestationSchemaUID,
-      }
-    : null;
-
-  await db.insert(chains).values({
+  await addChain(
     chainId,
     gqlName,
     rpcUrl,
     whitelistMode,
-    attestationSetup,
-  });
+    easAddress ?? undefined,
+    applicationAttestationSchemaUID ?? undefined,
+    applicationReviewAttestationSchemaUID ?? undefined,
+  );
 
   console.log(`✅ We good. Chain with ID ${chainId} added successfully.`);
 
@@ -83,4 +110,6 @@ async function main() {
   Deno.exit(0);
 }
 
-main();
+if (import.meta.main) {
+  main();
+}

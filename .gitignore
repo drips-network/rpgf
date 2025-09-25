@@ -1,6 +1,7 @@
 # Environment variables
 .env
 .env.*
+!.env.test
 !.env.example
 
 # Deno lock file (if used, though we are using import_map.json)

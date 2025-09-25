@@ -22,7 +22,7 @@ export type ProjectData = ProjectChainData & {
   gitHubUrl: string;
 };
 
-export async function getProject(accountId: string, chainGqlName: string): Promise<ProjectData | null> {
+async function getProject(accountId: string, chainGqlName: string): Promise<ProjectData | null> {
   const projectQuery = gql`
     query Project {
       projectById(id: "${accountId}", chains: [${chainGqlName}]) {
@@ -73,4 +73,8 @@ export async function getProject(accountId: string, chainGqlName: string): Promi
     ...chainData,
     gitHubUrl,
   }
+}
+
+export default {
+  getProject,
 }

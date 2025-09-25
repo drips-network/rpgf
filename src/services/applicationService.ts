@@ -14,7 +14,7 @@ import {
   UpdateApplicationDto,
   updateApplicationDtoSchema,
 } from "../types/application.ts";
-import { getProject } from "../gql/projects.ts";
+import projects from "../gql/projects.ts";
 import { JsonRpcProvider, type Provider } from "ethers";
 import { Attestation, EAS, SchemaEncoder } from "@ethereum-attestation-service/eas-sdk";
 import * as ipfs from "../ipfs/ipfs.ts";
@@ -24,12 +24,12 @@ import { inferRoundState, isUserRoundAdmin } from "./roundService.ts";
 import { mapDbAnswersToDto, recordAnswers, validateAnswers } from "./applicationAnswerService.ts";
 import { ApplicationAnswer } from "../types/applicationAnswer.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
-import { stringify } from "jsr:@std/csv";
+import { stringify } from "std/csv";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 import { KycProvider } from "../types/kyc.ts";
 
-async function validateEasAttestation(
+export async function validateEasAttestation(
   applicationDto: CreateApplicationDto | UpdateApplicationDto,
   formFields: InferSelectModel<typeof applicationFormFields>[],
   submitterWalletAddress: string,
@@ -321,7 +321,7 @@ export async function createApplication(
   // Validate provided Drips project ID is valid and owned by the submitter
   const { gqlName: chainGqlName, attestationSetup } = round.chain;
 
-  const onChainProject = await getProject(
+  const onChainProject = await projects.getProject(
     applicationDto.dripsAccountId,
     chainGqlName,
   );
@@ -566,7 +566,7 @@ export async function updateApplication(
 
   const { gqlName: chainGqlName, attestationSetup } = round.chain;
 
-  const onChainProject = await getProject(
+  const onChainProject = await projects.getProject(
     applicationDto.dripsAccountId,
     chainGqlName,
   );
