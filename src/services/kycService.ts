@@ -54,7 +54,7 @@ function _mapDbKycToDto(kycStatus: InferSelectModel<typeof kycRequests>, kycConf
         throw new Error("Treova form ID is not configured for this round");
       }
 
-      formUrl = `https://kyc.treova.ai/${kycConfiguration.treovaFormId}`;
+      formUrl = `https://verify.treova.ai/${kycConfiguration.treovaFormId}`;
       break;
   }
 
