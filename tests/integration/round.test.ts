@@ -347,7 +347,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     await withSuperOakApp((request) =>
       request
         .post(`/api/testing/force-round-state`)
-        .set("Authorization", `Bearer ${authToken}`)
         .send({
           roundSlug,
           desiredState: 'intake',
@@ -615,7 +614,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     assertFalse(anonResponse.text.includes("test@testerson.com"));
 
     // ... and all the same tests for CSV export
-  
+
     const adminCsvRes = await withSuperOakApp((request) =>
       request
         .get(`/api/rounds/${roundId}/applications?format=csv`)
