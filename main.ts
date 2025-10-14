@@ -81,6 +81,16 @@ app.use(async (ctx, next) => {
 app.use(healthRoutes.routes());
 app.use(healthRoutes.allowedMethods());
 
+if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
+  console.warn("----------------------------------------------------------------------")
+  console.warn("☠️⚠️☠️ DANGEROUS TEST ROUTES ENABLED! ☠️⚠️☠️");
+  console.warn("The ENABLE_DANGEROUS_TEST_ROUTES environment variable MUST be set to false in production environments.");
+  console.warn("----------------------------------------------------------------------")
+
+  app.use(dangerousTestRoutes.routes());
+  app.use(dangerousTestRoutes.allowedMethods());
+}
+
 app.use(authMiddleware);
 
 app.use(authRoutes.routes());
@@ -118,16 +128,6 @@ app.use(auditLogRoutes.allowedMethods());
 
 app.use(kycRoutes.routes());
 app.use(kycRoutes.allowedMethods());
-
-if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
-  console.warn("----------------------------------------------------------------------")
-  console.warn("☠️⚠️☠️ DANGEROUS TEST ROUTES ENABLED! ☠️⚠️☠️");
-  console.warn("The ENABLE_DANGEROUS_TEST_ROUTES environment variable MUST be set to false in production environments.");
-  console.warn("----------------------------------------------------------------------")
-
-  app.use(dangerousTestRoutes.routes());
-  app.use(dangerousTestRoutes.allowedMethods());
-}
 
 if (import.meta.main) {
   const port = parseInt(Deno.env.get("PORT") || "8000");
