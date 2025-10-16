@@ -87,7 +87,7 @@ async function createRefreshToken(
 ) {
   const jwtSecretKey = await getJwtSecret();
   const expirationMinutes = parseInt(
-    Deno.env.get("REFRESH_JWT_EXPIRATION_MINUTES") || "60",
+    Deno.env.get("REFRESH_JWT_EXPIRATION_MINUTES") || "43200",
   );
 
   const payload: RefreshTokenJwtPayload = {
