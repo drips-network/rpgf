@@ -27,7 +27,7 @@ export function validateAnswers(
   // ensure all required fields are present in the answers
   const requiredFields = applicationFields.filter((f) => f.required).map((f) => f.id);
   for (const requiredFieldId of requiredFields) {
-    if (!dto.find((a) => a.fieldId === requiredFieldId && a.value.toString().trim() !== "")) {
+    if (!dto.find((a) => a.fieldId === requiredFieldId && a.value?.toString().trim() != "")) {
       log(LogLevel.Warn, "Required field not found in answers", {
         requiredFieldId,
       });
