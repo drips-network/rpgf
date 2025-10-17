@@ -225,12 +225,12 @@ export async function recordAnswers(
   return await tx.transaction(async (tx) => {
 
     await Promise.all(fields.map(async (field) => {
-      const answerValue = dto.find(a => a.fieldId === field.id)?.value;
+      const answerValue = dto.find(a => a.fieldId === field.id)?.value ?? null;
 
       await tx.insert(applicationAnswers).values({
         applicationVersionId: applicationVersionId,
         fieldId: field.id,
-        answer: answerValue ? JSON.stringify(answerValue) : null,
+        answer: answerValue === null ? null : JSON.stringify(answerValue),
       });
     }));
 
