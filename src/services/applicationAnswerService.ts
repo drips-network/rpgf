@@ -27,7 +27,9 @@ export function validateAnswers(
   // ensure all required fields are present in the answers
   const requiredFields = applicationFields.filter((f) => f.required).map((f) => f.id);
   for (const requiredFieldId of requiredFields) {
-    if (!dto.find((a) => a.fieldId === requiredFieldId && a.value.toString().trim() !== "")) {
+    const answer = dto.find((a) => a.fieldId === requiredFieldId);
+
+    if (!answer || !answer.value) {
       log(LogLevel.Warn, "Required field not found in answers", {
         requiredFieldId,
       });
@@ -221,12 +223,15 @@ export async function recordAnswers(
   }
 
   return await tx.transaction(async (tx) => {
-    await Promise.all(dto.map(async (answer) => {
+
+    await Promise.all(fields.map(async (field) => {
+      const answerValue = dto.find(a => a.fieldId === field.id)?.value ?? null;
+
       await tx.insert(applicationAnswers).values({
         applicationVersionId: applicationVersionId,
-        fieldId: answer.fieldId,
-        answer: JSON.stringify(answer.value),
-      })
+        fieldId: field.id,
+        answer: answerValue === null ? null : JSON.stringify(answerValue),
+      });
     }));
 
     return await getAnswersByApplicationVersionId(applicationVersionId, false, tx);

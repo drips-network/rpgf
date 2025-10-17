@@ -1,0 +1,1 @@
+ALTER TABLE "application_answers" ALTER COLUMN "answer" DROP NOT NULL;
