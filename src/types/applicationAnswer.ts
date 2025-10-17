@@ -9,7 +9,7 @@ export type ApplicationUrlAnswer = {
 }
 export const applicationUrlAnswerDtoSchema = z.object({
   fieldId: z.string().min(1).max(255),
-  value: z.string().max(2000).url(),
+  value: z.string().max(2000).url().nullable(),
 });
 
 export type ApplicationTextAnswer = {
@@ -20,7 +20,7 @@ export type ApplicationTextAnswer = {
 }
 export const applicationTextAnswerDtoSchema = z.object({
   fieldId: z.string().min(1).max(255),
-  value: z.string().max(10000),
+  value: z.string().max(10000).nullable(),
 });
 
 export type ApplicationEmailAnswer = {
@@ -31,7 +31,7 @@ export type ApplicationEmailAnswer = {
 }
 export const applicationEmailAnswerDtoSchema = z.object({
   fieldId: z.string().min(1).max(255),
-  value: z.string().max(255).email(),
+  value: z.string().max(255).email().nullable(),
 });
 
 export type ApplicationListAnswer = {
@@ -42,7 +42,7 @@ export type ApplicationListAnswer = {
 }
 export const applicationListAnswerDtoSchema = z.object({
   fieldId: z.string().min(1).max(255),
-  value: z.array(z.record(z.union([z.string().max(1000), z.number()]))).max(100),
+  value: z.array(z.record(z.union([z.string().max(1000), z.number()]))).max(100).nullable(),
 });
 
 export type ApplicationSelectAnswer = {
@@ -53,7 +53,7 @@ export type ApplicationSelectAnswer = {
 }
 export const applicationSelectAnswerDtoSchema = z.object({
   fieldId: z.string().min(1).max(255),
-  value: z.array(z.string().min(1).max(255)).max(100),
+  value: z.array(z.string().min(1).max(255)).max(100).nullable(),
 });
 
 export type ApplicationAnswer =

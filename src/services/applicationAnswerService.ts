@@ -221,12 +221,15 @@ export async function recordAnswers(
   }
 
   return await tx.transaction(async (tx) => {
-    await Promise.all(dto.map(async (answer) => {
+
+    await Promise.all(fields.map(async (field) => {
+      const answerValue = dto.find(a => a.fieldId === field.id)?.value;
+
       await tx.insert(applicationAnswers).values({
         applicationVersionId: applicationVersionId,
-        fieldId: answer.fieldId,
-        answer: JSON.stringify(answer.value),
-      })
+        fieldId: field.id,
+        answer: answerValue ? JSON.stringify(answerValue) : null,
+      });
     }));
 
     return await getAnswersByApplicationVersionId(applicationVersionId, false, tx);
