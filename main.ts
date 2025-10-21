@@ -13,6 +13,7 @@ import roundAdminRoutes from "$app/routes/roundAdminRoutes.ts";
 import dangerousTestRoutes from "$app/routes/dangerousTestRoutes.ts";
 import auditLogRoutes from "$app/routes/auditLogRoutes.ts";
 import kycRoutes from "$app/routes/kycRoutes.ts";
+import customDatasetRoutes from "$app/routes/customDatasetRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
@@ -118,6 +119,9 @@ app.use(auditLogRoutes.allowedMethods());
 
 app.use(kycRoutes.routes());
 app.use(kycRoutes.allowedMethods());
+
+app.use(customDatasetRoutes.routes());
+app.use(customDatasetRoutes.allowedMethods());
 
 if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
   console.warn("----------------------------------------------------------------------")

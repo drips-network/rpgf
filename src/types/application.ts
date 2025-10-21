@@ -59,6 +59,11 @@ export type Application = {
   // Included so that this type extends ListingApplication
   projectName: string;
   dripsProjectDataSnapshot: ProjectData;
+  customDatasetValues: {
+    datasetId: string;
+    datasetName: string;
+    values: Record<string, string | number | boolean | null>;
+  }[];
 };
 
 export type ListingApplication = {
