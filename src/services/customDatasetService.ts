@@ -109,10 +109,7 @@ export async function uploadCustomDataset(
   for (let i = 0; i < dataRows.length; i++) {
     const row = dataRows[i];
     const applicationId = row[0];
-    if (!applicationId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      errors.push(`Row ${i + 2}: Invalid application ID format '${applicationId}'.`);
-    }
-    else if (!roundApplicationIds.has(applicationId)) {
+    if (!roundApplicationIds.has(applicationId)) {
       errors.push(`Row ${i + 2}: Application with ID '${applicationId}' not found in this round.`);
     }
   }
