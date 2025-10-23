@@ -6,7 +6,13 @@ import { SetRoundAdminsDto } from "./roundAdmin.ts";
 import { SetRoundVotersDto } from "./roundVoter.ts";
 import { CreateApplicationCategoryDto } from "./applicationCategory.ts";
 import { CreateApplicationFormDto } from "./applicationForm.ts";
+import { CreateCustomDatasetDto, UpdateCustomDatasetDto } from "./customDataset.ts";
 import { KycProvider, KycStatus } from "./kyc.ts";
+
+type CustomDatasetCreatedPayload = CreateCustomDatasetDto & { id: string };
+type CustomDatasetUpdatedPayload = UpdateCustomDatasetDto & { id: string };
+type CustomDatasetDeletedPayload = { id: string };
+type CustomDatasetUploadedPayload = { id: string; rowCount: number };
 
 type RoundCreatedPayload = CreateRoundDto;
 type RoundSettingsChangedPayload = PatchRoundDto;
@@ -73,9 +79,19 @@ export enum AuditLogAction {
   KycRequestCreated = "kyc_request_created",
   KycRequestLinkedToApplication = "kyc_request_linked_to_application",
   KycRequestUpdated = "kyc_request_updated",
+
+  CustomDatasetCreated = "custom_dataset_created",
+  CustomDatasetUpdated = "custom_dataset_updated",
+  CustomDatasetDeleted = "custom_dataset_deleted",
+  CustomDatasetUploaded = "custom_dataset_uploaded",
 }
 
 export type PayloadByAction = {
+  [AuditLogAction.CustomDatasetCreated]: CustomDatasetCreatedPayload;
+  [AuditLogAction.CustomDatasetUpdated]: CustomDatasetUpdatedPayload;
+  [AuditLogAction.CustomDatasetDeleted]: CustomDatasetDeletedPayload;
+  [AuditLogAction.CustomDatasetUploaded]: CustomDatasetUploadedPayload;
+
   [AuditLogAction.RoundCreated]: RoundCreatedPayload;
   [AuditLogAction.RoundSettingsChanged]: RoundSettingsChangedPayload;
   [AuditLogAction.RoundAdminsChanged]: RoundAdminsChangedPayload;

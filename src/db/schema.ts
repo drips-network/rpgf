@@ -334,6 +334,10 @@ export const auditLogAction = pgEnum('audit_log_action', [
   'kyc_request_created',
   'kyc_request_linked_to_application',
   'kyc_request_updated',
+  'custom_dataset_created',
+  'custom_dataset_updated',
+  'custom_dataset_deleted',
+  'custom_dataset_uploaded',
 ]);
 
 export type DbAuditLogActor =
