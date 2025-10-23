@@ -43,6 +43,13 @@
       "when": 1761030949976,
       "tag": "0005_big_tombstone",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1761216007588,
+      "tag": "0006_loving_raider",
+      "breakpoints": true
     }
   ]
 }
