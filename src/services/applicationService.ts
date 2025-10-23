@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, InferSelectModel, isNull, or } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
-import { applicationCategories, applicationFormFields, applicationKycRequests, applications, applicationVersions, kycRequests, results, rounds, users } from "../db/schema.ts";
+import { applicationCategories, applicationFormFields, applicationKycRequests, applications, applicationVersions, customDatasets, customDatasetFields, customDatasetValues, kycRequests, results, rounds, users } from "../db/schema.ts";
 import { log, LogLevel } from "./loggingService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
@@ -211,6 +211,7 @@ function mapDbApplicationToDto(
       form: { id: string; name: string; };
       category: InferSelectModel<typeof applicationCategories>;
     })[];
+    customDatasetValues?: (InferSelectModel<typeof customDatasetValues> & { dataset: InferSelectModel<typeof customDatasets> })[];
   },
   submitter: { id: string; walletAddress: string },
   resultAllocation: number | null,
@@ -243,6 +244,11 @@ function mapDbApplicationToDto(
       },
       answers: latestVersion.answers,
     },
+    customDatasetValues: application.customDatasetValues?.map((cdv) => ({
+      datasetId: cdv.datasetId,
+      datasetName: cdv.dataset.name,
+      values: cdv.values,
+    })) ?? [],
   }
 }
 
@@ -464,6 +470,7 @@ export async function createApplication(
         form: applicationCategory.form,
         category: applicationCategory,
       }],
+      customDatasetValues: [],
     };
   });
 
@@ -668,6 +675,7 @@ export async function updateApplication(
         ...v,
         answers: mapDbAnswersToDto(v.answers, false),
       })),
+      customDatasetValues: [],
     };
   });
 
@@ -835,6 +843,12 @@ export async function getApplication(
       ...v,
       answers: mapDbAnswersToDto(v.answers, !userIsAdmin && !userIsSubmitter),
     })),
+    customDatasetValues: (await db.query.customDatasetValues.findMany({
+      where: eq(customDatasetValues.applicationId, application.id),
+      with: {
+        dataset: true,
+      },
+    })).filter((cdv) => cdv.dataset.isPublic),
   };
 
   // Return calculated result if exists & published or exists & user is admin
@@ -1013,6 +1027,21 @@ export async function getApplicationsCsv(
       .filter((s): s is string => s !== null)
   )));
 
+  const publicDatasets = await db.query.customDatasets.findMany({
+    where: and(
+      eq(customDatasets.roundId, roundId),
+      eq(customDatasets.isPublic, true),
+    ),
+    with: {
+      fields: {
+        orderBy: asc(customDatasetFields.order),
+      },
+      values: true,
+    },
+  });
+
+  const datasetHeaders = publicDatasets.flatMap((ds) => ds.fields.map((f) => `${ds.name}:${f.name}`));
+
   const kycSlugs = includeKycData ? [
     "KYC Status",
     "KYC Email address",
@@ -1021,7 +1050,7 @@ export async function getApplicationsCsv(
   ] : [];
 
   const csvData = [
-    ["ID", "State", "Project Name", "GitHub URL", "Drips Account ID", "Submitter Wallet Address", "Category ID", "Category Name", "Form ID", "Form Name", ...kycSlugs, ...uniqueAnswerSlugs, "Created At", "Allocation"],
+    ["ID", "State", "Project Name", "GitHub URL", "Drips Account ID", "Submitter Wallet Address", "Category ID", "Category Name", "Form ID", "Form Name", ...kycSlugs, ...uniqueAnswerSlugs, ...datasetHeaders, "Created At", "Allocation"],
     ...data.map((app) => [
       app.id,
       app.state,
@@ -1042,6 +1071,10 @@ export async function getApplicationsCsv(
       ...uniqueAnswerSlugs.map((slug) => {
         const answer = app.versions[0].answers.find((a) => a.field.slug === slug);
         return answer ? (typeof answer.answer === "string" ? answer.answer : JSON.stringify(answer.answer)) : "";
+      }),
+      ...publicDatasets.flatMap((ds) => {
+        const appValues = ds.values.find((v) => v.applicationId === app.id);
+        return ds.fields.map((f) => appValues?.values[f.name]?.toString() ?? "");
       }),
       app.createdAt.toISOString(),
       includeVoteResult ? (app.result !== null ? app.result.result.toString() : "") : "",

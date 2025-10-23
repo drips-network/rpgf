@@ -61,7 +61,7 @@ try {
     '--env-file=.env.test',
     '--allow-read',
     '--trace-leaks',
-    'tests/'
+    './tests'
   ], { 
     cwd: projectRoot, 
     stdio: 'inherit' 

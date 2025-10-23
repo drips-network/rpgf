@@ -10,6 +10,7 @@ import { UnauthenticatedAppState } from "../../main.ts";
 import { Context } from "oak";
 import parseDto from "../utils/parseDto.ts";
 import { z } from "zod";
+import { log, LogLevel } from "$app/services/loggingService.ts";
 
 const ENABLE_DANGEROUS_TEST_ROUTES = Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true";
 
@@ -111,13 +112,19 @@ export async function dangerouslyForceRoundStateController(
     }
   }
 
-  await db.update(rounds).set({
+  const updated = await db.update(rounds).set({
     applicationPeriodStart: newSchedule.applicationPeriodStart,
     applicationPeriodEnd: newSchedule.applicationPeriodEnd,
     votingPeriodStart: newSchedule.votingPeriodStart,
     votingPeriodEnd: newSchedule.votingPeriodEnd,
     resultsPeriodStart: newSchedule.resultsPeriodStart,
-  }).where(eq(rounds.urlSlug, roundSlug));
+  }).where(eq(rounds.urlSlug, roundSlug)).returning();
+
+  log(LogLevel.Info, `Round ${roundSlug} forced into state ${desiredState}`, {
+    roundSlug: roundSlug,
+    desiredState: desiredState,
+    roundId: updated[0].id,
+  });
 
   ctx.response.status = 200;
   ctx.response.body = {

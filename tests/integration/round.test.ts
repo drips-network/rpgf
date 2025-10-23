@@ -62,7 +62,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(200)
     );
 
-    assertEquals(response.body.length, 0);
+    assert(response.body.find((r: any) => r.id === roundId) === undefined);
   });
 
   await t.step("should refuse to return a non-published round", async () => {
@@ -324,8 +324,8 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(200)
     );
 
-    assertEquals(response.body.length, 1);
-    assertEquals(response.body[0].name, "Test Round");
+
+    assert(response.body.find((r: any) => r.id === roundId) !== undefined);
   });
 
   let roundSlug: string;

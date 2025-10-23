@@ -386,6 +386,45 @@ export const applicationKycRequestsRelations = relations(applicationKycRequests,
 
 // Treova sends an idempotency key with each webhook to ensure we don't process the same event twice
 // we keep track of them here
+
+export const customDatasets = pgTable("custom_datasets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: 'cascade' }),
+  name: varchar("name", { length: 255 }).notNull(),
+  isPublic: boolean("is_public").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export const customDatasetsRelations = relations(customDatasets, ({ one, many }) => ({
+  round: one(rounds, { fields: [customDatasets.roundId], references: [rounds.id] }),
+  fields: many(customDatasetFields),
+  values: many(customDatasetValues),
+}));
+
+export const customDatasetFields = pgTable("custom_dataset_fields", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  datasetId: uuid("dataset_id").notNull().references(() => customDatasets.id, { onDelete: 'cascade' }),
+  name: varchar("name", { length: 255 }).notNull(),
+  order: integer("order").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const customDatasetFieldsRelations = relations(customDatasetFields, ({ one }) => ({
+  dataset: one(customDatasets, { fields: [customDatasetFields.datasetId], references: [customDatasets.id] }),
+}));
+
+export const customDatasetValues = pgTable("custom_dataset_values", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  datasetId: uuid("dataset_id").notNull().references(() => customDatasets.id, { onDelete: 'cascade' }),
+  applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
+  values: jsonb("values").notNull().$type<Record<string, string | number | boolean | null>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export const customDatasetValuesRelations = relations(customDatasetValues, ({ one }) => ({
+  dataset: one(customDatasets, { fields: [customDatasetValues.datasetId], references: [customDatasets.id] }),
+  application: one(applications, { fields: [customDatasetValues.applicationId], references: [applications.id] }),
+}));
+
 export const treovaWebhooks = pgTable("treova_webhooks", {
   id: uuid("id").primaryKey().defaultRandom(),
   treovaIdempotencyKey: varchar("treova_idempotency_key", { length: 255 }).notNull().unique(),
