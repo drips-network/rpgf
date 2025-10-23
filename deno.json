@@ -35,7 +35,7 @@
     }
   },
   "tasks": {
-    "start": "deno run --node-modules-dir --allow-net --allow-env --allow-read main.ts",
+    "start": "deno run --node-modules-dir --allow-net --allow-env --allow-read --allow-import main.ts",
     "dev": "deno run --node-modules-dir --watch --allow-net --allow-env --env-file --allow-read --allow-import main.ts",
     "configure-chain": "deno run --node-modules-dir --allow-net --allow-env --env-file ./scripts/add-chain.ts",
     "db:generate": "deno run -A --node-modules-dir npm:drizzle-kit generate",
