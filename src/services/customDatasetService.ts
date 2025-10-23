@@ -115,13 +115,21 @@ export async function uploadCustomDataset(
 
   const roundApplicationIds = new Set(roundApplications.map((app) => app.id));
   const errors: string[] = [];
+  const seenApplicationIds = new Set<string>();
 
   for (let i = 0; i < dataRows.length; i++) {
     const row = dataRows[i];
     const applicationId = row[0];
+
+    if (seenApplicationIds.has(applicationId)) {
+      errors.push(`Row ${i + 2}: Duplicate application ID '${applicationId}'.`);
+    }
+
     if (!roundApplicationIds.has(applicationId)) {
       errors.push(`Row ${i + 2}: Application with ID '${applicationId}' not found in this round.`);
     }
+
+    seenApplicationIds.add(applicationId);
   }
 
   if (errors.length > 0) {

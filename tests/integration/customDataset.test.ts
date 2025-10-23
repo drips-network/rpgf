@@ -364,5 +364,17 @@ Deno.test(
           .expect(400)
       );
     });
+
+    await t.step("should reject dataset with duplicate applicationIds", async () => {
+      const csv = `applicationId,foo,bar\n${application.id},baz,qux\n${application.id},foo,bar`;
+
+      await withSuperOakApp((req) =>
+        req
+          .post(`/api/rounds/${round.id}/custom-datasets/${dataset.id}/upload`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send(csv)
+          .expect(400)
+      );
+    });
   }
 );
