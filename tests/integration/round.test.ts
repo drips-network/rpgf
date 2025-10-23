@@ -324,7 +324,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(200)
     );
 
-    console.log({ rounderonis: response.body, roundId });
 
     assert(response.body.find((r: any) => r.id === roundId) !== undefined);
   });
