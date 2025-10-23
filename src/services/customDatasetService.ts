@@ -2,6 +2,9 @@ import { CreateCustomDatasetDto, CustomDataset, UpdateCustomDatasetDto } from "$
 import { db } from "$app/db/postgres.ts";
 import { applications, customDatasetFields, customDatasets, customDatasetValues, rounds } from "$app/db/schema.ts";
 import { and, count, eq, inArray, InferSelectModel } from "drizzle-orm";
+import { createLog } from "./auditLogService.ts";
+import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+import { log, LogLevel } from "./loggingService.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { NotFoundError } from "$app/errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
@@ -25,6 +28,7 @@ export async function createCustomDataset(
   dto: CreateCustomDatasetDto,
   creatorUserId: string,
 ): Promise<CustomDataset> {
+  log(LogLevel.Info, "Creating custom dataset", { roundId, creatorUserId, dto });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -45,12 +49,27 @@ export async function createCustomDataset(
     throw new BadRequestError("A round can have a maximum of 5 custom datasets.");
   }
 
-  const [dataset] = await db.insert(customDatasets).values({
-    roundId,
-    name: dto.name,
-  }).returning();
+  const result = await db.transaction(async (tx) => {
+    const [dataset] = await tx.insert(customDatasets).values({
+      roundId,
+      name: dto.name,
+    }).returning();
 
-  return mapDbCustomDatasetToDto(dataset, 0);
+    await createLog({
+      type: AuditLogAction.CustomDatasetCreated,
+      roundId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: creatorUserId,
+      },
+      payload: { ...dto, id: dataset.id },
+      tx,
+    });
+
+    return dataset;
+  });
+
+  return mapDbCustomDatasetToDto(result, 0);
 }
 
 export async function uploadCustomDataset(
@@ -59,6 +78,7 @@ export async function uploadCustomDataset(
   csv: string,
   uploaderUserId: string,
 ): Promise<CustomDataset> {
+  log(LogLevel.Info, "Uploading custom dataset", { roundId, datasetId, uploaderUserId });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -175,6 +195,17 @@ export async function uploadCustomDataset(
 
     const rowCount = valuesToInsert.length;
 
+    await createLog({
+      type: AuditLogAction.CustomDatasetUploaded,
+      roundId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: uploaderUserId,
+      },
+      payload: { id: datasetId, rowCount },
+      tx,
+    });
+
     return mapDbCustomDatasetToDto(created, rowCount);
   });
 
@@ -187,6 +218,7 @@ export async function updateCustomDataset(
   dto: UpdateCustomDatasetDto,
   updaterUserId: string,
 ): Promise<CustomDataset> {
+  log(LogLevel.Info, "Updating custom dataset", { roundId, datasetId, updaterUserId, dto });
   if (Object.keys(dto).length === 0) {
     throw new BadRequestError("No fields to update.");
   }
@@ -206,11 +238,26 @@ export async function updateCustomDataset(
     throw new UnauthorizedError("Only round admins can update datasets.");
   }
 
-  const [updated] = await db.update(customDatasets).set(dto).where(
-    eq(customDatasets.id, datasetId),
-  ).returning();
+  const result = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(customDatasets).set(dto).where(
+      eq(customDatasets.id, datasetId),
+    ).returning();
 
-  return mapDbCustomDatasetToDto(updated, await db.select({ count: count() }).from(customDatasetValues).where(
+    await createLog({
+      type: AuditLogAction.CustomDatasetUpdated,
+      roundId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: updaterUserId,
+      },
+      payload: { ...dto, id: datasetId },
+      tx,
+    });
+
+    return updated;
+  });
+
+  return mapDbCustomDatasetToDto(result, await db.select({ count: count() }).from(customDatasetValues).where(
     eq(customDatasetValues.datasetId, datasetId),
   ).then((res) => res[0].count));
 }
@@ -219,6 +266,7 @@ export async function listCustomDatasets(
   roundId: string,
   requestingUserId?: string,
 ): Promise<CustomDataset[]> {
+  log(LogLevel.Info, "Listing custom datasets", { roundId, requestingUserId });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -259,6 +307,7 @@ async function getCustomDataset(
   roundId: string,
   datasetId: string,
 ) {
+  log(LogLevel.Info, "Getting custom dataset", { roundId, datasetId });
   const dataset = await db.query.customDatasets.findFirst({
     where: and(
       eq(customDatasets.id, datasetId),
@@ -281,6 +330,7 @@ export async function downloadCustomDataset(
   roundId: string,
   datasetId: string,
 ) {
+  log(LogLevel.Info, "Downloading custom dataset", { roundId, datasetId });
   const dataset = await getCustomDataset(roundId, datasetId);
   const headers = ["applicationId", ...dataset.fields.map((f) => f.name)];
   const rows = dataset.values.map((v) => {
@@ -299,6 +349,7 @@ export async function deleteCustomDataset(
   datasetId: string,
   deleterUserId: string,
 ) {
+  log(LogLevel.Info, "Deleting custom dataset", { roundId, datasetId, deleterUserId });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -314,5 +365,18 @@ export async function deleteCustomDataset(
     throw new UnauthorizedError("Only round admins can delete datasets.");
   }
 
-  await db.delete(customDatasets).where(eq(customDatasets.id, datasetId));
+  await db.transaction(async (tx) => {
+    await tx.delete(customDatasets).where(eq(customDatasets.id, datasetId));
+
+    await createLog({
+      type: AuditLogAction.CustomDatasetDeleted,
+      roundId,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: deleterUserId,
+      },
+      payload: { id: datasetId },
+      tx,
+    });
+  });
 }
