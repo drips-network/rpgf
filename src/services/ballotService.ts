@@ -78,6 +78,8 @@ async function createBallot(
     ),
   });
 
+  console.log({ applicationsForRound });
+
   // throw bad request if any of the application ids are not in the approved applications
   const approvedApplicationIds = applicationsForRound.map((app) => app.id);
   const invalidApplicationIds = includedApplicationIds.filter(
@@ -135,21 +137,25 @@ export async function submitBallot(
       throw new BadRequestError("Round is not properly configured for voting");
     }
 
-    const existingBallot = await getBallot(roundId, userId, tx);
-    if (existingBallot) {
-      log(LogLevel.Error, "User has already submitted a ballot for this round", {
-        userId,
-        roundId,
-      });
-      throw new BadRequestError(
-        "You have already submitted a ballot for this round",
-      );
-    }
-
     validateBallot(ballotDto.ballot, {
       maxVotesPerVoter: round.maxVotesPerVoter,
       maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
     });
+
+    const existingBallot = await getBallot(roundId, userId, tx);
+    if (existingBallot) {
+      log(LogLevel.Error, "Deleting existing ballot", {
+        userId,
+        roundId,
+      });
+
+      await tx.delete(ballots).where(
+        and(
+          eq(ballots.roundId, round.id),
+          eq(ballots.voterUserId, userId),
+        ),
+      );
+    }
 
     const result = await createBallot(tx, round.id, userId, ballotDto);
 
@@ -168,78 +174,6 @@ export async function submitBallot(
     });
 
     return result;
-  });
-
-  return result;
-}
-
-export async function patchBallot(
-  userId: string,
-  roundId: string,
-  ballotDto: SubmitBallotDto,
-): Promise<WrappedBallot> {
-  log(LogLevel.Info, "Patching ballot", { userId, roundId });
-  const result = await db.transaction(async (tx) => {
-    const round = await getRound(roundId, userId);
-    if (!round) {
-      log(LogLevel.Error, "Round not found", { roundId });
-      throw new NotFoundError("Round not found");
-    }
-    if (!round.isVoter) {
-      log(LogLevel.Error, "User is not a voter for this round", {
-        userId,
-        roundId,
-      });
-      throw new UnauthorizedError("You are not a voter for this round");
-    }
-    if (round.state !== "voting") {
-      log(LogLevel.Error, "Round is not in voting state", { roundId });
-      throw new BadRequestError("Round is not in voting state");
-    }
-    if (!round.published || !round.maxVotesPerProjectPerVoter || !round.maxVotesPerVoter) {
-      log(LogLevel.Error, "Round is not properly configured for voting", {
-        roundId,
-      });
-      throw new BadRequestError("Round is not properly configured for voting");
-    }
-
-    validateBallot(ballotDto.ballot, {
-      maxVotesPerVoter: round.maxVotesPerVoter,
-      maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
-    });
-
-    const existingBallot = await getBallot(roundId, userId);
-    if (!existingBallot) {
-      log(LogLevel.Error, "Ballot not found", { userId, roundId });
-      throw new BadRequestError("Ballot not found");
-    }
-
-    await tx.update(ballots).set({
-      ballot: ballotDto.ballot,
-    }).where(
-      eq(ballots.id, existingBallot.id),
-    );
-
-    const ballot = await getBallot(round.id, userId);
-    if (!ballot) {
-      throw new Error("Ballot not found after submission");
-    }
-
-    await createLog({
-      type: AuditLogAction.BallotUpdated,
-      roundId: round.id,
-      actor: {
-        type: AuditLogActorType.User,
-        userId,
-      },
-      payload: {
-        ...ballotDto,
-        id: ballot.id,
-      },
-      tx,
-    })
-
-    return ballot;
   });
 
   return result;

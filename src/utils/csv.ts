@@ -25,3 +25,10 @@ export function convertToXlsxBuffer(csv: string): Uint8Array {
 
   return buff;
 }
+
+export function convertXlsxToCsv(xlsxBuffer: ArrayBuffer): string {
+  return XLSX.utils.sheet_to_csv(
+    XLSX.read(xlsxBuffer, { type: 'buffer' }).Sheets.Sheet1,
+    { blankrows: false }
+  );
+}
