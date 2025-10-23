@@ -17,7 +17,8 @@
     "zod": "npm:zod@^3.24.4",
     "is-ipfs": "npm:is-ipfs@^8.0.4",
     "superoak": "https://deno.land/x/superoak/mod.ts",
-    "execa": "npm:execa@^9.6.0"
+    "execa": "npm:execa@^9.6.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs"
   },
   "fmt": {
     "options": {
@@ -35,7 +36,7 @@
   },
   "tasks": {
     "start": "deno run --node-modules-dir --allow-net --allow-env --allow-read main.ts",
-    "dev": "deno run --node-modules-dir --watch --allow-net --allow-env --env-file --allow-read main.ts",
+    "dev": "deno run --node-modules-dir --watch --allow-net --allow-env --env-file --allow-read --allow-import main.ts",
     "configure-chain": "deno run --node-modules-dir --allow-net --allow-env --env-file ./scripts/add-chain.ts",
     "db:generate": "deno run -A --node-modules-dir npm:drizzle-kit generate",
     "db:migrate": "deno run -A --node-modules-dir npm:drizzle-kit migrate",

@@ -15,6 +15,7 @@ import {
 import { parseSortParam } from "../utils/sort.ts";
 import { parseFilterParams } from "../utils/filter.ts";
 import { z } from "zod";
+import { convertToXlsxBuffer } from "../utils/csv.ts";
 
 export async function createAppplicationController(
   ctx: RouterContext<
@@ -91,8 +92,8 @@ export async function getApplicationsForRoundController(
     categoryId: z.string().optional(),
   });
 
-  if (!(format === "json" || format === "csv")) {
-    throw new BadRequestError("Invalid format, only 'json' and 'csv' are supported");
+  if (!(format === "json" || format === "csv" || format === "xlsx")) {
+    throw new BadRequestError("Invalid format, only 'json', 'csv' and 'xlsx' are supported");
   }
 
   if (format === "json") {
@@ -107,11 +108,23 @@ export async function getApplicationsForRoundController(
     ctx.response.status = 200;
     ctx.response.body = applications;
     return;
-  } else if (format === "csv") {
+  } else if (format === "csv" || format === "xlsx") {
     const csv = await getApplicationsCsv(
       roundId,
       userId ?? null,
     );
+
+    if (format === "xlsx") {
+      const buff = convertToXlsxBuffer(csv);
+
+      ctx.response.status = 200;
+      ctx.response.headers.set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      ctx.response.headers.set("Content-Disposition", `attachment; filename="applications_${roundId}.xlsx"`);
+      ctx.response.body = buff;
+
+      return;
+    }
+
     ctx.response.status = 200;
     ctx.response.headers.set("Content-Type", "text/csv");
     ctx.response.headers.set("Content-Disposition", `attachment; filename="applications_${roundId}.csv"`);
