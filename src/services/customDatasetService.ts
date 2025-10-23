@@ -130,7 +130,6 @@ export async function uploadCustomDataset(
 
   const result = await db.transaction(async (tx) => {
     await tx.delete(customDatasetFields).where(eq(customDatasetFields.datasetId, datasetId));
-    await tx.delete(customDatasetValues).where(eq(customDatasetValues.datasetId, datasetId));
 
     const fieldNames = header.slice(1);
     const fieldsToInsert = fieldNames.map((name: string, i: number) => ({
