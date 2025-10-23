@@ -39,6 +39,12 @@ export async function createCustomDataset(
   if (!isUserRoundAdmin(round, creatorUserId)) {
     throw new UnauthorizedError("Only round admins can create datasets.");
   }
+
+  const datasetCount = await db.select({ count: count() }).from(customDatasets).where(eq(customDatasets.roundId, roundId));
+  if (datasetCount[0].count >= 5) {
+    throw new BadRequestError("A round can have a maximum of 5 custom datasets.");
+  }
+
   const [dataset] = await db.insert(customDatasets).values({
     roundId,
     name: dto.name,
@@ -77,6 +83,10 @@ export async function uploadCustomDataset(
   const header = rows[0];
   if (header[0] !== "applicationId") {
     throw new BadRequestError("First column of CSV must be 'applicationId'.");
+  }
+
+  if (header.length - 1 > 10) {
+    throw new BadRequestError("A custom dataset can have a maximum of 10 fields.");
   }
 
   const dataRows = rows.slice(1);

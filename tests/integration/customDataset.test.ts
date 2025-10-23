@@ -21,7 +21,7 @@ Deno.test(
     const adminUser = await createUser();
     const roundData: CreateRoundDto = {
       draft: true,
-      name: "Test Round",
+      name: "custom dataset test round",
       emoji: "🧪",
       chainId: 1,
       color: "#27C537",
@@ -45,7 +45,7 @@ Deno.test(
       maxVotesPerProjectPerVoter: 10,
       voterGuidelinesLink: "https://example.com",
       customAvatarCid: null,
-      urlSlug: "test-round",
+      urlSlug: "custom-dataset-test-round",
       kycProvider: null,
     };
     const round = await createRound(roundData, adminUser.id);
@@ -274,9 +274,7 @@ Deno.test(
     await t.step("should set the custom dataset to public", async () => {
       const res = await withSuperOakApp((req) =>
         req
-          .patch(
-            `/api/rounds/${round.id}/custom-datasets/${dataset.id}`
-          )
+          .patch(`/api/rounds/${round.id}/custom-datasets/${dataset.id}`)
           .set("Authorization", `Bearer ${authToken}`)
           .send({ isPublic: true })
           .expect(200)
@@ -294,10 +292,13 @@ Deno.test(
             .set("Authorization", `Bearer ${secondUserAuthToken}`)
             .expect(200)
         );
-        
+
         assertEquals(res.body.customDatasetValues.length, 1);
         assertEquals(res.body.customDatasetValues[0].datasetId, dataset.id);
-        assertEquals(res.body.customDatasetValues[0].values, { foo: "baz", bar: "qux" } );
+        assertEquals(res.body.customDatasetValues[0].values, {
+          foo: "baz",
+          bar: "qux",
+        });
       }
     );
 
@@ -312,6 +313,57 @@ Deno.test(
       assert(adminResponse.text.includes("Test Dataset:foo,Test Dataset:bar"));
       assert(adminResponse.text.includes(`baz,qux`));
       assert(adminResponse.text.includes(application.id));
+    });
+
+    await t.step("should cap amount of datasets at max 5", async () => {
+      await withSuperOakApp((req) =>
+        req
+          .put(`/api/rounds/${round.id}/custom-datasets`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send({ name: "Test Dataset 2" })
+          .expect(200)
+      );
+      await withSuperOakApp((req) =>
+        req
+          .put(`/api/rounds/${round.id}/custom-datasets`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send({ name: "Test Dataset 3" })
+          .expect(200)
+      );
+      await withSuperOakApp((req) =>
+        req
+          .put(`/api/rounds/${round.id}/custom-datasets`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send({ name: "Test Dataset 4" })
+          .expect(200)
+      );
+      await withSuperOakApp((req) =>
+        req
+          .put(`/api/rounds/${round.id}/custom-datasets`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send({ name: "Test Dataset 5" })
+          .expect(200)
+      );
+      await withSuperOakApp((req) =>
+        req
+          .put(`/api/rounds/${round.id}/custom-datasets`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send({ name: "Test Dataset 6" })
+          .expect(400)
+      );
+    });
+
+    await t.step("should cap amount of fields in dataset at 10", async () => {
+
+      const csv = `applicationId,field1,field2,field3,field4,field5,field6,field7,field8,field9,field10,field11\n${application.id},v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11`;
+
+      await withSuperOakApp((req) =>
+        req
+          .post(`/api/rounds/${round.id}/custom-datasets/${dataset.id}/upload`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send(csv)
+          .expect(400)
+      );
     });
   }
 );
