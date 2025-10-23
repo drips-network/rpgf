@@ -277,7 +277,9 @@ export const ballots = pgTable("ballots", {
   ballot: jsonb("ballot").notNull().$type<SubmitBallotDto['ballot']>(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
-});
+}, (table) => [
+  uniqueIndex('unique_ballot_per_voter_per_round_index').on(table.roundId, table.voterUserId),
+]);
 export const votesRelations = relations(ballots, ({ one }) => ({
   round: one(rounds, { fields: [ballots.roundId], references: [rounds.id] }),
   user: one(users, { fields: [ballots.voterUserId], references: [users.id] }),
