@@ -67,7 +67,6 @@ async function delByPattern(pattern: string): Promise<void> {
       if (key.length > 0) await redis.del(key);
     }
   } catch (error) {
-    console.log(error);
     log(LogLevel.Error, "Failed to delete keys by pattern from Redis cache", { pattern, error });
   }
 }
