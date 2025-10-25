@@ -36,7 +36,7 @@ async function set<T>(key: string, value: T, ttlSeconds: number = DEFAULT_TTL_SE
 
   try {
     const stringValue = JSON.stringify(value);
-    await redis.set(key, stringValue, { ex: ttlSeconds });
+    await redis.set(key, stringValue, { EX: ttlSeconds });
   } catch (error) {
     log(LogLevel.Error, "Failed to set value in Redis cache", { key, error });
   }
@@ -50,7 +50,7 @@ async function del(keys: string | string[]): Promise<void> {
   try {
     const keysToDelete = Array.isArray(keys) ? keys : [keys];
     if (keysToDelete.length > 0) {
-      await redis.del(...keysToDelete);
+      await redis.del(keysToDelete);
     }
   } catch (error) {
     log(LogLevel.Error, "Failed to delete key(s) from Redis cache", { keys, error });
@@ -63,20 +63,8 @@ async function delByPattern(pattern: string): Promise<void> {
   }
 
   try {
-    let cursor = 0;
-    const keysToDelete: string[] = [];
-
-    do {
-      const [nextCursor, keys] = await redis.scan(cursor, {
-        pattern,
-        count: 100,
-      });
-      keysToDelete.push(...keys);
-      cursor = parseInt(nextCursor, 10);
-    } while (cursor !== 0);
-
-    if (keysToDelete.length > 0) {
-      await redis.del(...keysToDelete);
+    for await (const key of redis.scanIterator({ MATCH: pattern })) {
+      await redis.del(key);
     }
   } catch (error) {
     log(LogLevel.Error, "Failed to delete keys by pattern from Redis cache", { pattern, error });
