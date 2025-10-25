@@ -27,7 +27,9 @@ export function validateAnswers(
   // ensure all required fields are present in the answers
   const requiredFields = applicationFields.filter((f) => f.required).map((f) => f.id);
   for (const requiredFieldId of requiredFields) {
-    if (!dto.find((a) => a.fieldId === requiredFieldId && a.value.toString().trim() !== "")) {
+    const answer = dto.find((a) => a.fieldId === requiredFieldId);
+
+    if (!answer || !answer.value) {
       log(LogLevel.Warn, "Required field not found in answers", {
         requiredFieldId,
       });
@@ -128,7 +130,7 @@ export function mapDbAnswersToDto(
           type: "url",
           fieldId: field.id,
           field: field.properties as ApplicationUrlField,
-          url: dbAnswer.answer as string,
+          url: dbAnswer.answer as string | null,
         };
       case "text":
       case "textarea":
@@ -136,28 +138,28 @@ export function mapDbAnswersToDto(
           type: "text",
           fieldId: field.id,
           field: field.properties as ApplicationTextField | ApplicationTextAreaField,
-          text: dbAnswer.answer as string,
+          text: dbAnswer.answer as string | null,
         };
       case "email":
         return {
           type: "email",
           fieldId: field.id,
           field: field.properties as ApplicationEmailField,
-          email: dbAnswer.answer as string,
+          email: dbAnswer.answer as string | null,
         };
       case "list":
         return {
           type: "list",
           fieldId: field.id,
           field: field.properties as ApplicationListField,
-          entries: dbAnswer.answer as Record<string, string | number>[],
+          entries: dbAnswer.answer as Record<string, string | number>[] | null,
         };
       case "select":
         return {
           type: "select",
           fieldId: field.id,
           field: field.properties as ApplicationSelectField,
-          selected: dbAnswer.answer as string[],
+          selected: dbAnswer.answer as string[] | null,
         };
       default:
         throw new Error(`Unsupported field type: ${field.type}`);
@@ -175,6 +177,7 @@ export async function getAnswersByApplicationVersionId(applicationVersionId: str
     with: {
       field: true,
     },
+    orderBy: (answers, { asc }) => [asc(answers.order)],
   });
 
   return mapDbAnswersToDto(answers, dropPrivateFields);
@@ -221,12 +224,16 @@ export async function recordAnswers(
   }
 
   return await tx.transaction(async (tx) => {
-    await Promise.all(dto.map(async (answer) => {
+
+    await Promise.all(fields.map(async (field) => {
+      const answerValue = dto.find(a => a.fieldId === field.id)?.value ?? null;
+
       await tx.insert(applicationAnswers).values({
         applicationVersionId: applicationVersionId,
-        fieldId: answer.fieldId,
-        answer: JSON.stringify(answer.value),
-      })
+        fieldId: field.id,
+        answer: answerValue === null ? null : JSON.stringify(answerValue),
+        order: field.order,
+      });
     }));
 
     return await getAnswersByApplicationVersionId(applicationVersionId, false, tx);
