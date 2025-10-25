@@ -774,6 +774,25 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     assertEquals(response.body.state, "approved");
   });
 
+  await t.step("should return the updated data in single and list application endpoints", async () => {
+    const singleAppResponse = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/applications/${applicationId}`)
+        .set("Authorization", `Bearer ${secondUserAuthToken}`)
+        .expect(200)
+    );
+    assertEquals(singleAppResponse.body.latestVersion.projectName, "Test Project - Edited");
+
+    const listAppResponse = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/applications`)
+        .set("Authorization", `Bearer ${secondUserAuthToken}`)
+        .expect(200)
+    );
+    const appInList = listAppResponse.body.find((app: any) => app.id === applicationId);
+    assertEquals(appInList.projectName, "Test Project - Edited");
+  });
+
   await t.step("should return history of the application", async () => {
     const history = await withSuperOakApp((request) =>
       request

@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:15
+    image: postgres:latest
     restart: always
     environment:
       POSTGRES_USER: rpgf_user
@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
   db_test:
-    image: postgres:15
+    image: postgres:latest
     restart: always
     environment:
       POSTGRES_USER: rpgf_user
@@ -24,6 +24,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  redis_test:
+    image: redis:latest
+    restart: always
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
 
 volumes:
   postgres_data:
+  redis_data:

@@ -10,6 +10,7 @@ import { eq } from "drizzle-orm";
 import { getRound } from "./roundService.ts";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+import { cachingService } from "./cachingService.ts";
 
 export enum ResultCalculationMethod {
   MEDIAN = "median",
@@ -163,7 +164,16 @@ export async function recalculateResultsForRound(
         method,
       },
       tx,
-    })
+    });
+
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
+    for (const app of applications) {
+      await cachingService.delByPattern(
+        cachingService.generateKey(["application", app.id, "*"]),
+      );
+    }
   });
 }
 
