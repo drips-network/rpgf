@@ -63,9 +63,17 @@ async function delByPattern(pattern: string): Promise<void> {
   }
 
   try {
-    for await (const key of redis.scanIterator({ MATCH: pattern })) {
-      if (key.length > 0) await redis.del(key);
-    }
+    const script = `
+      local keys = redis.call('KEYS', ARGV[1])
+      if #keys > 0 then
+        return redis.call('DEL', unpack(keys))
+      else
+        return 0
+      end
+    `;
+    await redis.eval(script, {
+      arguments: [pattern],
+    });
   } catch (error) {
     log(LogLevel.Error, "Failed to delete keys by pattern from Redis cache", { pattern, error });
   }
