@@ -210,11 +210,11 @@ export async function uploadCustomDataset(
     await cachingService.delByPattern(
       cachingService.generateKey(["applications", roundId, "*"]),
     );
-    await cachingService.del(
-      applicationIds.map((id) =>
-        cachingService.generateKey(["application", id, "*"])
-      ),
-    );
+    for (const id of applicationIds) {
+      await cachingService.delByPattern(
+        cachingService.generateKey(["application", id, "*"]),
+      );
+    }
 
     return mapDbCustomDatasetToDto(created, rowCount);
   });
@@ -276,11 +276,11 @@ export async function updateCustomDataset(
     });
 
     if (applicationIds.length > 0) {
-      await cachingService.del(
-        applicationIds.map((app) =>
-          cachingService.generateKey(["application", app.applicationId, "*"])
-        ),
-      );
+      for (const app of applicationIds) {
+        await cachingService.delByPattern(
+          cachingService.generateKey(["application", app.applicationId, "*"]),
+        );
+      }
     }
 
     return updated;

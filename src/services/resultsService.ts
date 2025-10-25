@@ -169,11 +169,11 @@ export async function recalculateResultsForRound(
     await cachingService.delByPattern(
       cachingService.generateKey(["applications", roundId, "*"]),
     );
-    await cachingService.del(
-      applications.map((app) =>
-        cachingService.generateKey(["application", app.id, "*"])
-      ),
-    );
+    for (const app of applications) {
+      await cachingService.delByPattern(
+        cachingService.generateKey(["application", app.id, "*"]),
+      );
+    }
   });
 }
 

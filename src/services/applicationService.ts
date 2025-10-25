@@ -659,7 +659,7 @@ export async function updateApplication(
     await cachingService.delByPattern(
       cachingService.generateKey(["applications", roundId, "*"]),
     );
-    await cachingService.del(
+    await cachingService.delByPattern(
       cachingService.generateKey(["application", applicationId, "*"]),
     );
 
@@ -1245,11 +1245,11 @@ export async function applyApplicationReview(
     await cachingService.delByPattern(
       cachingService.generateKey(["applications", roundId, "*"]),
     );
-    await cachingService.del(
-      allApplicationIds.map((id) =>
-        cachingService.generateKey(["application", id, "*"])
-      ),
-    );
+    for (const id of allApplicationIds) {
+      await cachingService.delByPattern(
+        cachingService.generateKey(["application", id, "*"]),
+      );
+    }
 
     return [...approvedApplications, ...rejectedApplications];
   });
