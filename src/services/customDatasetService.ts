@@ -10,6 +10,7 @@ import { NotFoundError } from "$app/errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { parse, stringify } from "std/csv";
 import { BadRequestError } from "$app/errors/generic.ts";
+import { cachingService } from "./cachingService.ts";
 
 function mapDbCustomDatasetToDto(dbDataset: InferSelectModel<typeof customDatasets>, rowCount: number): CustomDataset {
   return {
@@ -206,6 +207,15 @@ export async function uploadCustomDataset(
       tx,
     });
 
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
+    await cachingService.del(
+      applicationIds.map((id) =>
+        cachingService.generateKey(["application", id, "*"])
+      ),
+    );
+
     return mapDbCustomDatasetToDto(created, rowCount);
   });
 
@@ -253,6 +263,25 @@ export async function updateCustomDataset(
       payload: { ...dto, id: datasetId },
       tx,
     });
+
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
+
+    const applicationIds = await tx.query.customDatasetValues.findMany({
+      where: eq(customDatasetValues.datasetId, datasetId),
+      columns: {
+        applicationId: true,
+      },
+    });
+
+    if (applicationIds.length > 0) {
+      await cachingService.del(
+        applicationIds.map((app) =>
+          cachingService.generateKey(["application", app.applicationId, "*"])
+        ),
+      );
+    }
 
     return updated;
   });
@@ -378,5 +407,9 @@ export async function deleteCustomDataset(
       payload: { id: datasetId },
       tx,
     });
+
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
   });
 }

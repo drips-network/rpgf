@@ -12,6 +12,7 @@
     "djwt": "https://deno.land/x/djwt@v3.0.2/mod.ts",
     "drizzle-orm": "npm:drizzle-orm@^0.43.1",
     "pg": "npm:pg@^8.16.0",
+    "redis": "https://deno.land/x/redis@v0.32.0/mod.ts",
     "drizzle-kit": "npm:drizzle-kit@^0.31.1",
     "$app/": "./src/",
     "zod": "npm:zod@^3.24.4",
