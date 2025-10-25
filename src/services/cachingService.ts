@@ -3,7 +3,10 @@ import { log, LogLevel } from "$app/services/loggingService.ts";
 
 const CACHE_VERSION = Deno.env.get("CACHE_VERSION") || "1";
 const CACHE_PREFIX = `rpgf-cache:v${CACHE_VERSION}:`;
-const DEFAULT_TTL_SECONDS = 60 * 5; // 5 minutes
+const DEFAULT_TTL_SECONDS = parseInt(
+  Deno.env.get("CACHE_DEFAULT_TTL_SECONDS") || "3600",
+  10,
+);
 
 function generateKey(parts: (string | number)[]): string {
   return `${CACHE_PREFIX}${parts.join(":")}`;
