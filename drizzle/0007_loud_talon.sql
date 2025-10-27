@@ -22,4 +22,6 @@ JOIN
 LEFT JOIN
     application_answers aa ON aa.application_version_id = av.id AND aa.field_id = aff.id
 WHERE
-    aa.field_id IS NULL;
+    aff.slug IS NOT NULL
+    AND aff.deleted_at IS NULL
+    AND aa.field_id IS NULL;
