@@ -143,13 +143,20 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       name: "Application Form",
       fields: [
         {
+          type: 'markdown',
+          content: '# Welcome to the application form',
+        },
+        {
+          type: 'divider',
+        },
+        {
           type: 'text',
           label: 'Some text field',
           slug: 'some-text-field',
           descriptionMd: 'Description',
           required: true,
           private: false,
-        },
+        }, 
         {
           type: 'textarea',
           label: 'Description',
@@ -178,7 +185,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     assertEquals(formRes.body.name, "Application Form");
-    assertEquals(formRes.body.fields.length, 3);
+    assertEquals(formRes.body.fields.length, 5);
 
     applicationFormId = formRes.body.id;
   });
@@ -215,7 +222,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     assertEquals(response.body[0].name, "Application Form");
-    assertEquals(response.body[0].fields.length, 3);
+    assertEquals(response.body[0].fields.length, 5);
     assertEquals(response.body[0].id, applicationFormId);
   });
 
@@ -380,7 +387,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
 
     assertEquals(formRes.body.length, 1);
     assertEquals(formRes.body[0].name, "Application Form");
-    assertEquals(formRes.body[0].fields.length, 3);
+    assertEquals(formRes.body[0].fields.length, 5);
     assertEquals(formRes.body[0].id, applicationFormId);
 
     applicationForm = formRes.body[0];
@@ -406,15 +413,15 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       categoryId: category.id,
       answers: [
         {
-          fieldId: applicationForm.fields[0].id,
+          fieldId: applicationForm.fields[2].id,
           value: "Some answer",
         },
         {
-          fieldId: applicationForm.fields[1].id,
+          fieldId: applicationForm.fields[3].id,
           value: "This is my project description.",
         },
         {
-          fieldId: applicationForm.fields[2].id,
+          fieldId: applicationForm.fields[4].id,
           value: "test@testerson.com",
         },
       ]
@@ -471,6 +478,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     assertEquals(response.body.roundId, roundId);
     assertEquals(response.body.state, 'pending');
     assertExists(response.body.id);
+
 
     applicationId = response.body.id;
   });
@@ -663,15 +671,15 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       categoryId: category.id,
       answers: [
         {
-          fieldId: applicationForm.fields[0].id,
+          fieldId: applicationForm.fields[2].id,
           value: "Some answer - edited",
         },
         {
-          fieldId: applicationForm.fields[1].id,
+          fieldId: applicationForm.fields[3].id,
           value: "This is my project description. Edited.",
         },
         {
-          fieldId: applicationForm.fields[2].id,
+          fieldId: applicationForm.fields[4].id,
           value: "bro@breh.com",
         },
       ]

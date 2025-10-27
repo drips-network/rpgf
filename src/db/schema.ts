@@ -260,7 +260,8 @@ export const applicationVersionsRelations = relations(applicationVersions, ({ on
 export const applicationAnswers = pgTable("application_answers", {
   applicationVersionId: uuid("application_version_id").notNull().references(() => applicationVersions.id, { onDelete: 'cascade' }),
   fieldId: uuid("field_id").notNull().references(() => applicationFormFields.id),
-  answer: jsonb("answer").notNull(),
+  answer: jsonb("answer"),
+  order: integer("order").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   primaryKey({ columns: [table.applicationVersionId, table.fieldId] }),

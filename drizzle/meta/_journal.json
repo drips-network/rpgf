@@ -50,6 +50,13 @@
       "when": 1761216007588,
       "tag": "0006_loving_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1761404545846,
+      "tag": "0007_loud_talon",
+      "breakpoints": true
     }
   ]
 }
