@@ -18,7 +18,7 @@ import { isNull } from "drizzle-orm";
 
 export function validateAnswers(
   dto: ApplicationAnswerDto,
-  applicationFields: Pick<InferSelectModel<typeof applicationFormFields>, "id" | "type" | "required" | "properties">[],
+  applicationFields: Pick<InferSelectModel<typeof applicationFormFields>, "id" | "type" | "required" | "slug" | "properties">[],
 ): boolean {
   log(LogLevel.Info, "Validating answers", {
     answerCount: dto.length,
@@ -63,9 +63,11 @@ export function validateAnswers(
   // build a map of fieldId with their respective schemas for validation
   const fieldSchemaMap: Record<string, ZodSchema> = {};
 
-  const fillableFields = applicationFields.filter((f) => ["url", "text", "textarea", "email", "list", "select"].includes(f.type));
+  // only fields with slug are fillable
+  const fillableFields = applicationFields.filter((f) => f.slug !== null);
 
   for (const field of fillableFields) {
+    console.log('fillable field', field);
     switch (field.type) {
       case "url":
         fieldSchemaMap[field.id] = applicationUrlAnswerDtoSchema;
@@ -121,8 +123,12 @@ export function mapDbAnswersToDto(
     ? dbAnswersWithField.filter((a) => !a.field.private)
     : dbAnswersWithField;
 
-  return filteredFields.map((dbAnswer) => {
+  return filteredFields
+    .filter((dbAnswer) => dbAnswer.field.slug !== null)
+    .map((dbAnswer) => {
     const { field } = dbAnswer;
+
+    console.log(' mapdbanswerstodto', field);
 
     switch (field.type) {
       case "url":
