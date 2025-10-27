@@ -148,7 +148,7 @@ export async function submitBallot(
 
     const existingBallot = await getBallot(roundId, userId, tx);
     if (existingBallot) {
-      log(LogLevel.Error, "Deleting existing ballot", {
+      log(LogLevel.Info, "Deleting existing ballot", {
         userId,
         roundId,
       });
