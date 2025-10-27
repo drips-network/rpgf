@@ -28,6 +28,7 @@ import { stringify } from "std/csv";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 import { KycProvider } from "../types/kyc.ts";
+import { cachingService } from "./cachingService.ts";
 
 export async function validateEasAttestation(
   applicationDto: CreateApplicationDto | UpdateApplicationDto,
@@ -462,6 +463,10 @@ export async function createApplication(
       roundId,
     });
 
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
+
     return {
       ...newApplication,
       versions: [{
@@ -651,6 +656,13 @@ export async function updateApplication(
       tx,
     });
 
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
+    await cachingService.delByPattern(
+      cachingService.generateKey(["application", applicationId, "*"]),
+    );
+
     const fullApplication = (await tx.query.applications.findFirst({
       where: eq(applications.id, applicationId),
       with: {
@@ -711,7 +723,8 @@ export async function getApplicationHistory(
           answers: {
             with: {
               field: true,
-            }
+            },
+            orderBy: (answers, { asc }) => [asc(answers.order)],
           },
           form: true,
           category: true,
@@ -775,6 +788,18 @@ export async function getApplication(
     roundId,
     requestingUserId,
   });
+
+  const cacheKey = cachingService.generateKey([
+    "application",
+    applicationId,
+    requestingUserId || "public",
+  ]);
+  const cachedApplication = await cachingService.get<Application>(cacheKey);
+  if (cachedApplication) {
+    log(LogLevel.Info, "Returning cached application", { applicationId });
+    return cachedApplication;
+  }
+
   const application = await db.query.applications.findFirst({
     where: eq(applications.id, applicationId),
     with: {
@@ -804,7 +829,8 @@ export async function getApplication(
           answers: {
             with: {
               field: true,
-            }
+            },
+            orderBy: (answers, { asc }) => [asc(answers.order)],
           },
           form: true,
           category: true,
@@ -856,11 +882,15 @@ export async function getApplication(
     ? application.round.results.find((r) => r.applicationId === application.id)?.result ?? null
     : null;
 
-  return mapDbApplicationToDto(
+  const result = mapDbApplicationToDto(
     applicationWithFilteredAnswers,
     application.submitter,
     resultAllocation,
   );
+
+  await cachingService.set(cacheKey, result);
+
+  return result;
 }
 
 /** Return minimal listing applications */
@@ -883,6 +913,25 @@ export async function getApplications(
     limit,
     offset,
   });
+
+  const cacheKey = cachingService.generateKey([
+    "applications",
+    roundId,
+    requestingUserId || "public",
+    JSON.stringify(filterConfig),
+    JSON.stringify(sortConfig),
+    limit,
+    offset,
+  ]);
+
+  const cachedApplications = await cachingService.get<ListingApplication[]>(
+    cacheKey,
+  );
+  if (cachedApplications) {
+    log(LogLevel.Info, "Returning cached applications", { roundId });
+    return cachedApplications;
+  }
+
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
@@ -951,10 +1000,18 @@ export async function getApplications(
     applicationsResult = applicationsResult.sort(() => Math.random() - 0.5);
   }
 
-  return applicationsResult.map((application) => mapDbApplicationToListingDto(
-    application.applications,
-    returnResults && application.results?.result ? application.results.result : null,
-  ));
+  const result = applicationsResult.map((application) =>
+    mapDbApplicationToListingDto(
+      application.applications,
+      returnResults && application.results?.result
+        ? application.results.result
+        : null,
+    )
+  );
+
+  await cachingService.set(cacheKey, result);
+
+  return result;
 }
 
 export async function getApplicationsCsv(
@@ -1181,6 +1238,20 @@ export async function applyApplicationReview(
       payload: review,
       tx,
     });
+
+    const allApplicationIds = [
+      ...applicationIdsToApprove,
+      ...applicationIdsToReject,
+    ];
+
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
+    for (const id of allApplicationIds) {
+      await cachingService.delByPattern(
+        cachingService.generateKey(["application", id, "*"]),
+      );
+    }
 
     return [...approvedApplications, ...rejectedApplications];
   });

@@ -25,7 +25,7 @@ let scriptFailed = false;
 try {
   // Start up the test database.
   console.log("🚀 Starting test database...");
-  await execa('docker', ['compose', 'up', '-d', 'db_test', '--wait'], { 
+  await execa('docker', ['compose', 'up', '-d', 'db_test', '-d', 'redis_test', '--wait'], { 
     cwd: projectRoot, 
     stdio: 'inherit' 
   });
