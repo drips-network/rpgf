@@ -127,7 +127,6 @@ export function mapDbAnswersToDto(
     .map((dbAnswer) => {
     const { field } = dbAnswer;
 
-    console.log(' mapdbanswerstodto', field);
 
     switch (field.type) {
       case "url":
