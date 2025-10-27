@@ -5,11 +5,12 @@ import { InferSelectModel } from "drizzle-orm/table";
 import { applicationAnswers, applicationFormFields } from "$app/db/schema.ts";
 
 Deno.test("validateAnswers should throw if an answer is missing for a required field", () => {
-  const fields: Pick<InferSelectModel<typeof applicationFormFields>, "id" | "type" | "required" | "properties">[] = [
+  const fields: Pick<InferSelectModel<typeof applicationFormFields>, "id" | "type" | "slug" | "required" | "properties">[] = [
     {
       id: "field-1",
       type: "text",
       required: true,
+      slug: "field-1",
       properties: {
         id: "field-1",
         type: "text",
@@ -39,11 +40,12 @@ Deno.test("validateAnswers should not throw for a valid set of answers", () => {
       value: "Some answer",
     },
   ];
-  const fields: Pick<InferSelectModel<typeof applicationFormFields>, "id" | "type" | "required" | "properties">[] = [
+  const fields: Pick<InferSelectModel<typeof applicationFormFields>, "id" | "type" | "slug" | "required" | "properties">[] = [
     {
       id: "field-1",
       type: "text",
       required: true,
+      slug: "field-1",
       properties: {
         id: "field-1",
         type: "text",
