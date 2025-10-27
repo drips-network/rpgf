@@ -14,6 +14,18 @@ import z from "zod";
 import { convertXlsxToCsv } from "../utils/csv.ts";
 
 function _csvToBallotDto(csv: string): SubmitBallotDto {
+  const parsed = parse(csv, { skipFirstRow: true });
+
+  // ensure all the rows have at least ID and Allocation columns
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some((r) => !("ID" in r) || !("Allocation" in r))
+  ) {
+    throw new BadRequestError(
+      "Invalid CSV format. Required columns: ID, Allocation"
+    );
+  }
+
   const rows = z
     .array(
       z.object({
@@ -22,24 +34,39 @@ function _csvToBallotDto(csv: string): SubmitBallotDto {
         // otherwise, must be a positive int number
         Allocation: z
           .string()
-          .transform((value) => (value === '' ? null : value))
+          .transform((value) => (value === "" ? null : value))
           .nullable()
-          .refine((value) => value === null || !isNaN(Number(value)) && Number(value) > 0, {
-            message: 'Invalid number',
-          })
-          .transform((value) => (value === null ? null : Number(value)))
+          .refine(
+            (value) =>
+              value === null || (!isNaN(Number(value)) && Number(value) > 0),
+            {
+              message: "Invalid number",
+            }
+          )
+          .transform((value) => (value === null ? null : Number(value))),
       })
     )
-    .safeParse(parse(csv, { skipFirstRow: true }));
+    .safeParse(parsed);
 
   if (!rows.success) {
-    throw new BadRequestError(`Invalid CSV format: ${rows.error.message}`);
+    let msg = "CSV parsing errors:\n";
+
+    for (const err of rows.error.errors) {
+      const rowNo = typeof err.path[0] === "number" ? err.path[0] + 2 : "?"; // +2 for header and 0-index
+
+      msg += `Row ${rowNo}: ${err.message}\n`;
+    }
+
+    throw new BadRequestError(msg);
   }
 
   return {
     ballot: Object.fromEntries(
       rows.data
-        .filter((row): row is { ID: string; Allocation: number } => row.Allocation !== null)
+        .filter(
+          (row): row is { ID: string; Allocation: number } =>
+            row.Allocation !== null
+        )
         .map((row) => [row.ID, row.Allocation])
     ),
   };
@@ -83,13 +110,13 @@ export async function submitBallotAsSpreadsheetController(
     csv = await ctx.request.body.text();
   } else {
     const data = await ctx.request.body.arrayBuffer();
-    
+
     csv = convertXlsxToCsv(data);
   }
 
   const dto = _csvToBallotDto(csv);
   const result = await submitBallot(userId, roundId, dto);
-  
+
   ctx.response.status = 200;
   ctx.response.body = result;
 }
