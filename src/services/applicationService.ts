@@ -828,7 +828,8 @@ export async function getApplication(
           answers: {
             with: {
               field: true,
-            }
+            },
+            orderBy: (answers, { asc }) => [asc(answers.order)],
           },
           form: true,
           category: true,
