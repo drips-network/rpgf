@@ -67,7 +67,6 @@ export function validateAnswers(
   const fillableFields = applicationFields.filter((f) => f.slug !== null);
 
   for (const field of fillableFields) {
-    console.log('fillable field', field);
     switch (field.type) {
       case "url":
         fieldSchemaMap[field.id] = applicationUrlAnswerDtoSchema;
