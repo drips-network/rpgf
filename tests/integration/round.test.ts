@@ -479,7 +479,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     assertEquals(response.body.state, 'pending');
     assertExists(response.body.id);
 
-    console.log('APPLICATION RESPONSE', response.body);
 
     applicationId = response.body.id;
   });
