@@ -71,6 +71,10 @@ async function createBallot(
 ): Promise<WrappedBallot> {
   const includedApplicationIds = Object.keys(ballotDto.ballot);
 
+  if (includedApplicationIds.length === 0) {
+    throw new BadRequestError("Ballot must include at least one application with an allocation");
+  }
+
   const applicationsForRound = await tx.query.applications.findMany({
     where: and(
       eq(applicationsModel.roundId, roundId),
@@ -78,16 +82,16 @@ async function createBallot(
     ),
   });
 
-  console.log({ applicationsForRound });
-
   // throw bad request if any of the application ids are not in the approved applications
+  
   const approvedApplicationIds = applicationsForRound.map((app) => app.id);
   const invalidApplicationIds = includedApplicationIds.filter(
     (id) => !approvedApplicationIds.includes(id),
   );
+
   if (invalidApplicationIds.length > 0) {
     throw new BadRequestError(
-      `Invalid application IDs: ${invalidApplicationIds.join(", ")}`,
+      `The following application IDs had allocations, but are not approved: ${invalidApplicationIds.join(", ")}`,
     );
   }
 

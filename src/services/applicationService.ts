@@ -1017,6 +1017,7 @@ export async function getApplications(
 export async function getApplicationsCsv(
   roundId: string,
   requestingUserId: string | null,
+  onlyApproved = false,
 ) {
   log(LogLevel.Info, "Getting applications CSV", {
     roundId,
@@ -1041,7 +1042,7 @@ export async function getApplicationsCsv(
   const data = await db.query.applications.findMany({
     where: and(
       eq(applications.roundId, roundId),
-      includeRejectedAndPrivateData ? undefined : eq(applications.state, "approved"),
+      includeRejectedAndPrivateData && !onlyApproved ? undefined : eq(applications.state, "approved"),
     ),
     with: {
       versions: {

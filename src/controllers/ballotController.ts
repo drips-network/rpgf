@@ -85,7 +85,6 @@ export async function submitBallotAsSpreadsheetController(
     const data = await ctx.request.body.arrayBuffer();
     
     csv = convertXlsxToCsv(data);
-    console.log({csv});
   }
 
   const dto = _csvToBallotDto(csv);
