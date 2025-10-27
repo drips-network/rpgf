@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "unique_ballot_per_voter_per_round_index" ON "ballots" USING btree ("round_id","voter_user_id");
