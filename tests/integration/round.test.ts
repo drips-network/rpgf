@@ -803,7 +803,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
   });
 
   await t.step("should return history of the application", async () => {
-    console.log('TEST ID', { applicationId })
     const history = await withSuperOakApp((request) =>
       request
         .get(`/api/rounds/${roundId}/applications/${applicationId}/history`)
