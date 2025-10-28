@@ -5,7 +5,7 @@ import * as ballotController from "$app/controllers/ballotController.ts";
 const router = new Router();
 
 router.put('/api/rounds/:roundId/ballots', enforceAuthenticationMiddleware, ballotController.submitBallotController);
-router.patch('/api/rounds/:roundId/ballots/own', enforceAuthenticationMiddleware, ballotController.patchBallotController);
+router.post('/api/rounds/:roundId/ballots/spreadsheet', enforceAuthenticationMiddleware, ballotController.submitBallotAsSpreadsheetController);
 
 router.get('/api/rounds/:roundId/ballots/own', enforceAuthenticationMiddleware, ballotController.getOwnBallotController);
 router.get('/api/rounds/:roundId/ballots', enforceAuthenticationMiddleware, ballotController.getBallotsController);

@@ -112,6 +112,7 @@ export async function getApplicationsForRoundController(
     const csv = await getApplicationsCsv(
       roundId,
       userId ?? null,
+      filterConfig?.state === "approved"
     );
 
     if (format === "xlsx") {

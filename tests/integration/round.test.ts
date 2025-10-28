@@ -857,4 +857,198 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     assertFalse(anonHistory.text.includes("bro@breh.com"));
     assertFalse(anonHistory.text.includes("test@testerson.com"));
   });
+
+  const voterWallet = ethers.Wallet.createRandom();
+  const voterAuthToken = await getAuthToken(voterWallet);
+
+  await t.step("should submit a ballot via CSV", async () => {
+    const voters: SetRoundVotersDto = {
+      walletAddresses: [
+        '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
+        '0xf0C0638991c33567B5f068D80DEB87BaA6B886Af',
+        '0x0a97820c0DbDc763Ce6dDbfD482709392a647467',
+        voterWallet.address,
+      ]
+    };
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/voters`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(voters)
+        .expect(200)
+    );
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'voting',
+        })
+        .expect(200)
+    );
+
+    const csv = `ID,Allocation\n${applicationId},10`;
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(200)
+    );
+
+    const response = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballots/own`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .expect(200)
+    );
+
+    assertEquals(response.body.ballot[applicationId], 10);
+  });
+
+  await t.step("should reject ballot from non-voter", async () => {
+    const nonVoterWallet = ethers.Wallet.createRandom();
+    const nonVoterAuthToken = await getAuthToken(nonVoterWallet);
+
+    const csv = `ID,Allocation\n${applicationId},10`;
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${nonVoterAuthToken}`)
+        .send(csv)
+        .expect(401)
+    );
+  });
+
+  await t.step("should reject ballot in wrong round state", async () => {
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'intake',
+        })
+        .expect(200)
+    );
+
+    const csv = `ID,Allocation\n${applicationId},10`;
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+  });
+
+  await t.step("should reject unauthenticated ballot submission", async () => {
+    const csv = `ID,Allocation\n${applicationId},10`;
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .send(csv)
+        .expect(401)
+    );
+  });
+
+  await t.step("should reject ballot with invalid content", async () => {
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'voting',
+        })
+        .expect(200)
+    );
+
+    // Exceeding total vote limit
+    let csv = `ID,Allocation\n${applicationId},101`;
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+
+    // Exceeding per-project vote limit
+    csv = `ID,Allocation\n${applicationId},11`;
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+
+    // Voting for a non-existent application
+    csv = `ID,Allocation\nbc7534eb-acd3-43f0-952a-4a431e1b1065,10`;
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+
+    // Empty ballot
+    csv = `ID,Allocation\n`;
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+
+    // Negative allocation
+    csv = `ID,Allocation\n${applicationId},-10`;
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+  });
+
+  await t.step("should reject ballot with invalid CSV format", async () => {
+    // Missing required columns
+    let csv = `ID\n${applicationId}`;
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+
+    // Invalid data types
+    csv = `ID,Allocation\nnot-a-uuid,10`;
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+
+    csv = `ID,Allocation\n${applicationId},not-a-number`;
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+  });
 });

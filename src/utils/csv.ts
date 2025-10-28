@@ -25,3 +25,15 @@ export function convertToXlsxBuffer(csv: string): Uint8Array {
 
   return buff;
 }
+
+export function convertXlsxToCsv(xlsxBuffer: ArrayBuffer): string {
+  const workbook = XLSX.read(xlsxBuffer, { type: 'buffer' });
+
+  const firstSheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[firstSheetName];
+
+  return XLSX.utils.sheet_to_csv(
+    worksheet,
+    { blankrows: false }
+  );
+}
