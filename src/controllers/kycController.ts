@@ -62,8 +62,6 @@ export async function fernUpdateWebhookController(
   const timestamp = ctx.request.headers.get("x-api-timestamp");
   const rawBody = await ctx.request.body.text();
 
-  console.log("Received Fern KYC webhook", rawBody);
-
   if (!signature || !timestamp || !isValidWebhookSig(rawBody, timestamp, signature, FERN_WEBHOOK_SECRET)) {
     console.error("Invalid webhook signature – request possibly forged!");
     return ctx.response.status = 401;
@@ -122,7 +120,7 @@ export async function treovaUpdateWebhookController(
   const idempotencyKey = ctx.request.headers.get("x-idempotency-key");
   const rawBody = await ctx.request.body.text();
 
-  log("Received Treova KYC webhook", { idempotencyKey, rawBody });
+  log("Received Treova KYC webhook", { idempotencyKey });
 
   if (!signature || !timestamp || !isValidWebhookSig(rawBody, timestamp, signature, TREOVA_KYC_WEBHOOK_SECRET)) {
     console.error("Invalid webhook signature – request possibly forged!");
