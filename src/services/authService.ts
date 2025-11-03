@@ -2,13 +2,14 @@ import { SiweMessage } from "siwe";
 import { create as createJwt, getNumericDate, verify } from "djwt";
 import { db, Transaction } from "$app/db/postgres.ts";
 import { log, LogLevel } from "./loggingService.ts";
-import { nonces, refreshTokens, users } from "$app/db/schema.ts";
+import { nonces, refreshTokens, users, chains } from "$app/db/schema.ts";
 import { and, eq, lt } from "drizzle-orm";
 import type { AccessTokenJwtPayload, RefreshTokenJwtPayload } from "$app/types/auth.ts";
 import { Context } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import { UnauthenticatedError, UnauthorizedError } from "../errors/auth.ts";
 import { BadRequestError } from "../errors/generic.ts";
+import { ethers } from "ethers";
 
 const NONCE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -123,16 +124,26 @@ export async function verifySignatureAndCreateRefreshToken(
       throw new BadRequestError("Invalid or expired nonce.");
     }
 
+    const chain = await tx.query.chains.findFirst({
+      where: eq(chains.chainId, siweMessageInstance.chainId),
+    });
+
+    if (!chain) {
+      log(LogLevel.Error, `Unsupported chain ID: ${siweMessageInstance.chainId}`);
+      throw new BadRequestError(`Unsupported chain ID: ${siweMessageInstance.chainId}`);
+    }
+
+    const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+
     const { success } = await siweMessageInstance.verify(
       { signature },
+      { provider }
     );
 
     if (!success) {
       log(LogLevel.Error, "Invalid SIWE signature");
       throw new UnauthorizedError("Invalid SIWE signature.");
     }
-
-    // Signature is valid, proceed to find or create user
 
     const walletAddress = siweMessageInstance.address.toLowerCase();
     let user = await tx.query.users.findFirst({
