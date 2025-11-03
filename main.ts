@@ -18,6 +18,7 @@ import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
 import { AuthError, ExpiredJwtError } from "$app/errors/auth.ts";
+import { warmProviderRegistry } from "$app/ethereum/providerRegistry.ts";
 
 export interface UnauthenticatedAppState {
   user: undefined;
@@ -32,25 +33,37 @@ export type AppState = UnauthenticatedAppState | AuthenticatedAppState;
 const app = new Application<AppState>({ state: { user: undefined } });
 
 if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
-  console.warn("----------------------------------------------------------------------")
+  console.warn(
+    "----------------------------------------------------------------------",
+  );
   console.warn("🔒 CORS DISABLED! 🔒");
-  console.warn("The CORS_ALLOW_ALL_ORIGINS environment variable is set to true, which is a security risk in production environments.");
-  console.warn("----------------------------------------------------------------------")
+  console.warn(
+    "The CORS_ALLOW_ALL_ORIGINS environment variable is set to true, which is a security risk in production environments.",
+  );
+  console.warn(
+    "----------------------------------------------------------------------",
+  );
 }
 
 app.use((ctx, next) => {
-  const origin = ctx.request.headers.get('Origin');
+  const origin = ctx.request.headers.get("Origin");
   const allowedOriginRegex = /^https:\/\/.*\.drips\.network$/;
 
   if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
-    ctx.response.headers.set('Access-Control-Allow-Origin', origin || '*');
+    ctx.response.headers.set("Access-Control-Allow-Origin", origin || "*");
   } else if (origin && allowedOriginRegex.test(origin)) {
-    ctx.response.headers.set('Access-Control-Allow-Origin', origin);
+    ctx.response.headers.set("Access-Control-Allow-Origin", origin);
   }
 
-  ctx.response.headers.set('Access-Control-Allow-Credentials', 'true');
-  ctx.response.headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type, Credentials');
-  ctx.response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+  ctx.response.headers.set("Access-Control-Allow-Credentials", "true");
+  ctx.response.headers.set(
+    "Access-Control-Allow-Headers",
+    "Authorization, Content-Type, Credentials",
+  );
+  ctx.response.headers.set(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PATCH, PUT, DELETE, OPTIONS",
+  );
   return next();
 });
 
@@ -58,7 +71,6 @@ app.use(async (ctx, next) => {
   try {
     await next();
   } catch (e) {
-
     if (e instanceof BadRequestError) {
       ctx.response.status = 400;
       ctx.response.body = { error: e.message };
@@ -124,10 +136,16 @@ app.use(customDatasetRoutes.routes());
 app.use(customDatasetRoutes.allowedMethods());
 
 if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
-  console.warn("----------------------------------------------------------------------")
+  console.warn(
+    "----------------------------------------------------------------------",
+  );
   console.warn("☠️⚠️☠️ DANGEROUS TEST ROUTES ENABLED! ☠️⚠️☠️");
-  console.warn("The ENABLE_DANGEROUS_TEST_ROUTES environment variable MUST be set to false in production environments.");
-  console.warn("----------------------------------------------------------------------")
+  console.warn(
+    "The ENABLE_DANGEROUS_TEST_ROUTES environment variable MUST be set to false in production environments.",
+  );
+  console.warn(
+    "----------------------------------------------------------------------",
+  );
 
   app.use(dangerousTestRoutes.routes());
   app.use(dangerousTestRoutes.allowedMethods());
@@ -135,6 +153,7 @@ if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
 
 if (import.meta.main) {
   const port = parseInt(Deno.env.get("PORT") || "8000");
+  await warmProviderRegistry();
   console.log(`Server listening on http://localhost:${port}`);
   await app.listen({ port, hostname: "[::]" });
 }

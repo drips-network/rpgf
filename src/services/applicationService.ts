@@ -1,6 +1,19 @@
 import { and, asc, desc, eq, InferSelectModel, isNull, or } from "drizzle-orm";
 import { db, Transaction } from "../db/postgres.ts";
-import { applicationCategories, applicationFormFields, applicationKycRequests, applications, applicationVersions, customDatasets, customDatasetFields, customDatasetValues, kycRequests, results, rounds, users } from "../db/schema.ts";
+import {
+  applicationCategories,
+  applicationFormFields,
+  applicationKycRequests,
+  applications,
+  applicationVersions,
+  customDatasetFields,
+  customDatasets,
+  customDatasetValues,
+  kycRequests,
+  results,
+  rounds,
+  users,
+} from "../db/schema.ts";
 import { log, LogLevel } from "./loggingService.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
@@ -15,13 +28,21 @@ import {
   updateApplicationDtoSchema,
 } from "../types/application.ts";
 import projects from "../gql/projects.ts";
-import { JsonRpcProvider, type Provider } from "ethers";
-import { Attestation, EAS, SchemaEncoder } from "@ethereum-attestation-service/eas-sdk";
+import type { Provider } from "ethers";
+import {
+  Attestation,
+  EAS,
+  SchemaEncoder,
+} from "@ethereum-attestation-service/eas-sdk";
 import * as ipfs from "../ipfs/ipfs.ts";
 import z from "zod";
 import { SortConfig } from "../utils/sort.ts";
 import { inferRoundState, isUserRoundAdmin } from "./roundService.ts";
-import { mapDbAnswersToDto, recordAnswers, validateAnswers } from "./applicationAnswerService.ts";
+import {
+  mapDbAnswersToDto,
+  recordAnswers,
+  validateAnswers,
+} from "./applicationAnswerService.ts";
 import { ApplicationAnswer } from "../types/applicationAnswer.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { stringify } from "std/csv";
@@ -29,6 +50,7 @@ import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 import { KycProvider } from "../types/kyc.ts";
 import { cachingService } from "./cachingService.ts";
+import { getProviderForChain } from "$app/ethereum/providerRegistry.ts";
 
 export async function validateEasAttestation(
   applicationDto: CreateApplicationDto | UpdateApplicationDto,
@@ -60,7 +82,10 @@ export async function validateEasAttestation(
         break;
       }
     } catch (error) {
-      log(LogLevel.Error, `Attempt to fetch attestation failed: ${error}. Retrying...`);
+      log(
+        LogLevel.Error,
+        `Attempt to fetch attestation failed: ${error}. Retrying...`,
+      );
     }
 
     await new Promise((resolve) => setTimeout(resolve, retryInterval));
@@ -94,10 +119,14 @@ export async function validateEasAttestation(
     decoded.find((v) => v.name === "applicationDataIpfs")?.value.value,
   );
   if (!ipfsHashParse.success) {
-    log(LogLevel.Error, "EAS attestation missing or invalid applicationDataIpfs", {
-      uid,
-      decodedData: decoded,
-    });
+    log(
+      LogLevel.Error,
+      "EAS attestation missing or invalid applicationDataIpfs",
+      {
+        uid,
+        decodedData: decoded,
+      },
+    );
 
     throw new BadRequestError(
       "EAS attestation does not contain applicationDataIpfs, or is invalid",
@@ -106,7 +135,9 @@ export async function validateEasAttestation(
 
   const ipfsData = await ipfs.getIpfsFile(ipfsHashParse.data);
 
-  const attestedApplicationDtoParse = createApplicationDtoSchema.or(updateApplicationDtoSchema).safeParse(JSON.parse(ipfsData));
+  const attestedApplicationDtoParse = createApplicationDtoSchema.or(
+    updateApplicationDtoSchema,
+  ).safeParse(JSON.parse(ipfsData));
   if (!attestedApplicationDtoParse.success) {
     log(LogLevel.Error, "EAS attestation data is not a valid application DTO", {
       uid,
@@ -122,11 +153,15 @@ export async function validateEasAttestation(
   const attestedApplicationDto = attestedApplicationDtoParse.data;
 
   if (attestedApplicationDto.projectName !== projectName) {
-    log(LogLevel.Error, "EAS attestation project name does not match submitted application", {
-      uid,
-      attestedProjectName: attestedApplicationDto.projectName,
-      submittedProjectName: projectName,
-    });
+    log(
+      LogLevel.Error,
+      "EAS attestation project name does not match submitted application",
+      {
+        uid,
+        attestedProjectName: attestedApplicationDto.projectName,
+        submittedProjectName: projectName,
+      },
+    );
 
     throw new BadRequestError(
       "EAS attestation project name does not match the submitted application",
@@ -134,11 +169,15 @@ export async function validateEasAttestation(
   }
 
   if (attestedApplicationDto.dripsAccountId !== dripsAccountId) {
-    log(LogLevel.Error, "EAS attestation drips account ID does not match submitted application", {
-      uid,
-      attestedDripsAccountId: attestedApplicationDto.dripsAccountId,
-      submittedDripsAccountId: dripsAccountId,
-    });
+    log(
+      LogLevel.Error,
+      "EAS attestation drips account ID does not match submitted application",
+      {
+        uid,
+        attestedDripsAccountId: attestedApplicationDto.dripsAccountId,
+        submittedDripsAccountId: dripsAccountId,
+      },
+    );
 
     throw new BadRequestError(
       "EAS attestation drips account ID does not match the submitted application",
@@ -164,7 +203,9 @@ export async function validateEasAttestation(
           uid,
           fieldId,
         });
-        throw new BadRequestError(`EAS attestation must not contain private field ${fieldId}. The round organizers may have edited the application form. Please reload the page and try again.`);
+        throw new BadRequestError(
+          `EAS attestation must not contain private field ${fieldId}. The round organizers may have edited the application form. Please reload the page and try again.`,
+        );
       }
       continue;
     }
@@ -174,30 +215,40 @@ export async function validateEasAttestation(
         uid,
         fieldId,
       });
-      throw new BadRequestError(`EAS attestation is missing field ${fieldId}. The round organizers may have edited the application form. Please reload the page and try again.`);
+      throw new BadRequestError(
+        `EAS attestation is missing field ${fieldId}. The round organizers may have edited the application form. Please reload the page and try again.`,
+      );
     }
 
     const attestedValue = attestedAnswers.find((a) => a.fieldId === fieldId);
 
     if (typeof attestedValue?.value !== typeof value) {
-      log(LogLevel.Error, "EAS attestation field type does not match submitted application", {
-        uid,
-        fieldId,
-        attestedType: typeof attestedValue?.value,
-        submittedType: typeof value,
-      });
+      log(
+        LogLevel.Error,
+        "EAS attestation field type does not match submitted application",
+        {
+          uid,
+          fieldId,
+          attestedType: typeof attestedValue?.value,
+          submittedType: typeof value,
+        },
+      );
       throw new BadRequestError(
         `EAS attestation field ${fieldId} type does not match the submitted application. The round organizers may have edited the application form. Please reload the page and try again.`,
       );
     }
 
     if (JSON.stringify(attestedValue?.value) !== JSON.stringify(value)) {
-      log(LogLevel.Error, "EAS attestation field value does not match submitted application", {
-        uid,
-        fieldId,
-        attestedValue: attestedValue?.value,
-        submittedValue: value,
-      });
+      log(
+        LogLevel.Error,
+        "EAS attestation field value does not match submitted application",
+        {
+          uid,
+          fieldId,
+          attestedValue: attestedValue?.value,
+          submittedValue: value,
+        },
+      );
       throw new BadRequestError(
         `EAS attestation field ${fieldId} value does not match the submitted application.`,
       );
@@ -209,10 +260,12 @@ function mapDbApplicationToDto(
   application: InferSelectModel<typeof applications> & {
     versions: (InferSelectModel<typeof applicationVersions> & {
       answers: ApplicationAnswer[];
-      form: { id: string; name: string; };
+      form: { id: string; name: string };
       category: InferSelectModel<typeof applicationCategories>;
     })[];
-    customDatasetValues?: (InferSelectModel<typeof customDatasetValues> & { dataset: InferSelectModel<typeof customDatasets> })[];
+    customDatasetValues?: (InferSelectModel<typeof customDatasetValues> & {
+      dataset: InferSelectModel<typeof customDatasets>;
+    })[];
   },
   submitter: { id: string; walletAddress: string },
   resultAllocation: number | null,
@@ -250,7 +303,7 @@ function mapDbApplicationToDto(
       datasetName: cdv.dataset.name,
       values: cdv.values,
     })) ?? [],
-  }
+  };
 }
 
 function mapDbApplicationToListingDto(
@@ -266,7 +319,7 @@ function mapDbApplicationToListingDto(
     projectName: application.projectName,
     dripsProjectDataSnapshot: application.dripsProjectDataSnapshot,
     allocation: resultAllocation,
-  }
+  };
 }
 
 export async function createApplication(
@@ -291,7 +344,7 @@ export async function createApplication(
     log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
-  if (inferRoundState(round) !== 'intake') {
+  if (inferRoundState(round) !== "intake") {
     log(LogLevel.Error, "Round is not currently accepting applications", {
       roundId,
     });
@@ -303,17 +356,17 @@ export async function createApplication(
     where: and(
       eq(applicationCategories.roundId, round.id),
       eq(applicationCategories.id, applicationDto.categoryId),
-      isNull(applicationCategories.deletedAt)
+      isNull(applicationCategories.deletedAt),
     ),
     with: {
       form: {
         with: {
           fields: {
-            where: isNull(applicationFormFields.deletedAt)
+            where: isNull(applicationFormFields.deletedAt),
           },
-        }
+        },
       },
-    }
+    },
   });
 
   if (!applicationCategory) {
@@ -333,16 +386,20 @@ export async function createApplication(
     chainGqlName,
   );
   if (!onChainProject) {
-    log(LogLevel.Error, "Drips Account ID is not for a valid, claimed project", {
-      dripsAccountId: applicationDto.dripsAccountId,
-    });
+    log(
+      LogLevel.Error,
+      "Drips Account ID is not for a valid, claimed project",
+      {
+        dripsAccountId: applicationDto.dripsAccountId,
+      },
+    );
     throw new BadRequestError(
       "Drips Account ID is not for a valid, claimed project",
     );
   }
   if (
     onChainProject.owner.address.toLowerCase() !==
-    submitterWalletAddress.toLowerCase()
+      submitterWalletAddress.toLowerCase()
   ) {
     log(
       LogLevel.Error,
@@ -361,8 +418,8 @@ export async function createApplication(
       applicationCategory.form.fields,
       submitterWalletAddress,
       attestationSetup.easAddress,
-      new JsonRpcProvider(round.chain.rpcUrl),
-    )
+      await getProviderForChain(round.chain),
+    );
   }
 
   // Create answers and application
@@ -403,7 +460,7 @@ export async function createApplication(
         where: and(
           eq(kycRequests.userId, submitterUserId),
           eq(kycRequests.roundId, round.id),
-        )
+        ),
       });
 
       if (existingKycRequest) {
@@ -430,17 +487,20 @@ export async function createApplication(
           kycRequestId: existingKycRequest.id,
         });
       } else {
-        log(LogLevel.Info, "No existing KYC Request for user and round, not linking", {
-          userId: submitterUserId,
-          roundId: round.id,
-          applicationId: newApplication.id,
-        });
+        log(
+          LogLevel.Info,
+          "No existing KYC Request for user and round, not linking",
+          {
+            userId: submitterUserId,
+            roundId: round.id,
+            applicationId: newApplication.id,
+          },
+        );
 
         // If no existing KYC Request exists, we don't do anything here.
         // The incoming webhook handler will create the KYC Request entity
         // and link any existing applications for that wallet address to it.
       }
-
     }
 
     await createLog({
@@ -526,7 +586,7 @@ export async function updateApplication(
     });
     throw new UnauthorizedError("Not authorized to update this application");
   }
-  if (inferRoundState(application.round) !== 'intake') {
+  if (inferRoundState(application.round) !== "intake") {
     log(LogLevel.Error, "Round is not currently accepting applications", {
       roundId,
     });
@@ -543,7 +603,7 @@ export async function updateApplication(
     log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
-  if (inferRoundState(round) !== 'intake') {
+  if (inferRoundState(round) !== "intake") {
     log(LogLevel.Error, "Round is not currently accepting applications", {
       roundId,
     });
@@ -554,17 +614,17 @@ export async function updateApplication(
     where: and(
       eq(applicationCategories.roundId, round.id),
       eq(applicationCategories.id, applicationDto.categoryId),
-      isNull(applicationCategories.deletedAt)
+      isNull(applicationCategories.deletedAt),
     ),
     with: {
       form: {
         with: {
           fields: {
-            where: isNull(applicationFormFields.deletedAt)
+            where: isNull(applicationFormFields.deletedAt),
           },
-        }
+        },
       },
-    }
+    },
   });
 
   if (!applicationCategory) {
@@ -583,16 +643,20 @@ export async function updateApplication(
     chainGqlName,
   );
   if (!onChainProject) {
-    log(LogLevel.Error, "Drips Account ID is not for a valid, claimed project", {
-      dripsAccountId: applicationDto.dripsAccountId,
-    });
+    log(
+      LogLevel.Error,
+      "Drips Account ID is not for a valid, claimed project",
+      {
+        dripsAccountId: applicationDto.dripsAccountId,
+      },
+    );
     throw new BadRequestError(
       "Drips Account ID is not for a valid, claimed project",
     );
   }
   if (
     onChainProject.owner.address.toLowerCase() !==
-    submitterWalletAddress.toLowerCase()
+      submitterWalletAddress.toLowerCase()
   ) {
     log(
       LogLevel.Error,
@@ -610,8 +674,8 @@ export async function updateApplication(
       applicationCategory.form.fields,
       submitterWalletAddress,
       attestationSetup.easAddress,
-      new JsonRpcProvider(round.chain.rpcUrl),
-    )
+      await getProviderForChain(round.chain),
+    );
   }
 
   const updatedApplication = await db.transaction(async (tx) => {
@@ -672,13 +736,13 @@ export async function updateApplication(
             answers: {
               with: {
                 field: true,
-              }
+              },
             },
             form: true,
             category: true,
-          }
+          },
         },
-      }
+      },
     }))!;
 
     return {
@@ -728,9 +792,9 @@ export async function getApplicationHistory(
           },
           form: true,
           category: true,
-        }
-      }
-    }
+        },
+      },
+    },
   });
 
   if (!application) {
@@ -742,7 +806,9 @@ export async function getApplicationHistory(
       applicationId,
       roundId,
     });
-    throw new NotFoundError("Application does not belong to the specified round");
+    throw new NotFoundError(
+      "Application does not belong to the specified round",
+    );
   }
 
   const userIsAdmin = isUserRoundAdmin(application.round, requestingUserId);
@@ -812,16 +878,16 @@ export async function getApplication(
           admins: {
             columns: {
               userId: true,
-            }
+            },
           },
           results: true,
-        }
+        },
       },
       submitter: {
         columns: {
           id: true,
           walletAddress: true,
-        }
+        },
       },
       versions: {
         orderBy: desc(applicationVersions.createdAt),
@@ -834,9 +900,9 @@ export async function getApplication(
           },
           form: true,
           category: true,
-        }
-      }
-    }
+        },
+      },
+    },
   });
 
   if (!application) {
@@ -847,7 +913,9 @@ export async function getApplication(
       applicationId,
       roundId,
     });
-    throw new NotFoundError("Application does not belong to the specified round");
+    throw new NotFoundError(
+      "Application does not belong to the specified round",
+    );
   }
 
   const userIsAdmin = isUserRoundAdmin(application.round, requestingUserId);
@@ -879,7 +947,8 @@ export async function getApplication(
 
   // Return calculated result if exists & published or exists & user is admin
   const resultAllocation = application.round.resultsPublished || userIsAdmin
-    ? application.round.results.find((r) => r.applicationId === application.id)?.result ?? null
+    ? application.round.results.find((r) => r.applicationId === application.id)
+      ?.result ?? null
     : null;
 
   const result = mapDbApplicationToDto(
@@ -897,8 +966,11 @@ export async function getApplication(
 export async function getApplications(
   roundId: string,
   requestingUserId: string | null,
-  filterConfig: { state?: ApplicationState; submitterUserId?: string, categoryId?: string } | null =
-    null,
+  filterConfig: {
+    state?: ApplicationState;
+    submitterUserId?: string;
+    categoryId?: string;
+  } | null = null,
   sortConfig:
     | SortConfig<"random" | "name" | "createdAt" | "allocation">
     | null = null,
@@ -936,7 +1008,7 @@ export async function getApplications(
     where: eq(rounds.id, roundId),
     with: {
       admins: true,
-    }
+    },
   });
   if (!round) {
     log(LogLevel.Error, "Round not found", { roundId });
@@ -944,23 +1016,29 @@ export async function getApplications(
   }
 
   // We return result allocations only to admins or if results are published
-  const returnResults = isUserRoundAdmin(round, requestingUserId) || round.resultsPublished;
+  const returnResults = isUserRoundAdmin(round, requestingUserId) ||
+    round.resultsPublished;
 
   // Admins can see all applications. Non-admins can only see approved applications, or their own
   const returnOnlyAcceptedOrOwn = !isUserRoundAdmin(round, requestingUserId);
 
-  let applicationsResult = (await db
+  let applicationsResult = await db
     .select()
     .from(applications)
     .leftJoin(results, eq(applications.id, results.applicationId))
     .innerJoin(users, eq(applications.submitterUserId, users.id))
-    .innerJoin(applicationCategories, eq(applications.categoryId, applicationCategories.id))
+    .innerJoin(
+      applicationCategories,
+      eq(applications.categoryId, applicationCategories.id),
+    )
     .where(
       and(
         returnOnlyAcceptedOrOwn
           ? or(
             eq(applications.state, "approved"),
-            requestingUserId ? eq(applications.submitterUserId, requestingUserId) : undefined,
+            requestingUserId
+              ? eq(applications.submitterUserId, requestingUserId)
+              : undefined,
           )
           : undefined,
         eq(applications.roundId, roundId),
@@ -993,7 +1071,7 @@ export async function getApplications(
       }
     })())
     .limit(limit)
-    .offset(offset))
+    .offset(offset);
 
   // apply random sort if requested
   if (sortConfig?.field === "random") {
@@ -1027,7 +1105,7 @@ export async function getApplicationsCsv(
     where: eq(rounds.id, roundId),
     with: {
       admins: true,
-    }
+    },
   });
   if (!round) {
     log(LogLevel.Error, "Round not found", { roundId });
@@ -1037,12 +1115,15 @@ export async function getApplicationsCsv(
   const isAdmin = isUserRoundAdmin(round, requestingUserId);
   const includeRejectedAndPrivateData = isAdmin;
   const includeKycData = isAdmin;
-  const includeVoteResult = includeRejectedAndPrivateData || round.resultsPublished;
+  const includeVoteResult = includeRejectedAndPrivateData ||
+    round.resultsPublished;
 
   const data = await db.query.applications.findMany({
     where: and(
       eq(applications.roundId, roundId),
-      includeRejectedAndPrivateData && !onlyApproved ? undefined : eq(applications.state, "approved"),
+      includeRejectedAndPrivateData && !onlyApproved
+        ? undefined
+        : eq(applications.state, "approved"),
     ),
     with: {
       versions: {
@@ -1052,7 +1133,7 @@ export async function getApplicationsCsv(
           answers: {
             with: {
               field: true,
-            }
+            },
           },
           category: {
             columns: {
@@ -1064,26 +1145,28 @@ export async function getApplicationsCsv(
             columns: {
               id: true,
               name: true,
-            }
+            },
           },
-        }
+        },
       },
       result: true,
       kycRequestMapping: {
         with: {
           kycRequest: true,
-        }
-      }
-    }
+        },
+      },
+    },
   });
 
-  const uniqueAnswerSlugs = Array.from(new Set(data.flatMap((app) =>
-    app.versions[0].answers
-      // Extremely important: this drops private fields unless the user is an admin
-      .filter((a) => includeRejectedAndPrivateData ? true : !a.field.private)
-      .map((a) => a.field.slug ?? null)
-      .filter((s): s is string => s !== null)
-  )));
+  const uniqueAnswerSlugs = Array.from(
+    new Set(data.flatMap((app) =>
+      app.versions[0].answers
+        // Extremely important: this drops private fields unless the user is an admin
+        .filter((a) => includeRejectedAndPrivateData ? true : !a.field.private)
+        .map((a) => a.field.slug ?? null)
+        .filter((s): s is string => s !== null)
+    )),
+  );
 
   const publicDatasets = await db.query.customDatasets.findMany({
     where: and(
@@ -1098,17 +1181,37 @@ export async function getApplicationsCsv(
     },
   });
 
-  const datasetHeaders = publicDatasets.flatMap((ds) => ds.fields.map((f) => `${ds.name}:${f.name}`));
+  const datasetHeaders = publicDatasets.flatMap((ds) =>
+    ds.fields.map((f) => `${ds.name}:${f.name}`)
+  );
 
-  const kycSlugs = includeKycData ? [
-    "KYC Status",
-    "KYC Email address",
-    "KYC Updated At",
-    "KYC Provider",
-  ] : [];
+  const kycSlugs = includeKycData
+    ? [
+      "KYC Status",
+      "KYC Email address",
+      "KYC Updated At",
+      "KYC Provider",
+    ]
+    : [];
 
   const csvData = [
-    ["ID", "State", "Project Name", "GitHub URL", "Drips Account ID", "Submitter Wallet Address", "Category ID", "Category Name", "Form ID", "Form Name", ...kycSlugs, ...uniqueAnswerSlugs, ...datasetHeaders, "Created At", "Allocation"],
+    [
+      "ID",
+      "State",
+      "Project Name",
+      "GitHub URL",
+      "Drips Account ID",
+      "Submitter Wallet Address",
+      "Category ID",
+      "Category Name",
+      "Form ID",
+      "Form Name",
+      ...kycSlugs,
+      ...uniqueAnswerSlugs,
+      ...datasetHeaders,
+      "Created At",
+      "Allocation",
+    ],
     ...data.map((app) => [
       app.id,
       app.state,
@@ -1120,23 +1223,35 @@ export async function getApplicationsCsv(
       app.versions[0].category.name,
       app.versions[0].form.id,
       app.versions[0].form.name,
-      ...(includeKycData ? [
-        app.kycRequestMapping?.kycRequest.status ?? "",
-        app.kycRequestMapping?.kycRequest.kycEmail ?? "",
-        app.kycRequestMapping?.kycRequest.updatedAt.toISOString() ?? "",
-        app.kycRequestMapping?.kycRequest.kycProvider ?? "",
-      ] : []),
+      ...(includeKycData
+        ? [
+          app.kycRequestMapping?.kycRequest.status ?? "",
+          app.kycRequestMapping?.kycRequest.kycEmail ?? "",
+          app.kycRequestMapping?.kycRequest.updatedAt.toISOString() ?? "",
+          app.kycRequestMapping?.kycRequest.kycProvider ?? "",
+        ]
+        : []),
       ...uniqueAnswerSlugs.map((slug) => {
-        const answer = app.versions[0].answers.find((a) => a.field.slug === slug);
-        return answer ? (typeof answer.answer === "string" ? answer.answer : JSON.stringify(answer.answer)) : "";
+        const answer = app.versions[0].answers.find((a) =>
+          a.field.slug === slug
+        );
+        return answer
+          ? (typeof answer.answer === "string"
+            ? answer.answer
+            : JSON.stringify(answer.answer))
+          : "";
       }),
       ...publicDatasets.flatMap((ds) => {
         const appValues = ds.values.find((v) => v.applicationId === app.id);
-        return ds.fields.map((f) => appValues?.values[f.name]?.toString() ?? "");
+        return ds.fields.map((f) =>
+          appValues?.values[f.name]?.toString() ?? ""
+        );
       }),
       app.createdAt.toISOString(),
-      includeVoteResult ? (app.result !== null ? app.result.result.toString() : "") : "",
-    ])
+      includeVoteResult
+        ? (app.result !== null ? app.result.result.toString() : "")
+        : "",
+    ]),
   ];
 
   return stringify(csvData);
@@ -1176,10 +1291,12 @@ export async function setApplicationsState(
     throw new BadRequestError("Some applications were not in pending state");
   }
 
-  return updatedApplications.map((app) => mapDbApplicationToListingDto(
-    app,
-    null,
-  ));
+  return updatedApplications.map((app) =>
+    mapDbApplicationToListingDto(
+      app,
+      null,
+    )
+  );
 }
 
 export async function applyApplicationReview(
@@ -1195,7 +1312,7 @@ export async function applyApplicationReview(
     where: eq(rounds.id, roundId),
     with: {
       admins: true,
-    }
+    },
   });
   if (!round) {
     log(LogLevel.Error, "Round not found", { roundId });
@@ -1207,7 +1324,9 @@ export async function applyApplicationReview(
       "Not authorized to review applications for this round",
       { roundId, requestingUserId },
     );
-    throw new UnauthorizedError("Not authorized to review applications for this round");
+    throw new UnauthorizedError(
+      "Not authorized to review applications for this round",
+    );
   }
 
   const applicationIdsToApprove = review.filter((ri) =>
