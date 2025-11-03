@@ -1,7 +1,7 @@
 import { RouteParams, RouterContext } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
-import { addApplicationAttestationDtoSchema, applicationReviewDtoSchema, createApplicationDtoSchema, updateApplicationDtoSchema } from "../types/application.ts";
+import { applicationReviewDtoSchema, createApplicationDtoSchema, updateApplicationDtoSchema } from "../types/application.ts";
 import { BadRequestError } from "../errors/generic.ts";
 import {
   applyApplicationReview,
@@ -86,17 +86,11 @@ export async function addApplicationAttestationController(
   const userId = ctx.state.user.userId;
   const userWalletAddress = ctx.state.user.walletAddress;
 
-  const dto = await parseDto(
-    addApplicationAttestationDtoSchema,
-    ctx,
-  );
-
   const application = await addApplicationAttestationFromTransaction(
     applicationId,
     roundId,
     userId,
     userWalletAddress,
-    dto.transactionHash,
   );
 
   ctx.response.status = 200;

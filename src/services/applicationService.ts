@@ -287,6 +287,7 @@ function mapDbApplicationToDto(
       projectName: latestVersion.projectName,
       dripsAccountId: latestVersion.dripsAccountId,
       easAttestationUID: latestVersion.easAttestationUID ?? null,
+      deferredAttestationTxHash: latestVersion.deferredAttestationTxHash ?? null,
       dripsProjectDataSnapshot: latestVersion.dripsProjectDataSnapshot,
       createdAt: latestVersion.createdAt,
       formId: latestVersion.formId,
@@ -412,8 +413,21 @@ export async function createApplication(
   }
 
   // Validate the EAS attestation if required
+  const hasAttestationUid = Boolean(applicationDto.attestationUID);
+  const hasDeferredTx = Boolean(applicationDto.deferredAttestationTxHash);
+
   if (attestationSetup) {
-    if (applicationDto.attestationUID) {
+    if (!hasAttestationUid && !hasDeferredTx) {
+      log(LogLevel.Error, "Missing attestation proof for attestation-enabled round", {
+        roundId,
+        submitterUserId,
+      });
+      throw new BadRequestError(
+        "This round requires either an attestation UID or a deferred attestation transaction hash.",
+      );
+    }
+
+    if (hasAttestationUid) {
       await validateEasAttestation(
         applicationDto,
         applicationCategory.form.fields,
@@ -422,9 +436,10 @@ export async function createApplication(
         await getProviderForChain(round.chain),
       );
     } else {
-      log(LogLevel.Info, "No attestation UID provided during creation; skipping validation", {
+      log(LogLevel.Info, "Deferring attestation validation until transaction confirms", {
         roundId,
         submitterUserId,
+        deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
       });
     }
   }
@@ -444,6 +459,7 @@ export async function createApplication(
       projectName: applicationDto.projectName,
       dripsProjectDataSnapshot: onChainProject,
       easAttestationUID: applicationDto.attestationUID,
+      deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
       dripsAccountId: applicationDto.dripsAccountId,
       formId: applicationCategory.applicationFormId,
       categoryId: applicationCategory.id,
@@ -675,8 +691,22 @@ export async function updateApplication(
     );
   }
 
+  const hasAttestationUid = Boolean(applicationDto.attestationUID);
+  const hasDeferredTx = Boolean(applicationDto.deferredAttestationTxHash);
+
   if (attestationSetup) {
-    if (applicationDto.attestationUID) {
+    if (!hasAttestationUid && !hasDeferredTx) {
+      log(LogLevel.Error, "Missing attestation proof for attestation-enabled round on update", {
+        roundId,
+        applicationId,
+        submitterUserId,
+      });
+      throw new BadRequestError(
+        "This round requires either an attestation UID or a deferred attestation transaction hash.",
+      );
+    }
+
+    if (hasAttestationUid) {
       await validateEasAttestation(
         applicationDto,
         applicationCategory.form.fields,
@@ -685,9 +715,10 @@ export async function updateApplication(
         await getProviderForChain(round.chain),
       );
     } else {
-      log(LogLevel.Info, "No attestation UID provided during update; skipping validation", {
+      log(LogLevel.Info, "Deferring attestation validation until transaction confirms", {
         applicationId,
         submitterUserId,
+        deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
       });
     }
   }
@@ -698,6 +729,7 @@ export async function updateApplication(
       projectName: applicationDto.projectName,
       dripsProjectDataSnapshot: onChainProject,
       easAttestationUID: applicationDto.attestationUID,
+      deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
       dripsAccountId: applicationDto.dripsAccountId,
       formId: applicationCategory.applicationFormId,
       categoryId: applicationCategory.id,
@@ -781,13 +813,11 @@ export async function addApplicationAttestationFromTransaction(
   roundId: string,
   submitterUserId: string,
   submitterWalletAddress: string,
-  transactionHash: string,
 ): Promise<Application> {
   log(LogLevel.Info, "Adding attestation UID from transaction", {
     applicationId,
     roundId,
     submitterUserId,
-    transactionHash,
   });
 
   const application = await db.query.applications.findFirst({
@@ -845,13 +875,34 @@ export async function addApplicationAttestationFromTransaction(
     throw new BadRequestError("Round does not accept attestations");
   }
 
-  const latestVersion = application.versions[0];
-  if (!latestVersion) {
-    log(LogLevel.Error, "No application version found when adding attestation", {
+  const pendingVersion = application.versions.find((version) =>
+    !version.easAttestationUID && Boolean(version.deferredAttestationTxHash)
+  );
+
+  if (!pendingVersion) {
+    log(LogLevel.Error, "No deferred attestation found for application", {
       applicationId,
     });
-    throw new BadRequestError("Application version not found");
+    throw new BadRequestError(
+      "No deferred attestation transaction found for this application",
+    );
   }
+
+  const transactionHash = pendingVersion.deferredAttestationTxHash;
+
+  if (!transactionHash) {
+    log(LogLevel.Error, "Deferred attestation transaction hash missing", {
+      applicationId,
+    });
+    throw new BadRequestError(
+      "Application does not have a deferred attestation transaction hash",
+    );
+  }
+
+  log(LogLevel.Info, "Resolving deferred attestation", {
+    applicationId,
+    transactionHash,
+  });
 
   const provider = await getProviderForChain(application.round.chain);
 
@@ -929,7 +980,7 @@ export async function addApplicationAttestationFromTransaction(
   }
 
   const versionAnswers = await db.query.applicationAnswers.findMany({
-    where: (answers, { eq }) => eq(answers.applicationVersionId, latestVersion.id),
+    where: (answers, { eq }) => eq(answers.applicationVersionId, pendingVersion.id),
     orderBy: (answers, { asc }) => [asc(answers.order)],
   });
 
@@ -941,7 +992,7 @@ export async function addApplicationAttestationFromTransaction(
   const applicationCategory = await db.query.applicationCategories.findFirst({
     where: and(
       eq(applicationCategories.roundId, application.round.id),
-      eq(applicationCategories.id, latestVersion.categoryId),
+      eq(applicationCategories.id, pendingVersion.categoryId),
       isNull(applicationCategories.deletedAt),
     ),
     with: {
@@ -958,16 +1009,17 @@ export async function addApplicationAttestationFromTransaction(
   if (!applicationCategory) {
     log(LogLevel.Error, "Application category not found during attestation validation", {
       applicationId,
-      categoryId: latestVersion.categoryId,
+      categoryId: pendingVersion.categoryId,
     });
     throw new BadRequestError("Application category not found");
   }
 
   const validationPayload: CreateApplicationDto = {
-    projectName: latestVersion.projectName,
-    dripsAccountId: latestVersion.dripsAccountId,
+    projectName: pendingVersion.projectName,
+    dripsAccountId: pendingVersion.dripsAccountId,
     attestationUID: attestationUid,
-    categoryId: latestVersion.categoryId,
+    deferredAttestationTxHash: pendingVersion.deferredAttestationTxHash ?? undefined,
+    categoryId: pendingVersion.categoryId,
     answers: answersForValidation,
   };
 
@@ -982,7 +1034,7 @@ export async function addApplicationAttestationFromTransaction(
   const updatedApplication = await db.transaction(async (tx) => {
     await tx.update(applicationVersions).set({
       easAttestationUID: attestationUid,
-    }).where(eq(applicationVersions.id, latestVersion.id));
+    }).where(eq(applicationVersions.id, pendingVersion.id));
 
     const logPayload = {
       ...validationPayload,
@@ -1107,6 +1159,7 @@ export async function getApplicationHistory(
     projectName: v.projectName,
     dripsAccountId: v.dripsAccountId,
     easAttestationUID: v.easAttestationUID ?? null,
+    deferredAttestationTxHash: v.deferredAttestationTxHash ?? null,
     dripsProjectDataSnapshot: v.dripsProjectDataSnapshot,
     createdAt: v.createdAt,
     formId: v.formId,

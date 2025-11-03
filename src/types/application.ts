@@ -10,6 +10,7 @@ export const createApplicationDtoSchema = z.object({
   projectName: z.string().min(1).max(255),
   dripsAccountId: z.string().min(1).max(255),
   attestationUID: z.string().min(1).max(255).optional(),
+  deferredAttestationTxHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
   categoryId: z.string().uuid().min(1).max(255),
   answers: applicationAnswerDtoSchema,
 });
@@ -19,15 +20,11 @@ export const updateApplicationDtoSchema = z.object({
   projectName: z.string().min(1).max(255),
   dripsAccountId: z.string().min(1).max(255),
   attestationUID: z.string().min(1).max(255).optional(),
+  deferredAttestationTxHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
   categoryId: z.string().uuid().min(1).max(255),
   answers: applicationAnswerDtoSchema,
 });
 export type UpdateApplicationDto = z.infer<typeof updateApplicationDtoSchema>;
-
-export const addApplicationAttestationDtoSchema = z.object({
-  transactionHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
-});
-export type AddApplicationAttestationDto = z.infer<typeof addApplicationAttestationDtoSchema>;
 
 export const applicationReviewDtoSchema = z.array(z.object({
   applicationId: z.string(),
@@ -40,6 +37,7 @@ export type ApplicationVersion = {
   projectName: string;
   dripsAccountId: string;
   easAttestationUID: string | null;
+  deferredAttestationTxHash: string | null;
   dripsProjectDataSnapshot: ProjectData;
   createdAt: Date;
   formId: string;
