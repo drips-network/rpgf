@@ -24,6 +24,11 @@ export const updateApplicationDtoSchema = z.object({
 });
 export type UpdateApplicationDto = z.infer<typeof updateApplicationDtoSchema>;
 
+export const addApplicationAttestationDtoSchema = z.object({
+  transactionHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+});
+export type AddApplicationAttestationDto = z.infer<typeof addApplicationAttestationDtoSchema>;
+
 export const applicationReviewDtoSchema = z.array(z.object({
   applicationId: z.string(),
   decision: z.enum(["approve", "reject"]),

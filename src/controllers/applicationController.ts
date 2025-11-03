@@ -1,11 +1,12 @@
 import { RouteParams, RouterContext } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import parseDto from "../utils/parseDto.ts";
-import { applicationReviewDtoSchema, createApplicationDtoSchema, updateApplicationDtoSchema } from "../types/application.ts";
+import { addApplicationAttestationDtoSchema, applicationReviewDtoSchema, createApplicationDtoSchema, updateApplicationDtoSchema } from "../types/application.ts";
 import { BadRequestError } from "../errors/generic.ts";
 import {
   applyApplicationReview,
   createApplication,
+  addApplicationAttestationFromTransaction,
   getApplication,
   getApplicationHistory,
   getApplications,
@@ -67,6 +68,35 @@ export async function updateApplicationController(
     userId,
     userWalletAddress,
     dto,
+  );
+
+  ctx.response.status = 200;
+  ctx.response.body = application;
+}
+
+export async function addApplicationAttestationController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/applications/:applicationId/add-attestation-uid",
+    RouteParams<"/api/rounds/:roundId/applications/:applicationId/add-attestation-uid">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const applicationId = ctx.params.applicationId;
+  const userId = ctx.state.user.userId;
+  const userWalletAddress = ctx.state.user.walletAddress;
+
+  const dto = await parseDto(
+    addApplicationAttestationDtoSchema,
+    ctx,
+  );
+
+  const application = await addApplicationAttestationFromTransaction(
+    applicationId,
+    roundId,
+    userId,
+    userWalletAddress,
+    dto.transactionHash,
   );
 
   ctx.response.status = 200;
