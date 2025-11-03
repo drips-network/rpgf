@@ -1,0 +1,1 @@
+ALTER TABLE "application_versions" ADD COLUMN "deferred_attestation_tx_hash" varchar(66);
