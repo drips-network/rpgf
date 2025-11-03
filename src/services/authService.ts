@@ -2,18 +2,23 @@ import { SiweMessage } from "siwe";
 import { create as createJwt, getNumericDate, verify } from "djwt";
 import { db, Transaction } from "$app/db/postgres.ts";
 import { log, LogLevel } from "./loggingService.ts";
-import { nonces, refreshTokens, users, chains } from "$app/db/schema.ts";
+import { chains, nonces, refreshTokens, users } from "$app/db/schema.ts";
 import { and, eq, lt } from "drizzle-orm";
-import type { AccessTokenJwtPayload, RefreshTokenJwtPayload } from "$app/types/auth.ts";
+import type {
+  AccessTokenJwtPayload,
+  RefreshTokenJwtPayload,
+} from "$app/types/auth.ts";
 import { Context } from "oak";
 import { AppState, AuthenticatedAppState } from "../../main.ts";
 import { UnauthenticatedError, UnauthorizedError } from "../errors/auth.ts";
 import { BadRequestError } from "../errors/generic.ts";
-import { ethers } from "ethers";
+import { getProviderForChain } from "$app/ethereum/providerRegistry.ts";
 
 const NONCE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutes
 
-export function enforceAuthentication(ctx: Context<AppState>): ctx is Context<AuthenticatedAppState> {
+export function enforceAuthentication(
+  ctx: Context<AppState>,
+): ctx is Context<AuthenticatedAppState> {
   if (!ctx.state.user) {
     ctx.response.status = 401; // Unauthorized
     ctx.response.body = { error: "Unauthorized" };
@@ -26,7 +31,10 @@ export function enforceAuthentication(ctx: Context<AppState>): ctx is Context<Au
 // Helper to generate a cryptographically secure random string for nonce
 function generateSecureNonce(): string {
   const buffer = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(buffer, (byte: number) => byte.toString(16).padStart(2, "0"))
+  return Array.from(
+    buffer,
+    (byte: number) => byte.toString(16).padStart(2, "0"),
+  )
     .join("");
 }
 
@@ -92,7 +100,7 @@ async function createRefreshToken(
   );
 
   const payload: RefreshTokenJwtPayload = {
-    type: 'refresh',
+    type: "refresh",
     walletAddress,
     userId,
     exp: getNumericDate(expirationMinutes * 60), // Expires in X minutes
@@ -100,7 +108,11 @@ async function createRefreshToken(
     jti: crypto.randomUUID(), // Unique identifier for the token
   };
 
-  const jwt = await createJwt({ alg: "HS256", typ: "JWT" }, payload, jwtSecretKey);
+  const jwt = await createJwt(
+    { alg: "HS256", typ: "JWT" },
+    payload,
+    jwtSecretKey,
+  );
 
   // Store the refresh token in the database
   await tx.insert(refreshTokens).values({
@@ -129,15 +141,20 @@ export async function verifySignatureAndCreateRefreshToken(
     });
 
     if (!chain) {
-      log(LogLevel.Error, `Unsupported chain ID: ${siweMessageInstance.chainId}`);
-      throw new BadRequestError(`Unsupported chain ID: ${siweMessageInstance.chainId}`);
+      log(
+        LogLevel.Error,
+        `Unsupported chain ID: ${siweMessageInstance.chainId}`,
+      );
+      throw new BadRequestError(
+        `Unsupported chain ID: ${siweMessageInstance.chainId}`,
+      );
     }
 
-    const provider = new ethers.JsonRpcProvider(chain.rpcUrl);
+    const provider = await getProviderForChain(chain);
 
     const { success } = await siweMessageInstance.verify(
       { signature },
-      { provider }
+      { provider },
     );
 
     if (!success) {
@@ -166,10 +183,13 @@ export async function createAccessToken(
   log(LogLevel.Info, "Creating access token");
   return await db.transaction(async (tx) => {
     const jwtSecretKey = await getJwtSecret();
-    const payload = await verify(refreshToken, jwtSecretKey) as RefreshTokenJwtPayload;
+    const payload = await verify(
+      refreshToken,
+      jwtSecretKey,
+    ) as RefreshTokenJwtPayload;
     const { userId, type, walletAddress } = payload ?? {};
 
-    if (!payload || type !== 'refresh' || !walletAddress || !userId) {
+    if (!payload || type !== "refresh" || !walletAddress || !userId) {
       log(LogLevel.Error, "Invalid refresh token");
       throw new Error("Invalid refresh token");
     }
@@ -188,14 +208,18 @@ export async function createAccessToken(
 
     // Create a new access token with the same userId and walletAddress
     const accessTokenPayload: AccessTokenJwtPayload = {
-      type: 'access',
+      type: "access",
       walletAddress: walletAddress,
       userId: userId,
       exp: getNumericDate(15 * 60), // Expires in 15 minutes
       iat: getNumericDate(0), // Issued at now
     };
 
-    const accessToken = await createJwt({ alg: "HS256", typ: "JWT" }, accessTokenPayload, jwtSecretKey);
+    const accessToken = await createJwt(
+      { alg: "HS256", typ: "JWT" },
+      accessTokenPayload,
+      jwtSecretKey,
+    );
 
     return accessToken;
   });
@@ -210,13 +234,16 @@ export async function rotateRefreshToken(
 
     let payload: RefreshTokenJwtPayload | null = null;
     try {
-      payload = await verify(oldRefreshToken, jwtSecretKey) as RefreshTokenJwtPayload;
+      payload = await verify(
+        oldRefreshToken,
+        jwtSecretKey,
+      ) as RefreshTokenJwtPayload;
     } catch {
       // If verification fails, payload will remain null
       payload = null;
     }
 
-    if (!payload || payload.type !== 'refresh') {
+    if (!payload || payload.type !== "refresh") {
       log(LogLevel.Error, "Invalid refresh token");
       throw new UnauthorizedError("Invalid refresh token");
     }
@@ -236,9 +263,12 @@ export async function revokeRefreshToken(
 ): Promise<void> {
   log(LogLevel.Info, "Revoking refresh token");
   const jwtSecretKey = await getJwtSecret();
-  const payload = await verify(refreshToken, jwtSecretKey) as RefreshTokenJwtPayload;
+  const payload = await verify(
+    refreshToken,
+    jwtSecretKey,
+  ) as RefreshTokenJwtPayload;
 
-  if (!payload || payload.type !== 'refresh') {
+  if (!payload || payload.type !== "refresh") {
     log(LogLevel.Error, "Invalid refresh token");
     throw new UnauthorizedError("Invalid refresh token");
   }
