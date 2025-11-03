@@ -45,7 +45,8 @@
     "test:db:migrate": "deno run -A --node-modules-dir --env-file=.env.test npm:drizzle-kit migrate",
     "test:db:studio": "deno run -A --node-modules-dir --env-file=.env.test npm:drizzle-kit studio",
     "test": "deno run --allow-run --env-file=.env.test --node-modules-dir --allow-net --allow-env --allow-read tests/run.ts",
-    "applications:update-avatars": "deno run --node-modules-dir --allow-net --allow-env --env-file --allow-read --allow-import ./scripts/update-application-avatars.ts"
+    "applications:update-avatars": "deno run --node-modules-dir --allow-net --allow-env --env-file --allow-read --allow-import ./scripts/update-application-avatars.ts",
+    "applications:resolve-deferred-attestations": "deno run --node-modules-dir --allow-net --allow-env --env-file --allow-read --allow-import ./scripts/resolve-deferred-attestations.ts"
   },
   "nodeModulesDir": "auto"
 }

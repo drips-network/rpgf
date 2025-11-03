@@ -6,6 +6,7 @@ import { BadRequestError } from "../errors/generic.ts";
 import {
   applyApplicationReview,
   createApplication,
+  addApplicationAttestationFromTransaction,
   getApplication,
   getApplicationHistory,
   getApplications,
@@ -67,6 +68,29 @@ export async function updateApplicationController(
     userId,
     userWalletAddress,
     dto,
+  );
+
+  ctx.response.status = 200;
+  ctx.response.body = application;
+}
+
+export async function addApplicationAttestationController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/applications/:applicationId/add-attestation-uid",
+    RouteParams<"/api/rounds/:roundId/applications/:applicationId/add-attestation-uid">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const applicationId = ctx.params.applicationId;
+  const userId = ctx.state.user.userId;
+  const userWalletAddress = ctx.state.user.walletAddress;
+
+  const application = await addApplicationAttestationFromTransaction(
+    applicationId,
+    roundId,
+    userId,
+    userWalletAddress,
   );
 
   ctx.response.status = 200;

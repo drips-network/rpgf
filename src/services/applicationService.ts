@@ -28,7 +28,7 @@ import {
   updateApplicationDtoSchema,
 } from "../types/application.ts";
 import projects from "../gql/projects.ts";
-import type { Provider } from "ethers";
+import { Interface, type Provider } from "ethers";
 import {
   Attestation,
   EAS,
@@ -287,6 +287,7 @@ function mapDbApplicationToDto(
       projectName: latestVersion.projectName,
       dripsAccountId: latestVersion.dripsAccountId,
       easAttestationUID: latestVersion.easAttestationUID ?? null,
+      deferredAttestationTxHash: latestVersion.deferredAttestationTxHash ?? null,
       dripsProjectDataSnapshot: latestVersion.dripsProjectDataSnapshot,
       createdAt: latestVersion.createdAt,
       formId: latestVersion.formId,
@@ -412,14 +413,35 @@ export async function createApplication(
   }
 
   // Validate the EAS attestation if required
+  const hasAttestationUid = Boolean(applicationDto.attestationUID);
+  const hasDeferredTx = Boolean(applicationDto.deferredAttestationTxHash);
+
   if (attestationSetup) {
-    await validateEasAttestation(
-      applicationDto,
-      applicationCategory.form.fields,
-      submitterWalletAddress,
-      attestationSetup.easAddress,
-      await getProviderForChain(round.chain),
-    );
+    if (!hasAttestationUid && !hasDeferredTx) {
+      log(LogLevel.Error, "Missing attestation proof for attestation-enabled round", {
+        roundId,
+        submitterUserId,
+      });
+      throw new BadRequestError(
+        "This round requires either an attestation UID or a deferred attestation transaction hash.",
+      );
+    }
+
+    if (hasAttestationUid) {
+      await validateEasAttestation(
+        applicationDto,
+        applicationCategory.form.fields,
+        submitterWalletAddress,
+        attestationSetup.easAddress,
+        await getProviderForChain(round.chain),
+      );
+    } else {
+      log(LogLevel.Info, "Deferring attestation validation until transaction confirms", {
+        roundId,
+        submitterUserId,
+        deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
+      });
+    }
   }
 
   // Create answers and application
@@ -437,6 +459,7 @@ export async function createApplication(
       projectName: applicationDto.projectName,
       dripsProjectDataSnapshot: onChainProject,
       easAttestationUID: applicationDto.attestationUID,
+      deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
       dripsAccountId: applicationDto.dripsAccountId,
       formId: applicationCategory.applicationFormId,
       categoryId: applicationCategory.id,
@@ -668,14 +691,36 @@ export async function updateApplication(
     );
   }
 
+  const hasAttestationUid = Boolean(applicationDto.attestationUID);
+  const hasDeferredTx = Boolean(applicationDto.deferredAttestationTxHash);
+
   if (attestationSetup) {
-    await validateEasAttestation(
-      applicationDto,
-      applicationCategory.form.fields,
-      submitterWalletAddress,
-      attestationSetup.easAddress,
-      await getProviderForChain(round.chain),
-    );
+    if (!hasAttestationUid && !hasDeferredTx) {
+      log(LogLevel.Error, "Missing attestation proof for attestation-enabled round on update", {
+        roundId,
+        applicationId,
+        submitterUserId,
+      });
+      throw new BadRequestError(
+        "This round requires either an attestation UID or a deferred attestation transaction hash.",
+      );
+    }
+
+    if (hasAttestationUid) {
+      await validateEasAttestation(
+        applicationDto,
+        applicationCategory.form.fields,
+        submitterWalletAddress,
+        attestationSetup.easAddress,
+        await getProviderForChain(round.chain),
+      );
+    } else {
+      log(LogLevel.Info, "Deferring attestation validation until transaction confirms", {
+        applicationId,
+        submitterUserId,
+        deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
+      });
+    }
   }
 
   const updatedApplication = await db.transaction(async (tx) => {
@@ -684,6 +729,7 @@ export async function updateApplication(
       projectName: applicationDto.projectName,
       dripsProjectDataSnapshot: onChainProject,
       easAttestationUID: applicationDto.attestationUID,
+      deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
       dripsAccountId: applicationDto.dripsAccountId,
       formId: applicationCategory.applicationFormId,
       categoryId: applicationCategory.id,
@@ -762,6 +808,292 @@ export async function updateApplication(
   );
 }
 
+export async function addApplicationAttestationFromTransaction(
+  applicationId: string,
+  roundId: string,
+  submitterUserId: string,
+  submitterWalletAddress: string,
+): Promise<Application> {
+  log(LogLevel.Info, "Adding attestation UID from transaction", {
+    applicationId,
+    roundId,
+    submitterUserId,
+  });
+
+  const application = await db.query.applications.findFirst({
+    where: and(
+      eq(applications.id, applicationId),
+      eq(applications.roundId, roundId),
+    ),
+    with: {
+      round: {
+        with: {
+          chain: true,
+        },
+      },
+      versions: {
+        orderBy: desc(applicationVersions.createdAt),
+      },
+    },
+  });
+
+  if (!application) {
+    log(LogLevel.Error, "Application not found when adding attestation", {
+      applicationId,
+      roundId,
+    });
+    throw new NotFoundError("Application not found");
+  }
+
+  if (application.submitterUserId !== submitterUserId) {
+    log(LogLevel.Error, "User not authorized to add attestation", {
+      applicationId,
+      submitterUserId,
+    });
+    throw new UnauthorizedError("Not authorized to update this application");
+  }
+
+  if (!application.round) {
+    log(LogLevel.Error, "Application round missing while adding attestation", {
+      applicationId,
+    });
+    throw new NotFoundError("Round not found");
+  }
+
+  if (inferRoundState(application.round) !== "intake") {
+    log(LogLevel.Error, "Round is not currently accepting applications", {
+      roundId,
+    });
+    throw new BadRequestError("Round is not currently accepting applications");
+  }
+
+  const attestationSetup = application.round.chain?.attestationSetup;
+  if (!attestationSetup) {
+    log(LogLevel.Error, "Attestation setup missing for round when adding attestation", {
+      roundId,
+    });
+    throw new BadRequestError("Round does not accept attestations");
+  }
+
+  const pendingVersion = application.versions.find((version) =>
+    !version.easAttestationUID && Boolean(version.deferredAttestationTxHash)
+  );
+
+  if (!pendingVersion) {
+    log(LogLevel.Error, "No deferred attestation found for application", {
+      applicationId,
+    });
+    throw new BadRequestError(
+      "No deferred attestation transaction found for this application",
+    );
+  }
+
+  const transactionHash = pendingVersion.deferredAttestationTxHash;
+
+  if (!transactionHash) {
+    log(LogLevel.Error, "Deferred attestation transaction hash missing", {
+      applicationId,
+    });
+    throw new BadRequestError(
+      "Application does not have a deferred attestation transaction hash",
+    );
+  }
+
+  log(LogLevel.Info, "Resolving deferred attestation", {
+    applicationId,
+    transactionHash,
+  });
+
+  const provider = await getProviderForChain(application.round.chain);
+
+  const receiptTimeoutMs = 30000;
+  const receiptPollIntervalMs = 2000;
+  let receipt = await provider.getTransactionReceipt(transactionHash);
+  const transactionStart = Date.now();
+
+  while (!receipt && Date.now() - transactionStart < receiptTimeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, receiptPollIntervalMs));
+    receipt = await provider.getTransactionReceipt(transactionHash);
+  }
+
+  if (!receipt) {
+    log(LogLevel.Error, "Transaction receipt not found for attestation", {
+      transactionHash,
+    });
+    throw new BadRequestError("Attestation transaction not found or not yet mined");
+  }
+
+  const attestedInterface = new Interface([
+    "event Attested(address indexed recipient, address indexed attester, bytes32 indexed schema, bytes32 uid, bytes data)",
+  ]);
+  const expectedContractAddress = attestationSetup.easAddress.toLowerCase();
+
+  let parsedLog: ReturnType<typeof attestedInterface.parseLog> | null = null;
+  for (const logEntry of receipt.logs) {
+    if (logEntry.address.toLowerCase() !== expectedContractAddress) {
+      continue;
+    }
+
+    try {
+      const candidateLog = attestedInterface.parseLog(logEntry);
+      if (!candidateLog) {
+        continue;
+      }
+      const candidateSchemaUid = (candidateLog.args.schema as string).toLowerCase();
+
+      if (candidateSchemaUid !== attestationSetup.applicationAttestationSchemaUID.toLowerCase()) {
+        continue;
+      }
+
+      parsedLog = candidateLog;
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  if (!parsedLog) {
+    log(LogLevel.Error, "No attestation log found in transaction", {
+      transactionHash,
+      expectedSchemaUid: attestationSetup.applicationAttestationSchemaUID,
+    });
+    throw new BadRequestError("Transaction does not contain the expected attestation event");
+  }
+
+  const attestationUid = parsedLog.args.uid as string;
+  const attesterAddress = (parsedLog.args.attester as string).toLowerCase();
+
+  if (!attestationUid) {
+    log(LogLevel.Error, "Attestation UID missing in parsed log", {
+      transactionHash,
+    });
+    throw new BadRequestError("Attestation UID could not be determined from transaction");
+  }
+
+  if (attesterAddress !== submitterWalletAddress.toLowerCase()) {
+    log(LogLevel.Error, "Attestation attester does not match submitter", {
+      transactionHash,
+      attesterAddress,
+      submitterWalletAddress,
+    });
+    throw new BadRequestError("Attestation was not created by the submitting wallet");
+  }
+
+  const versionAnswers = await db.query.applicationAnswers.findMany({
+    where: (answers, { eq }) => eq(answers.applicationVersionId, pendingVersion.id),
+    orderBy: (answers, { asc }) => [asc(answers.order)],
+  });
+
+  const answersForValidation = versionAnswers.map((answer) => ({
+    fieldId: answer.fieldId,
+    value: answer.answer ?? null,
+  })) as CreateApplicationDto["answers"];
+
+  const applicationCategory = await db.query.applicationCategories.findFirst({
+    where: and(
+      eq(applicationCategories.roundId, application.round.id),
+      eq(applicationCategories.id, pendingVersion.categoryId),
+      isNull(applicationCategories.deletedAt),
+    ),
+    with: {
+      form: {
+        with: {
+          fields: {
+            where: isNull(applicationFormFields.deletedAt),
+          },
+        },
+      },
+    },
+  });
+
+  if (!applicationCategory) {
+    log(LogLevel.Error, "Application category not found during attestation validation", {
+      applicationId,
+      categoryId: pendingVersion.categoryId,
+    });
+    throw new BadRequestError("Application category not found");
+  }
+
+  const validationPayload: CreateApplicationDto = {
+    projectName: pendingVersion.projectName,
+    dripsAccountId: pendingVersion.dripsAccountId,
+    attestationUID: attestationUid,
+    deferredAttestationTxHash: pendingVersion.deferredAttestationTxHash ?? undefined,
+    categoryId: pendingVersion.categoryId,
+    answers: answersForValidation,
+  };
+
+  await validateEasAttestation(
+    validationPayload,
+    applicationCategory.form.fields,
+    submitterWalletAddress,
+    attestationSetup.easAddress,
+    provider,
+  );
+
+  const updatedApplication = await db.transaction(async (tx) => {
+    await tx.update(applicationVersions).set({
+      easAttestationUID: attestationUid,
+    }).where(eq(applicationVersions.id, pendingVersion.id));
+
+    const logPayload = {
+      ...validationPayload,
+      id: application.id,
+    };
+
+    await createLog({
+      type: AuditLogAction.ApplicationUpdated,
+      roundId: application.round.id,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: submitterUserId,
+      },
+      payload: logPayload,
+      tx,
+    });
+
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
+    await cachingService.delByPattern(
+      cachingService.generateKey(["application", applicationId, "*"]),
+    );
+
+    const fullApplication = (await tx.query.applications.findFirst({
+      where: eq(applications.id, applicationId),
+      with: {
+        versions: {
+          orderBy: desc(applicationVersions.createdAt),
+          with: {
+            answers: {
+              with: {
+                field: true,
+              },
+            },
+            form: true,
+            category: true,
+          },
+        },
+      },
+    }))!;
+
+    return {
+      ...fullApplication,
+      versions: fullApplication.versions.map((version) => ({
+        ...version,
+        answers: mapDbAnswersToDto(version.answers, false),
+      })),
+      customDatasetValues: [],
+    };
+  });
+
+  return mapDbApplicationToDto(
+    updatedApplication,
+    { id: submitterUserId, walletAddress: submitterWalletAddress },
+    null,
+  );
+}
+
 export async function getApplicationHistory(
   applicationId: string,
   roundId: string,
@@ -827,6 +1159,7 @@ export async function getApplicationHistory(
     projectName: v.projectName,
     dripsAccountId: v.dripsAccountId,
     easAttestationUID: v.easAttestationUID ?? null,
+    deferredAttestationTxHash: v.deferredAttestationTxHash ?? null,
     dripsProjectDataSnapshot: v.dripsProjectDataSnapshot,
     createdAt: v.createdAt,
     formId: v.formId,

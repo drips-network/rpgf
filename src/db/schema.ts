@@ -246,6 +246,7 @@ export const applicationVersions = pgTable("application_versions", {
   dripsAccountId: varchar("drips_account_id", { length: 255 }).notNull(),
   dripsProjectDataSnapshot: jsonb("drips_project_data_snapshot").$type<ProjectData>().notNull(),
   easAttestationUID: varchar("attestation_uid", { length: 255 }),
+  deferredAttestationTxHash: varchar("deferred_attestation_tx_hash", { length: 66 }),
   formId: uuid("form_id").notNull().references(() => applicationForms.id),
   categoryId: uuid("category_id").references(() => applicationCategories.id).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
