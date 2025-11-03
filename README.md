@@ -99,6 +99,16 @@ For development with auto-reloading on file changes:
 deno task dev
 ```
 
+### Refresh application avatars
+
+To keep stored application snapshots aligned with the latest Drips project data, run:
+
+```bash
+deno task applications:update-avatars
+```
+
+The script re-fetches each application's avatar metadata from the Drips API, updates the latest application version (and its denormalized copy), and clears the relevant Redis caches. Schedule it via cron or another job runner to refresh avatars periodically.
+
 ## API Endpoints
 
 The application exposes the following main sets of API endpoints:
