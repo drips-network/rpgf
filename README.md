@@ -107,7 +107,7 @@ To keep stored application snapshots aligned with the latest Drips project data,
 deno task applications:update-avatars
 ```
 
-The script re-fetches each application's avatar metadata from the Drips API, updates the latest application version (and its denormalized copy), and clears the relevant Redis caches. Schedule it via cron or another job runner to refresh avatars periodically.
+The script re-fetches each application's project data (avatar, color, owner, GitHub URL) from the Drips API, updates the latest application version (and its denormalized copy), and clears the relevant Redis caches. Schedule it via cron or another job runner to refresh project data periodically.
 
 ## API Endpoints
 
