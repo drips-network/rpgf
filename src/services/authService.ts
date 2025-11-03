@@ -124,7 +124,7 @@ export async function verifySignatureAndCreateRefreshToken(
       throw new BadRequestError("Invalid or expired nonce.");
     }
 
-    const chain = await db.query.chains.findFirst({
+    const chain = await tx.query.chains.findFirst({
       where: eq(chains.chainId, siweMessageInstance.chainId),
     });
 
