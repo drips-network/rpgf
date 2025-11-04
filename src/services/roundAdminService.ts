@@ -38,7 +38,7 @@ export async function setRoundAdmins(
       throw new UnauthorizedError("You are not authorized to modify this round.");
     }
 
-    const uniqueAddresses = new Set(dto.admins.map((admin) => admin.walletAddress));
+    const uniqueAddresses = new Set(dto.admins.map((admin) => admin.walletAddress.toLowerCase()));
     if (uniqueAddresses.size !== dto.admins.length) {
       log(LogLevel.Error, "Duplicate wallet addresses are not allowed");
       throw new BadRequestError("Duplicate wallet addresses are not allowed.");
