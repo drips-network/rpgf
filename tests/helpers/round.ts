@@ -23,10 +23,12 @@ export async function createRound(
 export async function createRoundAdmin(
   roundId: string,
   userId: string,
+  superAdmin = false,
 ) {
   await db.insert(roundAdmins).values({
     roundId,
     userId,
+    superAdmin,
   });
 }
 

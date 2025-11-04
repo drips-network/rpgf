@@ -71,6 +71,13 @@
       "when": 1762208250748,
       "tag": "0009_brief_wallflower",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1762246234576,
+      "tag": "0010_spicy_viper",
+      "breakpoints": true
     }
   ]
 }

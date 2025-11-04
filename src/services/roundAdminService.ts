@@ -1,11 +1,10 @@
-import type { RoundVoter } from '$app/types/roundVoter.ts';
+import type { RoundAdmin, SetRoundAdminsDto } from '$app/types/roundAdmin.ts';
 import { eq } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
 import { log, LogLevel } from "./loggingService.ts";
 import { roundAdmins, rounds } from "../db/schema.ts";
 import { createOrGetUser } from "./userService.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
-import { SetRoundAdminsDto } from "../types/roundAdmin.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
@@ -15,7 +14,7 @@ export async function setRoundAdmins(
   dto: SetRoundAdminsDto,
   requestingUserId: string,
   roundId: string,
-): Promise<RoundVoter[]> {
+): Promise<RoundAdmin[]> {
   log(LogLevel.Info, "Setting round admins", {
     requestingUserId,
     roundId,
@@ -39,16 +38,16 @@ export async function setRoundAdmins(
       throw new UnauthorizedError("You are not authorized to modify this round.");
     }
 
-    const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
-    if (uniqueAddresses.size !== dto.walletAddresses.length) {
+    const uniqueAddresses = new Set(dto.admins.map((admin) => admin.walletAddress.toLowerCase()));
+    if (uniqueAddresses.size !== dto.admins.length) {
       log(LogLevel.Error, "Duplicate wallet addresses are not allowed");
       throw new BadRequestError("Duplicate wallet addresses are not allowed.");
     }
 
     // get the list of users for the provided wallet addresses, creating any that don't exist
 
-    const users = await Promise.all(dto.walletAddresses.map((walletAddress) =>
-      createOrGetUser(tx, walletAddress),
+    const users = await Promise.all(dto.admins.map((admin) =>
+      createOrGetUser(tx, admin.walletAddress),
     ));
 
     // delete existing admins for the round
@@ -58,9 +57,10 @@ export async function setRoundAdmins(
     // insert the new admins for the round
 
     const admins = await tx.insert(roundAdmins).values(
-      users.map((u) => ({
+      users.map((u, index) => ({
         roundId,
         userId: u.id,
+        superAdmin: dto.admins[index].superAdmin,
       })),
     ).returning();
 
@@ -71,15 +71,14 @@ export async function setRoundAdmins(
         type: AuditLogActorType.User,
         userId: requestingUserId,
       },
-      payload: {
-        walletAddresses: dto.walletAddresses,
-      },
+      payload: dto,
       tx,
     })
 
-    return admins.map((admin) => ({
+    return admins.map((admin, index) => ({
       id: admin.userId,
-      walletAddress: users.find((u) => u.id === admin.userId)!.walletAddress,
+      walletAddress: users[index].walletAddress,
+      superAdmin: admin.superAdmin,
     }));
   });
 
@@ -87,7 +86,7 @@ export async function setRoundAdmins(
   return result;
 }
 
-export async function getRoundAdminsByRoundId(roundId: string, requestingUserId: string): Promise<RoundVoter[]> {
+export async function getRoundAdminsByRoundId(roundId: string, requestingUserId: string): Promise<RoundAdmin[]> {
   log(LogLevel.Info, "Getting round admins by round ID", {
     roundId,
     requestingUserId,
@@ -120,5 +119,6 @@ export async function getRoundAdminsByRoundId(roundId: string, requestingUserId:
   return admins.map((admin) => ({
     id: admin.user.id,
     walletAddress: admin.user.walletAddress,
+    superAdmin: admin.superAdmin,
   }));
 }

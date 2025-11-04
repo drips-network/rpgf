@@ -23,9 +23,14 @@ import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 import { KycProvider } from "../types/kyc.ts";
 
+type RoundAdminRelation = {
+  userId: string;
+  superAdmin?: boolean | null;
+};
+
 export function isUserRoundAdmin(
   roundWithAdmins: {
-    admins: { userId: string }[];
+    admins: RoundAdminRelation[];
   },
   userId: string | undefined | null,
 ): boolean {
@@ -34,6 +39,21 @@ export function isUserRoundAdmin(
   }
 
   return roundWithAdmins.admins.some((admin) => admin.userId === userId);
+}
+
+export function isUserRoundSuperAdmin(
+  roundWithAdmins: {
+    admins: RoundAdminRelation[];
+  },
+  userId: string | undefined | null,
+): boolean {
+  if (!userId) {
+    return false;
+  }
+
+  return roundWithAdmins.admins.some((admin) =>
+    admin.userId === userId && admin.superAdmin === true
+  );
 }
 
 const defaultRoundSelectFields = {
@@ -64,7 +84,7 @@ const defaultRoundSelectFields = {
 } as const;
 
 type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
-  admins: { userId: string }[];
+  admins: RoundAdminRelation[];
   voters: { userId: string }[];
   linkedDripLists: { dripListAccountId: string }[];
   createdBy: { id: string, walletAddress: string };

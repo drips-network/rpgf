@@ -2,6 +2,7 @@
 import {
   assertEquals,
   assertExists,
+  assertNotEquals,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { CreateRoundDto } from "$app/types/round.ts";
 import { getAuthToken } from "../helpers/auth.ts";
@@ -10,14 +11,18 @@ import { CreateApplicationDto } from "../../src/types/application.ts";
 import { SetRoundVotersDto } from "$app/types/roundVoter.ts";
 import { CreateApplicationFormDto } from "$app/types/applicationForm.ts";
 import { CreateApplicationCategoryDto } from "$app/types/applicationCategory.ts";
+import { db } from "$app/db/postgres.ts";
+import { roundAdmins, users } from "$app/db/schema.ts";
 import { assert } from "node:console";
 import { ethers } from "ethers";
 import { Stub, stub } from "jsr:@std/testing@1.0.15/mock";
 import projects from '$app/gql/projects.ts';
 import { assertFalse } from "https://deno.land/std@0.224.0/assert/assert_false.ts";
+import { and, eq } from "drizzle-orm";
 
 Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, async (t) => {
-  const authToken = await getAuthToken();
+  const adminWallet = ethers.Wallet.createRandom();
+  const authToken = await getAuthToken(adminWallet);
 
   let roundId: string;
 
@@ -373,6 +378,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
 
   const secondUserWallet = ethers.Wallet.createRandom();
   const secondUserAuthToken = await getAuthToken(secondUserWallet);
+  const superAdminOverrideWallet = ethers.Wallet.createRandom();
 
   let applicationForm: any;
   let category: any;
@@ -907,6 +913,144 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     assertEquals(response.body.ballot[applicationId], 10);
+  });
+
+  await t.step("should reject submitterOverride unless requester is super admin", async () => {
+    const overrideProjectStub: Stub = stub(projects, "getProject", () => {
+      return Promise.resolve({
+        gitHubUrl: "bar.baz",
+        avatar: {
+          emoji: "🌞",
+        },
+        color: "#123456",
+        owner: {
+          address: superAdminOverrideWallet.address,
+        },
+      });
+    });
+
+    try {
+      const overrideApplicationDto: CreateApplicationDto = {
+        projectName: "Super Admin Project",
+        dripsAccountId: "987",
+        categoryId: category.id,
+        answers: [
+          {
+            fieldId: applicationForm.fields[2].id,
+            value: "Super admin answer",
+          },
+          {
+            fieldId: applicationForm.fields[3].id,
+            value: "This is a project submitted during voting by a super admin.",
+          },
+          {
+            fieldId: applicationForm.fields[4].id,
+            value: "override@applicant.com",
+          },
+        ],
+        submitterOverride: superAdminOverrideWallet.address,
+      };
+
+      await withSuperOakApp((request) =>
+        request
+          .put(`/api/rounds/${roundId}/applications`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send(overrideApplicationDto)
+          .expect(401)
+      );
+
+      const randomUserToken = await getAuthToken();
+      await withSuperOakApp((request) =>
+        request
+          .put(`/api/rounds/${roundId}/applications`)
+          .set("Authorization", `Bearer ${randomUserToken}`)
+          .send({ ...overrideApplicationDto })
+          .expect(401)
+      );
+    } finally {
+      overrideProjectStub.restore();
+    }
+  });
+
+  await t.step("should promote the admin to super admin in the database", async () => {
+    const adminUser = await db.query.users.findFirst({
+      where: eq(users.walletAddress, adminWallet.address.toLowerCase()),
+    });
+    assertExists(adminUser);
+
+    const [updatedAdmin] = await db.update(roundAdmins)
+      .set({ superAdmin: true })
+      .where(and(
+        eq(roundAdmins.roundId, roundId),
+        eq(roundAdmins.userId, adminUser.id),
+      ))
+      .returning();
+
+    assertExists(updatedAdmin);
+    assertEquals(updatedAdmin.superAdmin, true);
+  });
+
+  await t.step("should allow a super admin to submit on behalf during voting", async () => {
+    const overrideApplicationDto: CreateApplicationDto = {
+      projectName: "Super Admin Project",
+      dripsAccountId: "987",
+      categoryId: category.id,
+      answers: [
+        {
+          fieldId: applicationForm.fields[2].id,
+          value: "Super admin answer",
+        },
+        {
+          fieldId: applicationForm.fields[3].id,
+          value: "This is a project submitted during voting by a super admin.",
+        },
+        {
+          fieldId: applicationForm.fields[4].id,
+          value: "override@applicant.com",
+        },
+      ],
+      submitterOverride: superAdminOverrideWallet.address,
+    };
+
+    const overrideProjectStub: Stub = stub(projects, "getProject", () => {
+      return Promise.resolve({
+        gitHubUrl: "bar.baz",
+        avatar: {
+          emoji: "🌞",
+        },
+        color: "#123456",
+        owner: {
+          address: superAdminOverrideWallet.address,
+        },
+      });
+    });
+
+    try {
+      const response = await withSuperOakApp((request) =>
+        request
+          .put(`/api/rounds/${roundId}/applications`)
+          .set("Authorization", `Bearer ${authToken}`)
+          .send(overrideApplicationDto)
+          .expect(200)
+      );
+
+      assertEquals(response.body.projectName, "Super Admin Project");
+      assertEquals(response.body.state, "pending");
+      assertNotEquals(
+        adminWallet.address.toLowerCase(),
+        superAdminOverrideWallet.address.toLowerCase(),
+      );
+      assertNotEquals(
+        response.body.submitter.walletAddress.toLowerCase(),
+        adminWallet.address.toLowerCase(),
+      );
+      assertEquals(
+        response.body.submitter.walletAddress.toLowerCase(),
+        superAdminOverrideWallet.address.toLowerCase(),
+      );
+    } finally {
+      overrideProjectStub.restore();
+    }
   });
 
   await t.step("should reject ballot from non-voter", async () => {

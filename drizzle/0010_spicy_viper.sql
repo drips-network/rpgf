@@ -1,0 +1,1 @@
+ALTER TABLE "round_admins" ADD COLUMN "super_admin" boolean DEFAULT false NOT NULL;

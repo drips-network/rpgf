@@ -37,7 +37,7 @@ import {
 import * as ipfs from "../ipfs/ipfs.ts";
 import z from "zod";
 import { SortConfig } from "../utils/sort.ts";
-import { inferRoundState, isUserRoundAdmin } from "./roundService.ts";
+import { inferRoundState, isUserRoundAdmin, isUserRoundSuperAdmin } from "./roundService.ts";
 import {
   mapDbAnswersToDto,
   recordAnswers,
@@ -51,6 +51,7 @@ import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 import { KycProvider } from "../types/kyc.ts";
 import { cachingService } from "./cachingService.ts";
 import { getProviderForChain } from "$app/ethereum/providerRegistry.ts";
+import { createOrGetUser } from "./userService.ts";
 
 export async function validateEasAttestation(
   applicationDto: CreateApplicationDto | UpdateApplicationDto,
@@ -322,7 +323,6 @@ function mapDbApplicationToListingDto(
     allocation: resultAllocation,
   };
 }
-
 export async function createApplication(
   roundId: string,
   submitterUserId: string,
@@ -333,21 +333,43 @@ export async function createApplication(
     roundId,
     submitterUserId,
   });
-  // Validate round in 'intake' state
+  const actingUserId = submitterUserId;
+  const actingWalletAddress = submitterWalletAddress;
+  const submitterOverride = applicationDto.submitterOverride ?? null;
+  const submittingOnBehalf = submitterOverride !== null;
+
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: {
       chain: true,
       kycConfiguration: true,
+      admins: true,
     },
   });
   if (!round) {
     log(LogLevel.Error, "Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
-  if (inferRoundState(round) !== "intake") {
+
+  const actorIsSuperAdmin = isUserRoundSuperAdmin(round, actingUserId);
+  if (submittingOnBehalf && !actorIsSuperAdmin) {
+    log(LogLevel.Error, "User attempted to submit on behalf without super admin rights", {
+      roundId,
+      actingUserId,
+      submitterOverride,
+    });
+    throw new UnauthorizedError("Only super admins can submit on behalf of another user.");
+  }
+
+  const effectiveWalletAddress = (submittingOnBehalf
+    ? submitterOverride!
+    : actingWalletAddress).toLowerCase();
+
+  const roundState = inferRoundState(round);
+  if (roundState !== "intake" && !actorIsSuperAdmin) {
     log(LogLevel.Error, "Round is not currently accepting applications", {
       roundId,
+      roundState,
     });
     throw new BadRequestError("Round is not currently accepting applications");
   }
@@ -400,12 +422,15 @@ export async function createApplication(
   }
   if (
     onChainProject.owner.address.toLowerCase() !==
-      submitterWalletAddress.toLowerCase()
+      effectiveWalletAddress.toLowerCase()
   ) {
     log(
       LogLevel.Error,
       "Drips Account ID is pointing at a project not currently owned by the submitter",
-      { dripsAccountId: applicationDto.dripsAccountId, submitterWalletAddress },
+      {
+        dripsAccountId: applicationDto.dripsAccountId,
+        submitterWalletAddress: effectiveWalletAddress,
+      },
     );
     throw new BadRequestError(
       "Drips Account ID is pointing at a project not currently owned by the submitter",
@@ -431,7 +456,7 @@ export async function createApplication(
       await validateEasAttestation(
         applicationDto,
         applicationCategory.form.fields,
-        submitterWalletAddress,
+        effectiveWalletAddress,
         attestationSetup.easAddress,
         await getProviderForChain(round.chain),
       );
@@ -445,9 +470,17 @@ export async function createApplication(
   }
 
   // Create answers and application
-  const newApplication = await db.transaction(async (tx) => {
-    const newApplication = (await tx.insert(applications).values({
-      submitterUserId,
+  const { dbApplication, submitter: resolvedSubmitter } = await db.transaction(async (tx) => {
+    let resolvedSubmitter: { id: string; walletAddress: string };
+    if (submittingOnBehalf) {
+      const user = await createOrGetUser(tx, effectiveWalletAddress);
+      resolvedSubmitter = { id: user.id, walletAddress: user.walletAddress };
+    } else {
+      resolvedSubmitter = { id: actingUserId, walletAddress: effectiveWalletAddress };
+    }
+
+    const insertedApplication = (await tx.insert(applications).values({
+      submitterUserId: resolvedSubmitter.id,
       roundId,
       projectName: applicationDto.projectName,
       dripsProjectDataSnapshot: onChainProject,
@@ -455,7 +488,7 @@ export async function createApplication(
     }).returning())[0];
 
     const newVersion = (await tx.insert(applicationVersions).values({
-      applicationId: newApplication.id,
+      applicationId: insertedApplication.id,
       projectName: applicationDto.projectName,
       dripsProjectDataSnapshot: onChainProject,
       easAttestationUID: applicationDto.attestationUID,
@@ -472,23 +505,17 @@ export async function createApplication(
     );
 
     // **Handle Treova KYC**
-    // Treova tracks KYC status per wallet address. We internally create a
-    // KYC Request entity when we receive a webhook from Treova updating
-    // us about the KYC status for a wallet address changing.
-    // If such a KYC Request already exists for this wallet address,
-    // we link it to the new application.
-
     if (round.kycConfiguration?.kycProvider === KycProvider.Treova) {
       const existingKycRequest = await tx.query.kycRequests.findFirst({
         where: and(
-          eq(kycRequests.userId, submitterUserId),
+          eq(kycRequests.userId, resolvedSubmitter.id),
           eq(kycRequests.roundId, round.id),
         ),
       });
 
       if (existingKycRequest) {
         await tx.insert(applicationKycRequests).values({
-          applicationId: newApplication.id,
+          applicationId: insertedApplication.id,
           kycRequestId: existingKycRequest.id,
         });
 
@@ -498,15 +525,15 @@ export async function createApplication(
           actor: { type: AuditLogActorType.System },
           payload: {
             kycRequestId: existingKycRequest.id,
-            applicationId: newApplication.id,
+            applicationId: insertedApplication.id,
           },
           tx,
         });
 
         log(LogLevel.Info, "Linked existing KYC Request to new application", {
-          userId: submitterUserId,
+          userId: resolvedSubmitter.id,
           roundId: round.id,
-          applicationId: newApplication.id,
+          applicationId: insertedApplication.id,
           kycRequestId: existingKycRequest.id,
         });
       } else {
@@ -514,15 +541,11 @@ export async function createApplication(
           LogLevel.Info,
           "No existing KYC Request for user and round, not linking",
           {
-            userId: submitterUserId,
+            userId: resolvedSubmitter.id,
             roundId: round.id,
-            applicationId: newApplication.id,
+            applicationId: insertedApplication.id,
           },
         );
-
-        // If no existing KYC Request exists, we don't do anything here.
-        // The incoming webhook handler will create the KYC Request entity
-        // and link any existing applications for that wallet address to it.
       }
     }
 
@@ -531,19 +554,21 @@ export async function createApplication(
       roundId: round.id,
       actor: {
         type: AuditLogActorType.User,
-        userId: submitterUserId,
+        userId: actingUserId,
       },
       payload: {
         ...applicationDto,
-        id: newApplication.id,
+        id: insertedApplication.id,
       },
       tx,
     });
 
     log(LogLevel.Info, "Created new application", {
-      applicationId: newApplication.id,
-      submitterUserId,
+      applicationId: insertedApplication.id,
       roundId,
+      actorUserId: actingUserId,
+      submitterUserId: resolvedSubmitter.id,
+      submittingOnBehalf,
     });
 
     await cachingService.delByPattern(
@@ -551,20 +576,23 @@ export async function createApplication(
     );
 
     return {
-      ...newApplication,
-      versions: [{
-        ...newVersion,
-        answers: newAnswers,
-        form: applicationCategory.form,
-        category: applicationCategory,
-      }],
-      customDatasetValues: [],
+      dbApplication: {
+        ...insertedApplication,
+        versions: [{
+          ...newVersion,
+          answers: newAnswers,
+          form: applicationCategory.form,
+          category: applicationCategory,
+        }],
+        customDatasetValues: [],
+      },
+      submitter: resolvedSubmitter,
     };
   });
 
   return mapDbApplicationToDto(
-    newApplication,
-    { id: submitterUserId, walletAddress: submitterWalletAddress },
+    dbApplication,
+    resolvedSubmitter,
     null,
   );
 }
