@@ -147,6 +147,7 @@ export const roundKycConfigurationsRelations =  relations(roundKycConfigurations
 export const roundAdmins = pgTable("round_admins", {
   roundId: uuid("round_id").references(() => rounds.id, { onDelete: 'cascade' }).notNull(),
   userId: uuid("user_id").notNull().references(() => users.id),
+  superAdmin: boolean("super_admin").notNull().default(false),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).defaultNow(),
 }, (table) => [
   primaryKey({ columns: [table.roundId, table.userId] }),

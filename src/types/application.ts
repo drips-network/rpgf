@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ProjectData } from "../gql/projects.ts";
 import { ApplicationCategory } from "./applicationCategory.ts";
 import { ApplicationAnswer, applicationAnswerDtoSchema } from "./applicationAnswer.ts";
+import { ethereumAddressSchema } from "./shared.ts";
 
 export const applicationStateSchema = z.enum(["pending", "approved", "rejected"]);
 export type ApplicationState = z.infer<typeof applicationStateSchema>;
@@ -13,6 +14,7 @@ export const createApplicationDtoSchema = z.object({
   deferredAttestationTxHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
   categoryId: z.string().uuid().min(1).max(255),
   answers: applicationAnswerDtoSchema,
+  submitterOverride: ethereumAddressSchema.optional(),
 });
 export type CreateApplicationDto = z.infer<typeof createApplicationDtoSchema>;
 

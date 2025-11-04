@@ -32,8 +32,8 @@ export async function getRoundAdminsController(
   const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;
 
-  const voters = await getRoundAdminsByRoundId(roundId, userId);
+  const admins = await getRoundAdminsByRoundId(roundId, userId);
 
   ctx.response.status = 200;
-  ctx.response.body = voters;
+  ctx.response.body = admins;
 }
