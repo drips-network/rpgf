@@ -377,7 +377,6 @@ export async function createRound(
     await tx.insert(roundAdmins).values({
       roundId: insertedId,
       userId: creatorUserId,
-      superAdmin: true,
     });
 
     const newRoundDraft = await tx.query.rounds.findFirst({
