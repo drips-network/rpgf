@@ -32,9 +32,14 @@ export function validateBallot(ballot: Ballot, votingConfig: {
       );
     }
     
-    if (votingConfig.minVotesPerProjectPerVoter && voteCount > 0 && voteCount < votingConfig.minVotesPerProjectPerVoter) {
+    // Validate minimum votes only if minimum is set and project has at least 1 vote
+    const hasMinimumVoteRequirement = votingConfig.minVotesPerProjectPerVoter !== undefined;
+    const projectHasVotes = voteCount > 0;
+    const votesBelowMinimum = hasMinimumVoteRequirement && voteCount < votingConfig.minVotesPerProjectPerVoter!;
+    
+    if (projectHasVotes && votesBelowMinimum) {
       throw new BadRequestError(
-        `Votes for project ${projectId} are below the minimum required (${votingConfig.minVotesPerProjectPerVoter})`,
+        `Votes for project ${projectId} are below the minimum required (${votingConfig.minVotesPerProjectPerVoter!})`,
       );
     }
   }
