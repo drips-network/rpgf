@@ -45,3 +45,46 @@ Deno.test("validateBallot should not throw for a valid ballot", () => {
   };
   validateBallot(ballot, votingConfig);
 });
+
+Deno.test("validateBallot should throw if votes for a project are below minVotesPerProjectPerVoter", () => {
+  const ballot = {
+    "project-1": 3,
+    "project-2": 10,
+  };
+  const votingConfig = {
+    maxVotesPerVoter: 40,
+    maxVotesPerProjectPerVoter: 20,
+    minVotesPerProjectPerVoter: 5,
+  };
+  assertThrows(
+    () => validateBallot(ballot, votingConfig),
+    BadRequestError,
+    "Votes for project project-1 are below the minimum required (5)",
+  );
+});
+
+Deno.test("validateBallot should not throw if votes for a project meet minVotesPerProjectPerVoter", () => {
+  const ballot = {
+    "project-1": 5,
+    "project-2": 10,
+  };
+  const votingConfig = {
+    maxVotesPerVoter: 40,
+    maxVotesPerProjectPerVoter: 20,
+    minVotesPerProjectPerVoter: 5,
+  };
+  validateBallot(ballot, votingConfig);
+});
+
+Deno.test("validateBallot should allow zero votes even with minVotesPerProjectPerVoter set", () => {
+  const ballot = {
+    "project-1": 0,
+    "project-2": 10,
+  };
+  const votingConfig = {
+    maxVotesPerVoter: 40,
+    maxVotesPerProjectPerVoter: 20,
+    minVotesPerProjectPerVoter: 5,
+  };
+  validateBallot(ballot, votingConfig);
+});

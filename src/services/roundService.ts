@@ -149,6 +149,7 @@ function mapDbRoundToDto(
     resultsPeriodStart: round.resultsPeriodStart,
     maxVotesPerVoter: round.maxVotesPerVoter,
     maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
+    minVotesPerProjectPerVoter: round.minVotesPerProjectPerVoter,
     voterGuidelinesLink: round.voterGuidelinesLink,
     createdByUser: {
       id: round.createdBy.id,
@@ -368,6 +369,7 @@ export async function createRound(
       resultsPeriodStart: dto.resultsPeriodStart ? new Date(dto.resultsPeriodStart) : null,
       maxVotesPerVoter: dto.maxVotesPerVoter,
       maxVotesPerProjectPerVoter: dto.maxVotesPerProjectPerVoter,
+      minVotesPerProjectPerVoter: dto.minVotesPerProjectPerVoter,
       voterGuidelinesLink: dto.voterGuidelinesLink,
       createdByUserId: creatorUserId,
       customAvatarCid: dto.customAvatarCid,
@@ -743,6 +745,7 @@ export async function patchRound(
         resultsPeriodStart: dto.resultsPeriodStart ? new Date(dto.resultsPeriodStart) : existingRound.resultsPeriodStart,
         maxVotesPerVoter: dto.maxVotesPerVoter ?? existingRound.maxVotesPerVoter,
         maxVotesPerProjectPerVoter: dto.maxVotesPerProjectPerVoter ?? existingRound.maxVotesPerProjectPerVoter,
+        minVotesPerProjectPerVoter: dto.minVotesPerProjectPerVoter ?? existingRound.minVotesPerProjectPerVoter,
         voterGuidelinesLink: dto.voterGuidelinesLink ?? existingRound.voterGuidelinesLink,
         updatedAt: new Date(),
       }).where(eq(rounds.id, existingRound.id));

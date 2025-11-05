@@ -57,6 +57,7 @@ export type Round<IsPublished extends boolean> = {
   resultsPeriodStart: IsPublished extends true ? Date : Date | null;
   maxVotesPerVoter: IsPublished extends true ? number : number | null;
   maxVotesPerProjectPerVoter: IsPublished extends true ? number : number | null;
+  minVotesPerProjectPerVoter: IsPublished extends true ? number : number | null;
   voterGuidelinesLink: string | null;
   createdByUser: {
     walletAddress: string;
@@ -113,6 +114,7 @@ export const createRoundDtoSchema = z.object({
   }).nullable(),
   maxVotesPerVoter: z.number().int().positive().nullable(),
   maxVotesPerProjectPerVoter: z.number().int().positive().nullable(),
+  minVotesPerProjectPerVoter: z.number().int().positive().nullable(),
   voterGuidelinesLink: z.string().url().max(255).nullable(),
   kycProvider: z.enum(["FERN"]).nullable(),
 });

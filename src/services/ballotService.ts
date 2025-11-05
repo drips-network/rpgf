@@ -13,6 +13,7 @@ import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 export function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
   maxVotesPerProjectPerVoter: number;
+  minVotesPerProjectPerVoter?: number;
 }) {
   const totalVotes = Object.values(ballot).reduce(
     (acc, voteCount) => acc + voteCount,
@@ -28,6 +29,12 @@ export function validateBallot(ballot: Ballot, votingConfig: {
     if (voteCount > votingConfig.maxVotesPerProjectPerVoter) {
       throw new BadRequestError(
         `Votes for project ${projectId} exceed the maximum allowed (${votingConfig.maxVotesPerProjectPerVoter})`,
+      );
+    }
+    
+    if (votingConfig.minVotesPerProjectPerVoter && voteCount > 0 && voteCount < votingConfig.minVotesPerProjectPerVoter) {
+      throw new BadRequestError(
+        `Votes for project ${projectId} are below the minimum required (${votingConfig.minVotesPerProjectPerVoter})`,
       );
     }
   }
@@ -144,6 +151,7 @@ export async function submitBallot(
     validateBallot(ballotDto.ballot, {
       maxVotesPerVoter: round.maxVotesPerVoter,
       maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
+      minVotesPerProjectPerVoter: round.minVotesPerProjectPerVoter ?? undefined,
     });
 
     const existingBallot = await getBallot(roundId, userId, tx);
