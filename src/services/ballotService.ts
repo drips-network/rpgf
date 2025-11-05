@@ -104,6 +104,12 @@ async function createBallot(
   );
 
   if (invalidApplicationIds.length > 0) {
+    log(LogLevel.Error, "Ballot contains invalid application IDs", {
+      invalidApplicationIds,
+      roundId,
+      userId,
+    });
+
     throw new BadRequestError(
       `The following application IDs had allocations, but are not approved: ${invalidApplicationIds.join(", ")}`,
     );

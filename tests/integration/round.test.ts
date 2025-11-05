@@ -1141,6 +1141,8 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(200)
     );
 
+    console.log('exceeding')
+
     // Exceeding total vote limit
     let csv = `ID,Allocation\n${applicationId},101`;
     await withSuperOakApp((request) =>
@@ -1150,6 +1152,8 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .send(csv)
         .expect(400)
     );
+
+    console.log('exceeding 2')
 
     // Exceeding per-project vote limit
     csv = `ID,Allocation\n${applicationId},11`;
@@ -1161,6 +1165,8 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(400)
     );
 
+    console.log('non existent')
+
     // Voting for a non-existent application
     csv = `ID,Allocation\nbc7534eb-acd3-43f0-952a-4a431e1b1065,10`;
     await withSuperOakApp((request) =>
@@ -1171,6 +1177,8 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(400)
     );
 
+    console.log('empty')
+
     // Empty ballot
     csv = `ID,Allocation\n`;
     await withSuperOakApp((request) =>
@@ -1180,6 +1188,8 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .send(csv)
         .expect(400)
     );
+
+    console.log('negative')
 
     // Negative allocation
     csv = `ID,Allocation\n${applicationId},-10`;

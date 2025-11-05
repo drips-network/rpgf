@@ -31,18 +31,17 @@ function _csvToBallotDto(csv: string): SubmitBallotDto {
       z.object({
         ID: z.string().uuid(),
         // parse empty string as null
-        // otherwise, must be a positive int number
+        // otherwise, must be 0 or positive int number
         Allocation: z
           .string()
           .transform((value) => (value === "" ? null : value))
           .nullable()
-          .refine(
-            (value) =>
-              value === null || (!isNaN(Number(value))),
-            {
-              message: "Invalid number",
-            }
-          )
+          .refine((value) => value === null || !isNaN(Number(value)), {
+            message: "Invalid number",
+          })
+          .refine((value) => value === null || Number(value) >= 0, {
+            message: "Allocation must be 0 or a positive number",
+          })
           .transform((value) => (value === null ? null : Number(value))),
       })
     )
