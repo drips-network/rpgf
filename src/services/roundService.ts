@@ -15,13 +15,14 @@ import {
   Round,
   RoundState,
 } from "$app/types/round.ts";
-import { and, count, eq, inArray, InferSelectModel, isNull } from "drizzle-orm";
+import { and, count, eq, inArray, InferInsertModel, InferSelectModel, isNull } from "drizzle-orm";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { z } from "zod";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 import { KycProvider } from "../types/kyc.ts";
+import { extractProvidedFields } from "$app/utils/extractProvidedFields.ts";
 
 type RoundAdminRelation = {
   userId: string;
@@ -715,40 +716,64 @@ export async function patchRound(
         );
       }
 
-      // update the fields
-      await tx.update(rounds).set({
-        name: dto.name ?? existingRound.name,
-        color: dto.color ?? existingRound.color,
-        emoji: dto.emoji ?? existingRound.emoji,
-        customAvatarCid: dto.customAvatarCid ?? existingRound.customAvatarCid,
-        description: dto.description ?? existingRound.description,
-        voterGuidelinesLink: dto.voterGuidelinesLink ?? existingRound.voterGuidelinesLink,
+      const { updates } = extractProvidedFields(dto, {
+        name: true,
+        color: true,
+        emoji: true,
+        customAvatarCid: true,
+        description: true,
+        voterGuidelinesLink: true,
+      });
+
+      const updatePayload: Partial<InferInsertModel<typeof rounds>> = {
+        ...updates,
         updatedAt: new Date(),
-      }).where(eq(rounds.id, existingRound.id)).returning();
+      };
+
+      await tx.update(rounds)
+        .set(updatePayload)
+        .where(eq(rounds.id, existingRound.id));
     } else {
-      // if urlSlug is being updated, ensure it's available
-      if (dto.urlSlug && dto.urlSlug !== existingRound.urlSlug) {
-        await ensureUrlSlugAvailable(dto.urlSlug, tx);
+      const toNullableDate = (value: string | null | undefined) =>
+        value === null
+          ? null
+          : value === undefined
+            ? undefined
+            : new Date(value);
+
+      const { updates, has } = extractProvidedFields(dto, {
+        name: true,
+        urlSlug: true,
+        color: true,
+        emoji: true,
+        customAvatarCid: true,
+        description: true,
+        applicationPeriodStart: toNullableDate,
+        applicationPeriodEnd: toNullableDate,
+        votingPeriodStart: toNullableDate,
+        votingPeriodEnd: toNullableDate,
+        resultsPeriodStart: toNullableDate,
+        maxVotesPerVoter: true,
+        maxVotesPerProjectPerVoter: true,
+        minVotesPerProjectPerVoter: true,
+        voterGuidelinesLink: true,
+      });
+
+      if (has("urlSlug")) {
+        const nextSlug = updates.urlSlug;
+        if (nextSlug && nextSlug !== existingRound.urlSlug) {
+          await ensureUrlSlugAvailable(nextSlug, tx);
+        }
       }
 
-      await tx.update(rounds).set({
-        name: dto.name ?? existingRound.name,
-        urlSlug: dto.urlSlug ?? existingRound.urlSlug,
-        color: dto.color ?? existingRound.color,
-        emoji: dto.emoji ?? existingRound.emoji,
-        customAvatarCid: dto.customAvatarCid ?? existingRound.customAvatarCid,
-        description: dto.description ?? existingRound.description,
-        applicationPeriodStart: dto.applicationPeriodStart ? new Date(dto.applicationPeriodStart) : existingRound.applicationPeriodStart,
-        applicationPeriodEnd: dto.applicationPeriodEnd ? new Date(dto.applicationPeriodEnd) : existingRound.applicationPeriodEnd,
-        votingPeriodStart: dto.votingPeriodStart ? new Date(dto.votingPeriodStart) : existingRound.votingPeriodStart,
-        votingPeriodEnd: dto.votingPeriodEnd ? new Date(dto.votingPeriodEnd) : existingRound.votingPeriodEnd,
-        resultsPeriodStart: dto.resultsPeriodStart ? new Date(dto.resultsPeriodStart) : existingRound.resultsPeriodStart,
-        maxVotesPerVoter: dto.maxVotesPerVoter ?? existingRound.maxVotesPerVoter,
-        maxVotesPerProjectPerVoter: dto.maxVotesPerProjectPerVoter ?? existingRound.maxVotesPerProjectPerVoter,
-        minVotesPerProjectPerVoter: dto.minVotesPerProjectPerVoter ?? existingRound.minVotesPerProjectPerVoter,
-        voterGuidelinesLink: dto.voterGuidelinesLink ?? existingRound.voterGuidelinesLink,
+      const updatePayload: Partial<InferInsertModel<typeof rounds>> = {
+        ...updates,
         updatedAt: new Date(),
-      }).where(eq(rounds.id, existingRound.id));
+      };
+
+      await tx.update(rounds)
+        .set(updatePayload)
+        .where(eq(rounds.id, existingRound.id));
     }
 
     const updatedRound = await tx.query.rounds.findFirst({

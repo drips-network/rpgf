@@ -61,6 +61,32 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     roundId = response.body.id;
   });
 
+  await t.step("should allow clearing optional fields via patch", async () => {
+    const patchResponse = await withSuperOakApp((request) =>
+      request
+        .patch(`/api/rounds/${roundId}`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          description: null,
+          voterGuidelinesLink: null,
+        })
+        .expect(200)
+    );
+
+    assertEquals(patchResponse.body.description, null);
+    assertEquals(patchResponse.body.voterGuidelinesLink, null);
+
+    const adminRound = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .expect(200)
+    );
+
+    assertEquals(adminRound.body.description, null);
+    assertEquals(adminRound.body.voterGuidelinesLink, null);
+  });
+
   await t.step("should not list the round in public listing since it's not yet published", async () => {
     const response = await withSuperOakApp((request) =>
       request
