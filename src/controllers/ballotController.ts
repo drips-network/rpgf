@@ -38,7 +38,7 @@ function _csvToBallotDto(csv: string): SubmitBallotDto {
           .nullable()
           .refine(
             (value) =>
-              value === null || (!isNaN(Number(value)) && Number(value) > 0),
+              value === null || (!isNaN(Number(value))),
             {
               message: "Invalid number",
             }
