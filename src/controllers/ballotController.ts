@@ -64,7 +64,7 @@ function _csvToBallotDto(csv: string): SubmitBallotDto {
       rows.data
         .filter(
           (row): row is { ID: string; Allocation: number } =>
-            row.Allocation !== null
+            row.Allocation !== null && row.Allocation > 0
         )
         .map((row) => [row.ID, row.Allocation])
     ),
