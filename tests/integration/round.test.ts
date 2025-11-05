@@ -39,6 +39,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       resultsPeriodStart: new Date(Date.now() + 18000000).toISOString(),
       maxVotesPerVoter: 100,
       maxVotesPerProjectPerVoter: 10,
+      minVotesPerProjectPerVoter: null,
       emoji: "🎉",
       color: "#27C537",
       voterGuidelinesLink: "https://example.com/guidelines",
