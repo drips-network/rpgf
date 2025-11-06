@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ballotSchema = z.record(z.string().uuid(), z.number().int().positive());
+export const ballotSchema = z.record(z.string().uuid(), z.number().int().min(0));
 export type Ballot = z.infer<typeof ballotSchema>;
 
 export const submitBallotDtoSchema = z.object({

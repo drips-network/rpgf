@@ -108,6 +108,7 @@ export const rounds = pgTable("rounds", {
   }),
   maxVotesPerVoter: integer("max_votes_per_voter"),
   maxVotesPerProjectPerVoter: integer("max_votes_per_project_per_voter"),
+  minVotesPerProjectPerVoter: integer("min_votes_per_project_per_voter"),
   voterGuidelinesLink: varchar("voter_guidelines_link", { length: 255 }),
   createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

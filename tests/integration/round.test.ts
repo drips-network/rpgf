@@ -39,6 +39,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       resultsPeriodStart: new Date(Date.now() + 18000000).toISOString(),
       maxVotesPerVoter: 100,
       maxVotesPerProjectPerVoter: 10,
+      minVotesPerProjectPerVoter: null,
       emoji: "🎉",
       color: "#27C537",
       voterGuidelinesLink: "https://example.com/guidelines",
@@ -58,6 +59,32 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     assertEquals(response.body.name, "Test Round");
     assertExists(response.body.id);
     roundId = response.body.id;
+  });
+
+  await t.step("should allow clearing optional fields via patch", async () => {
+    const patchResponse = await withSuperOakApp((request) =>
+      request
+        .patch(`/api/rounds/${roundId}`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          description: null,
+          voterGuidelinesLink: null,
+        })
+        .expect(200)
+    );
+
+    assertEquals(patchResponse.body.description, null);
+    assertEquals(patchResponse.body.voterGuidelinesLink, null);
+
+    const adminRound = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .expect(200)
+    );
+
+    assertEquals(adminRound.body.description, null);
+    assertEquals(adminRound.body.voterGuidelinesLink, null);
   });
 
   await t.step("should not list the round in public listing since it's not yet published", async () => {

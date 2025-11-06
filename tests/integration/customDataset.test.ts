@@ -43,6 +43,7 @@ Deno.test(
       ).toISOString(),
       maxVotesPerVoter: 100,
       maxVotesPerProjectPerVoter: 10,
+      minVotesPerProjectPerVoter: null,
       voterGuidelinesLink: "https://example.com",
       customAvatarCid: null,
       urlSlug: "custom-dataset-test-round",

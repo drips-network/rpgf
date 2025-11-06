@@ -13,6 +13,7 @@ import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 export function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
   maxVotesPerProjectPerVoter: number;
+  minVotesPerProjectPerVoter?: number;
 }) {
   const totalVotes = Object.values(ballot).reduce(
     (acc, voteCount) => acc + voteCount,
@@ -29,6 +30,19 @@ export function validateBallot(ballot: Ballot, votingConfig: {
       throw new BadRequestError(
         `Votes for project ${projectId} exceed the maximum allowed (${votingConfig.maxVotesPerProjectPerVoter})`,
       );
+    }
+    
+    // Validate minimum votes only if minimum is set and project has at least 1 vote
+    if (votingConfig.minVotesPerProjectPerVoter !== undefined) {
+      const minRequired = votingConfig.minVotesPerProjectPerVoter;
+      const projectHasVotes = voteCount > 0;
+      const votesBelowMinimum = voteCount < minRequired;
+      
+      if (projectHasVotes && votesBelowMinimum) {
+        throw new BadRequestError(
+          `Votes for project ${projectId} are below the minimum required (${minRequired})`,
+        );
+      }
     }
   }
 }
@@ -90,6 +104,12 @@ async function createBallot(
   );
 
   if (invalidApplicationIds.length > 0) {
+    log(LogLevel.Error, "Ballot contains invalid application IDs", {
+      invalidApplicationIds,
+      roundId,
+      userId,
+    });
+
     throw new BadRequestError(
       `The following application IDs had allocations, but are not approved: ${invalidApplicationIds.join(", ")}`,
     );
@@ -144,6 +164,7 @@ export async function submitBallot(
     validateBallot(ballotDto.ballot, {
       maxVotesPerVoter: round.maxVotesPerVoter,
       maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
+      minVotesPerProjectPerVoter: round.minVotesPerProjectPerVoter ?? undefined,
     });
 
     const existingBallot = await getBallot(roundId, userId, tx);

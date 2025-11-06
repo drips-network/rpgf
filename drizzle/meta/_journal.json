@@ -78,6 +78,13 @@
       "when": 1762246234576,
       "tag": "0010_spicy_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1762346849670,
+      "tag": "0011_add_min_votes_per_project_per_voter",
+      "breakpoints": true
     }
   ]
 }
