@@ -106,8 +106,8 @@ export async function uploadCustomDataset(
     throw new BadRequestError("First column of CSV must be 'applicationId'.");
   }
 
-  if (header.length - 1 > 10) {
-    throw new BadRequestError("A custom dataset can have a maximum of 10 fields.");
+  if (header.length - 1 > 30) {
+    throw new BadRequestError("A custom dataset can have a maximum of 30 fields.");
   }
 
   const dataRows = rows.slice(1);
