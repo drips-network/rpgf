@@ -1199,7 +1199,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
 
     const chainId = 1;
 
-    console.log("foo-1");
 
     // Exceeding total vote limit
     let csv = `ID,Allocation\n${applicationId},101`;
