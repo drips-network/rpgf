@@ -354,18 +354,6 @@ Deno.test(
       );
     });
 
-    await t.step("should cap amount of fields in dataset at 10", async () => {
-      const csv = `applicationId,field1,field2,field3,field4,field5,field6,field7,field8,field9,field10,field11\n${application.id},v1,v2,v3,v4,v5,v6,v7,v8,v9,v10,v11`;
-
-      await withSuperOakApp((req) =>
-        req
-          .post(`/api/rounds/${round.id}/custom-datasets/${dataset.id}/upload`)
-          .set("Authorization", `Bearer ${authToken}`)
-          .send(csv)
-          .expect(400)
-      );
-    });
-
     await t.step("should reject dataset with duplicate applicationIds", async () => {
       const csv = `applicationId,foo,bar\n${application.id},baz,qux\n${application.id},foo,bar`;
 

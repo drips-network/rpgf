@@ -13,7 +13,7 @@ import { parse } from "std/csv/parse";
 import z from "zod";
 import { convertXlsxToCsv } from "../utils/csv.ts";
 
-function _csvToBallotDto(csv: string): SubmitBallotDto {
+function _csvToBallotDto(csv: string): { ballot: Record<string, number> } {
   const parsed = parse(csv, { skipFirstRow: true });
 
   // ensure all the rows have at least ID and Allocation columns
@@ -71,6 +71,33 @@ function _csvToBallotDto(csv: string): SubmitBallotDto {
   };
 }
 
+export async function parseBallotFromSpreadsheetController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/ballots/parse-spreadsheet",
+    RouteParams<"/api/rounds/:roundId/ballots/parse-spreadsheet">,
+    AuthenticatedAppState
+  >
+) {
+  const format = ctx.request.url.searchParams.get("format");
+
+  if (format !== "csv" && format !== "xlsx") {
+    throw new BadRequestError("Invalid format. Possible: csv, xlsx");
+  }
+
+  let csv: string;
+  if (format === "csv") {
+    csv = await ctx.request.body.text();
+  } else {
+    const data = await ctx.request.body.arrayBuffer();
+    csv = convertXlsxToCsv(data);
+  }
+
+  const ballotDto = _csvToBallotDto(csv);
+
+  ctx.response.status = 200;
+  ctx.response.body = ballotDto;
+}
+
 export async function submitBallotController(
   ctx: RouterContext<
     "/api/rounds/:roundId/ballots",
@@ -101,6 +128,22 @@ export async function submitBallotAsSpreadsheetController(
     throw new BadRequestError("Invalid format. Possible: csv, xlsx");
   }
 
+  const signature = ctx.request.url.searchParams.get("signature");
+  const chainIdParam = ctx.request.url.searchParams.get("chainId");
+
+  if (!signature) {
+    throw new BadRequestError("Signature is required");
+  }
+
+  if (!chainIdParam) {
+    throw new BadRequestError("Chain ID is required");
+  }
+
+  const chainId = parseInt(chainIdParam, 10);
+  if (isNaN(chainId) || chainId <= 0) {
+    throw new BadRequestError("Chain ID must be a positive integer");
+  }
+
   const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;
 
@@ -113,7 +156,12 @@ export async function submitBallotAsSpreadsheetController(
     csv = convertXlsxToCsv(data);
   }
 
-  const dto = _csvToBallotDto(csv);
+  const ballotDto = _csvToBallotDto(csv);
+  const dto = {
+    ...ballotDto,
+    signature,
+    chainId,
+  };
   const result = await submitBallot(userId, roundId, dto);
 
   ctx.response.status = 200;

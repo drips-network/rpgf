@@ -85,6 +85,13 @@
       "when": 1762346849670,
       "tag": "0011_add_min_votes_per_project_per_voter",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1762958074438,
+      "tag": "0012_heavy_mephisto",
+      "breakpoints": true
     }
   ]
 }

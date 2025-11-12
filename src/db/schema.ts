@@ -279,6 +279,8 @@ export const ballots = pgTable("ballots", {
   roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: 'cascade' }),
   voterUserId: uuid("voter_user_id").notNull().references(() => users.id),
   ballot: jsonb("ballot").notNull().$type<SubmitBallotDto['ballot']>(),
+  signature: text("signature"),
+  chainId: integer("chain_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 }, (table) => [
