@@ -1238,8 +1238,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(400)
     );
 
-    console.log("foo-4");
-
     // Empty ballot
     csv = `ID,Allocation\n`;
     ballot = {};
