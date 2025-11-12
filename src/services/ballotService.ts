@@ -9,6 +9,7 @@ import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
 import { escapeCsvValue } from "../utils/csv.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+import { verifyBallotSignature } from "../utils/ballotSignature.ts";
 
 export function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
@@ -119,6 +120,8 @@ async function createBallot(
     roundId,
     voterUserId: userId,
     ballot: ballotDto.ballot,
+    signature: ballotDto.signature,
+    chainId: ballotDto.chainId,
   });
 
   const ballot = await getBallot(roundId, userId, tx);
@@ -161,6 +164,37 @@ export async function submitBallot(
       throw new BadRequestError("Round is not properly configured for voting");
     }
 
+    // Get user's wallet address for signature verification (do this before validation)
+    const user = await tx.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!user) {
+      log(LogLevel.Error, "User not found", { userId });
+      throw new NotFoundError("User not found");
+    }
+
+    // Verify ballot signature BEFORE validating content
+    try {
+      verifyBallotSignature(
+        user.walletAddress,
+        ballotDto.ballot,
+        ballotDto.signature,
+        ballotDto.chainId,
+      );
+      log(LogLevel.Info, "Ballot signature verified", { userId, roundId });
+    } catch (error) {
+      log(LogLevel.Error, "Ballot signature verification failed", {
+        userId,
+        roundId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new UnauthorizedError(
+        `Ballot signature verification failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    // Validate ballot content AFTER signature verification
     validateBallot(ballotDto.ballot, {
       maxVotesPerVoter: round.maxVotesPerVoter,
       maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
@@ -192,7 +226,9 @@ export async function submitBallot(
         userId,
       },
       payload: {
-        ...ballotDto,
+        ballot: ballotDto.ballot,
+        chainId: ballotDto.chainId,
+        // Note: signature is intentionally excluded from audit log
         id: result.id,
       },
       tx,
@@ -231,6 +267,8 @@ function _generateCsvRowsForVoter(
       escapeCsvValue(voteCount.toString()),
       escapeCsvValue(ballot?.createdAt.toString() ?? ""),
       escapeCsvValue(ballot?.updatedAt.toString() ?? ""),
+      escapeCsvValue(ballot?.signature ?? ""),
+      escapeCsvValue(ballot?.chainId?.toString() ?? ""),
     ].join(',');
 
     result += `${values}\n`;
@@ -292,7 +330,7 @@ export async function getBallots(
 
   if (format === "csv") {
     let csv =
-      `Voter Wallet Address,Application ID,Project Name,GitHub URL,Assigned votes,Submitted at,Updated at\n`;
+      `Voter Wallet Address,Application ID,Project Name,GitHub URL,Assigned votes,Submitted at,Updated at,Signature,Chain ID\n`;
 
     csv += round.voters.map((voter) => {
       const voterUser = voter.user;

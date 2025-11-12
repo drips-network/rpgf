@@ -25,8 +25,8 @@ type ApplicationSubmittedPayload = CreateApplicationDto & { id: string };
 type ApplicationUpdatedPayload = UpdateApplicationDto & { id: string };
 type ApplicationsReviewedPayload = ApplicationReviewDto;
 
-type BallotSubmittedPayload = SubmitBallotDto & { id: string };
-type BallotUpdatedPayload = SubmitBallotDto & { id: string };
+type BallotSubmittedPayload = Omit<SubmitBallotDto, "signature"> & { id: string };
+type BallotUpdatedPayload = Omit<SubmitBallotDto, "signature"> & { id: string };
 
 type ResultsCalculatedPayload = {
   method: ResultCalculationMethod;

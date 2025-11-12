@@ -19,6 +19,8 @@ import { Stub, stub } from "jsr:@std/testing@1.0.15/mock";
 import projects from '$app/gql/projects.ts';
 import { assertFalse } from "https://deno.land/std@0.224.0/assert/assert_false.ts";
 import { and, eq } from "drizzle-orm";
+import { signBallot } from "../helpers/ballot.ts";
+import { Ballot } from "$app/types/ballot.ts";
 
 Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, async (t) => {
   const adminWallet = ethers.Wallet.createRandom();
@@ -923,10 +925,13 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     const csv = `ID,Allocation\n${applicationId},10`;
+    const ballot: Ballot = { [applicationId]: 10 };
+    const chainId = 1;
+    const signature = await signBallot(voterWallet, ballot, chainId);
 
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(200)
@@ -940,6 +945,37 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     assertEquals(response.body.ballot[applicationId], 10);
+  });
+
+  await t.step("should include signature and chainId in CSV ballot export", async () => {
+    const csvResponse = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballots?format=csv`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .expect(200)
+    );
+
+    const csvText = csvResponse.text;
+    const lines = csvText.split('\n');
+
+    // Check header includes Signature and Chain ID columns
+    const header = lines[0];
+    assert(header.includes('Signature'));
+    assert(header.includes('Chain ID'));
+
+    // Check that data row includes signature and chainId
+    const dataRow = lines[1];
+    assert(dataRow.length > 0);
+
+    // Parse the CSV to verify signature is present
+    const columns = dataRow.split(',');
+    const signatureIndex = header.split(',').indexOf('Signature');
+    const chainIdIndex = header.split(',').indexOf('Chain ID');
+
+    assert(signatureIndex >= 0, 'Signature column should exist');
+    assert(chainIdIndex >= 0, 'Chain ID column should exist');
+    assert(columns[signatureIndex].length > 0, 'Signature value should be present');
+    assert(columns[chainIdIndex] === '1', 'Chain ID should be 1');
   });
 
   await t.step("should reject submitterOverride unless requester is super admin", async () => {
@@ -1085,10 +1121,13 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     const nonVoterAuthToken = await getAuthToken(nonVoterWallet);
 
     const csv = `ID,Allocation\n${applicationId},10`;
+    const ballot: Ballot = { [applicationId]: 10 };
+    const chainId = 1;
+    const signature = await signBallot(nonVoterWallet, ballot, chainId);
 
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
         .set("Authorization", `Bearer ${nonVoterAuthToken}`)
         .send(csv)
         .expect(401)
@@ -1108,6 +1147,47 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     const csv = `ID,Allocation\n${applicationId},10`;
+    const ballot: Ballot = { [applicationId]: 10 };
+    const chainId = 1;
+    const signature = await signBallot(voterWallet, ballot, chainId);
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'voting',
+        })
+        .expect(200)
+    );
+  });
+
+  await t.step("should reject unauthenticated ballot submission", async () => {
+    const csv = `ID,Allocation\n${applicationId},10`;
+    const ballot: Ballot = { [applicationId]: 10 };
+    const chainId = 1;
+    // Use voterWallet to sign even though we won't authenticate
+    const signature = await signBallot(voterWallet, ballot, chainId);
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
+        .send(csv)
+        .expect(401)
+    );
+  });
+
+  await t.step("should reject ballot submission without signature", async () => {
+    const csv = `ID,Allocation\n${applicationId},10`;
 
     await withSuperOakApp((request) =>
       request
@@ -1118,12 +1198,19 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
   });
 
-  await t.step("should reject unauthenticated ballot submission", async () => {
+  await t.step("should reject ballot submission with invalid signature", async () => {
     const csv = `ID,Allocation\n${applicationId},10`;
+    const ballot: Ballot = { [applicationId]: 10 };
+    const chainId = 1;
+
+    // Sign with a different wallet to create a valid signature format but wrong signer
+    const wrongWallet = ethers.Wallet.createRandom();
+    const invalidSignature = await signBallot(wrongWallet, ballot, chainId);
 
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(invalidSignature)}&chainId=${chainId}`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(401)
     );
@@ -1141,11 +1228,16 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(200)
     );
 
+    const chainId = 1;
+
+
     // Exceeding total vote limit
     let csv = `ID,Allocation\n${applicationId},101`;
+    let ballot: Ballot = { [applicationId]: 101 };
+    let signature = await signBallot(voterWallet, ballot, chainId);
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(400)
@@ -1153,9 +1245,11 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
 
     // Exceeding per-project vote limit
     csv = `ID,Allocation\n${applicationId},11`;
+    ballot = { [applicationId]: 11 };
+    signature = await signBallot(voterWallet, ballot, chainId);
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(400)
@@ -1163,9 +1257,11 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
 
     // Voting for a non-existent application
     csv = `ID,Allocation\nbc7534eb-acd3-43f0-952a-4a431e1b1065,10`;
+    ballot = { "bc7534eb-acd3-43f0-952a-4a431e1b1065": 10 };
+    signature = await signBallot(voterWallet, ballot, chainId);
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(400)
@@ -1173,19 +1269,21 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
 
     // Empty ballot
     csv = `ID,Allocation\n`;
+    ballot = {};
+    signature = await signBallot(voterWallet, ballot, chainId);
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(400)
     );
 
-    // Negative allocation
+    // Negative allocation - this should fail at CSV parsing before signature validation
     csv = `ID,Allocation\n${applicationId},-10`;
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=dummy&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(400)
@@ -1193,21 +1291,23 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
   });
 
   await t.step("should reject ballot with invalid CSV format", async () => {
-    // Missing required columns
+    const chainId = 1;
+
+    // Missing required columns - fails at CSV parsing, signature not needed
     let csv = `ID\n${applicationId}`;
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=dummysig&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(400)
     );
 
-    // Invalid data types
+    // Invalid data types - fails at CSV parsing, signature not needed
     csv = `ID,Allocation\nnot-a-uuid,10`;
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=dummysig&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(400)
@@ -1216,10 +1316,90 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     csv = `ID,Allocation\n${applicationId},not-a-number`;
     await withSuperOakApp((request) =>
       request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=dummysig&chainId=${chainId}`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
         .send(csv)
         .expect(400)
     );
+  });
+
+  await t.step("should parse ballot from CSV spreadsheet", async () => {
+    const csv = `ID,Allocation\n${applicationId},10`;
+
+    const response = await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(200)
+    );
+
+    assertEquals(response.body.ballot[applicationId], 10);
+    assertEquals(Object.keys(response.body.ballot).length, 1);
+  });
+
+  await t.step("should parse ballot and filter out zero allocations", async () => {
+    const csv = `ID,Allocation\n${applicationId},10\n${applicationId},0`;
+
+    const response = await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(200)
+    );
+
+    // Only non-zero allocations should be included
+    assertEquals(response.body.ballot[applicationId], 10);
+  });
+
+  await t.step("should reject parse-spreadsheet with invalid format", async () => {
+    const csv = `ID,Allocation\n${applicationId},10`;
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=invalid`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+  });
+
+  await t.step("should reject parse-spreadsheet with invalid CSV", async () => {
+    const csv = `ID\n${applicationId}`;
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
+    );
+  });
+
+  await t.step("should reject unauthenticated parse-spreadsheet request", async () => {
+    const csv = `ID,Allocation\n${applicationId},10`;
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
+        .send(csv)
+        .expect(401)
+    );
+  });
+
+  await t.step("should parse empty CSV (no allocations)", async () => {
+    const csv = `ID,Allocation\n${applicationId},0`;
+
+    const response = await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(200)
+    );
+
+    // Zero allocations should be filtered out
+    assertEquals(response.body.ballot, {});
   });
 });

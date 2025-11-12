@@ -4,6 +4,7 @@ import * as ballotController from "$app/controllers/ballotController.ts";
 
 const router = new Router();
 
+router.post('/api/rounds/:roundId/ballots/parse-spreadsheet', enforceAuthenticationMiddleware, ballotController.parseBallotFromSpreadsheetController);
 router.put('/api/rounds/:roundId/ballots', enforceAuthenticationMiddleware, ballotController.submitBallotController);
 router.post('/api/rounds/:roundId/ballots/spreadsheet', enforceAuthenticationMiddleware, ballotController.submitBallotAsSpreadsheetController);
 
