@@ -1212,8 +1212,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(400)
     );
 
-    console.log("foo-2");
-
     // Exceeding per-project vote limit
     csv = `ID,Allocation\n${applicationId},11`;
     ballot = { [applicationId]: 11 };
@@ -1249,8 +1247,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .send(csv)
         .expect(400)
     );
-
-    console.log("foo-5");
 
     // Negative allocation - this should fail at CSV parsing before signature validation
     csv = `ID,Allocation\n${applicationId},-10`;
