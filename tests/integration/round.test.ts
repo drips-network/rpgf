@@ -1226,8 +1226,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(400)
     );
 
-    console.log("foo-3");
-
     // Voting for a non-existent application
     csv = `ID,Allocation\nbc7534eb-acd3-43f0-952a-4a431e1b1065,10`;
     ballot = { "bc7534eb-acd3-43f0-952a-4a431e1b1065": 10 };
