@@ -267,6 +267,8 @@ function _generateCsvRowsForVoter(
       escapeCsvValue(voteCount.toString()),
       escapeCsvValue(ballot?.createdAt.toString() ?? ""),
       escapeCsvValue(ballot?.updatedAt.toString() ?? ""),
+      escapeCsvValue(ballot?.signature ?? ""),
+      escapeCsvValue(ballot?.chainId?.toString() ?? ""),
     ].join(',');
 
     result += `${values}\n`;
@@ -328,7 +330,7 @@ export async function getBallots(
 
   if (format === "csv") {
     let csv =
-      `Voter Wallet Address,Application ID,Project Name,GitHub URL,Assigned votes,Submitted at,Updated at\n`;
+      `Voter Wallet Address,Application ID,Project Name,GitHub URL,Assigned votes,Submitted at,Updated at,Signature,Chain ID\n`;
 
     csv += round.voters.map((voter) => {
       const voterUser = voter.user;

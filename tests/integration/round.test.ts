@@ -947,6 +947,37 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     assertEquals(response.body.ballot[applicationId], 10);
   });
 
+  await t.step("should include signature and chainId in CSV ballot export", async () => {
+    const csvResponse = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballots?format=csv`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .expect(200)
+    );
+
+    const csvText = csvResponse.text;
+    const lines = csvText.split('\n');
+
+    // Check header includes Signature and Chain ID columns
+    const header = lines[0];
+    assert(header.includes('Signature'));
+    assert(header.includes('Chain ID'));
+
+    // Check that data row includes signature and chainId
+    const dataRow = lines[1];
+    assert(dataRow.length > 0);
+
+    // Parse the CSV to verify signature is present
+    const columns = dataRow.split(',');
+    const signatureIndex = header.split(',').indexOf('Signature');
+    const chainIdIndex = header.split(',').indexOf('Chain ID');
+
+    assert(signatureIndex >= 0, 'Signature column should exist');
+    assert(chainIdIndex >= 0, 'Chain ID column should exist');
+    assert(columns[signatureIndex].length > 0, 'Signature value should be present');
+    assert(columns[chainIdIndex] === '1', 'Chain ID should be 1');
+  });
+
   await t.step("should reject submitterOverride unless requester is super admin", async () => {
     const overrideProjectStub: Stub = stub(projects, "getProject", () => {
       return Promise.resolve({
