@@ -16,6 +16,7 @@ export enum ResultCalculationMethod {
   MEDIAN = "median",
   AVG = "avg",
   SUM = "sum",
+  IMPORT = "import",
 }
 
 export function isValidResultsCalculationMethod(
@@ -162,6 +163,107 @@ export async function recalculateResultsForRound(
       },
       payload: {
         method,
+      },
+      tx,
+    });
+
+    await cachingService.delByPattern(
+      cachingService.generateKey(["applications", roundId, "*"]),
+    );
+    for (const app of applications) {
+      await cachingService.delByPattern(
+        cachingService.generateKey(["application", app.id, "*"]),
+      );
+    }
+  });
+}
+
+export async function importResultsForRound(
+  roundId: string,
+  requestingUserId: string,
+  results: Record<string, number>,
+) {
+  log(LogLevel.Info, "Importing results for round", {
+    roundId,
+    requestingUserId,
+  });
+  await db.transaction(async (tx) => {
+    const round = await getRound(roundId, requestingUserId, tx);
+    if (!round) {
+      log(LogLevel.Error, "Round not found", { roundId });
+      throw new NotFoundError("Round not found");
+    }
+    if (!round.isAdmin) {
+      log(LogLevel.Error, "User is not authorized to modify this round", {
+        roundId,
+        requestingUserId,
+      });
+      throw new BadRequestError("You are not authorized to modify this round");
+    }
+
+    if (!(round.state === "results" || round.state === "pending-results")) {
+      log(LogLevel.Error, "Round voting hasn't concluded yet", { roundId });
+      throw new BadRequestError("Round voting hasn't concluded yet");
+    }
+
+    const applications = await tx.query.applications.findMany({
+      where: (applications, { eq }) => eq(applications.roundId, round.id),
+      columns: {
+        id: true,
+      },
+    });
+
+    const applicationIds = new Set(applications.map((app) => app.id));
+    const invalidApplicationIds = Object.keys(results).filter(
+      (id) => !applicationIds.has(id),
+    );
+
+    if (invalidApplicationIds.length > 0) {
+      throw new BadRequestError(
+        `The following application IDs are not part of this round: ${
+          invalidApplicationIds.join(", ")
+        }`,
+      );
+    }
+
+    // Delete existing results for the round
+    await tx
+      .delete(resultsTable)
+      .where(
+        eq(resultsTable.roundId, round.id),
+      );
+
+    // Insert new results
+    const resultsToInsert = Object.entries(results).map((
+      [applicationId, result],
+    ) => ({
+      roundId: round.id,
+      applicationId,
+      method: ResultCalculationMethod.IMPORT,
+      result,
+    }));
+
+    if (resultsToInsert.length > 0) {
+      await tx
+        .insert(resultsTable)
+        .values(resultsToInsert);
+    }
+
+    // Indicate on the round that results have been calculated
+    await tx
+      .update(rounds)
+      .set({ resultsCalculated: true })
+      .where(eq(rounds.id, round.id));
+
+    await createLog({
+      type: AuditLogAction.ResultsCalculated,
+      roundId: round.id,
+      actor: {
+        type: AuditLogActorType.User,
+        userId: requestingUserId,
+      },
+      payload: {
+        method: ResultCalculationMethod.IMPORT,
       },
       tx,
     });
