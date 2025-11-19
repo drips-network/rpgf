@@ -36,8 +36,7 @@ function _csvToResultDto(csv: string): { results: Record<string, number> } {
     .array(
       z.object({
         ID: z.string().uuid(),
-        // parse empty string as null
-        // otherwise, must be 0 or positive int number
+        // parse empty string as null; otherwise, must be a positive number (zero values are excluded from import)
         Allocation:
           z
             .string()
