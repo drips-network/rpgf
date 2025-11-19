@@ -307,7 +307,7 @@ export const linkedDripListsRelations = relations(linkedDripLists, ({ one }) => 
 export const results = pgTable("results", {
   roundId: uuid("round_id").notNull().references(() => rounds.id),
   applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
-  method: varchar("method", { length: 255 }).notNull().$type<'median' | 'avg' | 'sum'>(),
+  method: varchar("method", { length: 255 }).notNull().$type<'median' | 'avg' | 'sum' | 'import'>(),
   result: integer("result").notNull(),
   calculatedAt: timestamp("calculated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table => [

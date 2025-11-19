@@ -5,6 +5,7 @@ import * as resolutController from "$app/controllers/resultController.ts";
 const router = new Router();
 
 router.post('/api/rounds/:roundId/results/recalculate', enforceAuthenticationMiddleware, resolutController.recalculateResultsController);
+router.post('/api/rounds/:roundId/results/import', enforceAuthenticationMiddleware, resolutController.importResultsFromSpreadsheetController);
 router.post('/api/rounds/:roundId/results/publish', enforceAuthenticationMiddleware, resolutController.publishResultsController);
 
 router.get('/api/rounds/:roundId/results/drip-list-weights', enforceAuthenticationMiddleware, resolutController.getDripListWeightsController);
