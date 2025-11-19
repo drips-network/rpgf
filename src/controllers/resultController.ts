@@ -13,7 +13,14 @@ import z from "zod";
 import { convertXlsxToCsv } from "../utils/csv.ts";
 
 function _csvToResultDto(csv: string): { results: Record<string, number> } {
-  const parsed = parse(csv, { skipFirstRow: true });
+  let parsed: ReturnType<typeof parse>;
+  try {
+    parsed = parse(csv, { skipFirstRow: true });
+  } catch (e) {
+    throw new BadRequestError(
+      `Invalid CSV format: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 
   // ensure all the rows have at least ID and Allocation columns
   if (
