@@ -94,6 +94,84 @@ type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
   kycConfiguration: { kycProvider: KycProvider, treovaFormId: string | null } | null;
 };
 
+const roundScheduleFields = [
+  "applicationPeriodStart",
+  "applicationPeriodEnd",
+  "votingPeriodStart",
+  "votingPeriodEnd",
+  "resultsPeriodStart",
+] as const;
+
+type RoundScheduleField = typeof roundScheduleFields[number];
+type RoundScheduleShape = Pick<RoundSelectModelWithRelations, RoundScheduleField>;
+
+export function validateFutureScheduleUpdates(
+  schedule: RoundScheduleShape,
+  updates: Partial<Record<RoundScheduleField, Date | null | undefined>>,
+  now = new Date(),
+): void {
+  const providedFields = roundScheduleFields.filter((field) =>
+    Object.prototype.hasOwnProperty.call(updates, field)
+  );
+
+  if (providedFields.length === 0) {
+    return;
+  }
+
+  const nextSchedule: RoundScheduleShape = { ...schedule };
+
+  for (const field of providedFields) {
+    const originalValue = schedule[field];
+    const updatedValue = updates[field];
+
+    if (!(originalValue instanceof Date)) {
+      throw new BadRequestError(
+        `Cannot update ${field} because the current value is missing.`,
+      );
+    }
+
+    if (originalValue <= now) {
+      throw new BadRequestError(
+        `Cannot update ${field} because it is in the past.`,
+      );
+    }
+
+    if (!(updatedValue instanceof Date)) {
+      throw new BadRequestError(
+        `${field} must be provided as an ISO date string.`,
+      );
+    }
+
+    if (updatedValue <= now) {
+      throw new BadRequestError(
+        `${field} must be in the future.`,
+      );
+    }
+
+    nextSchedule[field] = updatedValue;
+  }
+
+  if (nextSchedule.applicationPeriodStart && nextSchedule.applicationPeriodEnd &&
+    nextSchedule.applicationPeriodStart >= nextSchedule.applicationPeriodEnd) {
+    throw new BadRequestError("Application period start must be before end.");
+  }
+
+  if (nextSchedule.votingPeriodStart && nextSchedule.votingPeriodEnd &&
+    nextSchedule.votingPeriodStart >= nextSchedule.votingPeriodEnd) {
+    throw new BadRequestError("Voting period start must be before end.");
+  }
+
+  if (nextSchedule.applicationPeriodEnd && nextSchedule.votingPeriodStart &&
+    nextSchedule.applicationPeriodEnd >= nextSchedule.votingPeriodStart) {
+    throw new BadRequestError("Voting period must start after application period ends.");
+  }
+
+  if (nextSchedule.votingPeriodEnd && nextSchedule.resultsPeriodStart &&
+    nextSchedule.votingPeriodEnd >= nextSchedule.resultsPeriodStart) {
+    throw new BadRequestError("Results period must start after voting period ends.");
+  }
+}
+
 function mapDbRoundToDto(
   requestingUserId: string | null,
   round: RoundSelectModelWithRelations,
@@ -684,8 +762,15 @@ export async function patchRound(
       throw new UnauthorizedError("Only round admins can update the round.");
     }
 
+    const toNullableDate = (value: string | null | undefined) =>
+      value === null
+        ? null
+        : value === undefined
+          ? undefined
+          : new Date(value);
+
     // if the round is not published yet, allow partial updates to any field
-    // else, only allow name, color, emoji, customAvatarCid, description, voterGuidelinesLink
+    // else, only allow name, color, emoji, customAvatarCid, description, voterGuidelinesLink, certain dates
 
     if (existingRound.published) {
       const allowedFields = [
@@ -695,6 +780,7 @@ export async function patchRound(
         "customAvatarCid",
         "description",
         "voterGuidelinesLink",
+        ...roundScheduleFields,
       ];
 
       // check if dto has any fields not in allowedFields
@@ -716,14 +802,30 @@ export async function patchRound(
         );
       }
 
-      const { updates } = extractProvidedFields(dto, {
+      const { updates, has } = extractProvidedFields(dto, {
         name: true,
         color: true,
         emoji: true,
         customAvatarCid: true,
         description: true,
         voterGuidelinesLink: true,
+        applicationPeriodStart: toNullableDate,
+        applicationPeriodEnd: toNullableDate,
+        votingPeriodStart: toNullableDate,
+        votingPeriodEnd: toNullableDate,
+        resultsPeriodStart: toNullableDate,
       });
+
+      const scheduleUpdates = roundScheduleFields.filter((field) => has(field));
+
+      if (scheduleUpdates.length > 0) {
+        const scheduleUpdatePayload: Partial<Record<RoundScheduleField, Date | null | undefined>> = {};
+        for (const field of scheduleUpdates) {
+          scheduleUpdatePayload[field] = updates[field];
+        }
+
+        validateFutureScheduleUpdates(existingRound, scheduleUpdatePayload);
+      }
 
       const updatePayload: Partial<InferInsertModel<typeof rounds>> = {
         ...updates,
@@ -734,13 +836,6 @@ export async function patchRound(
         .set(updatePayload)
         .where(eq(rounds.id, existingRound.id));
     } else {
-      const toNullableDate = (value: string | null | undefined) =>
-        value === null
-          ? null
-          : value === undefined
-            ? undefined
-            : new Date(value);
-
       const { updates, has } = extractProvidedFields(dto, {
         name: true,
         urlSlug: true,
