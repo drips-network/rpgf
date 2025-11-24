@@ -44,6 +44,7 @@ export async function setRoundVoters(
     'intake',
     'pending-intake',
     'pending-voting',
+    'voting',
   ];
 
   if (roundState && !editingAllowedInStates.includes(roundState)) {
@@ -107,7 +108,7 @@ export async function setRoundVoters(
       });
 
       if (ballots.length > 0) {
-        throw new Error("Cannot remove voters that have already submitted a ballot.");
+        throw new BadRequestError("Cannot remove voters that have already submitted a ballot.");
       }
     }
 
