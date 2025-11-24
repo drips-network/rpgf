@@ -1472,7 +1472,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .put(`/api/rounds/${roundId}/voters`)
         .set("Authorization", `Bearer ${authToken}`)
         .send(voters)
-        .expect(500) // Should fail with error about removing voters with ballots
+        .expect(400) // Should fail with BadRequestError about removing voters with ballots
     );
   });
 });
