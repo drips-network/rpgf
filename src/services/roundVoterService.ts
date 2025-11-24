@@ -45,6 +45,7 @@ export async function setRoundVoters(
     'pending-intake',
     'pending-voting',
     'voting',
+    'pending-results',
   ];
 
   if (roundState && !editingAllowedInStates.includes(roundState)) {
