@@ -8,7 +8,7 @@ import { getRound, isUserRoundAdmin } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
 import { escapeCsvValue } from "../utils/csv.ts";
-import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+import { AuditLogAction, AuditLogActorType, type PayloadByAction } from "../types/auditLog.ts";
 import { verifyBallotSignature } from "../utils/ballotSignature.ts";
 
 type SubmitBallotOptions = {
@@ -286,6 +286,17 @@ export async function submitBallot(
 
     const result = await createBallot(tx, round.id, userId, ballotDto);
 
+    const auditPayload: PayloadByAction[AuditLogAction.BallotSubmitted] = {
+      ballot: ballotDto.ballot,
+      chainId: ballotDto.chainId,
+      // Note: signature is intentionally excluded from audit log
+      id: result.id,
+    };
+
+    if (actingOnBehalf) {
+      auditPayload.badgeholderWalletAddress = user.walletAddress;
+    }
+
     await createLog({
       type: AuditLogAction.BallotSubmitted,
       roundId: round.id,
@@ -293,12 +304,7 @@ export async function submitBallot(
         type: AuditLogActorType.User,
         userId: actorUserId,
       },
-      payload: {
-        ballot: ballotDto.ballot,
-        chainId: ballotDto.chainId,
-        // Note: signature is intentionally excluded from audit log
-        id: result.id,
-      },
+      payload: auditPayload,
       tx,
     });
 

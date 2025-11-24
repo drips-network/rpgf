@@ -25,8 +25,13 @@ type ApplicationSubmittedPayload = CreateApplicationDto & { id: string };
 type ApplicationUpdatedPayload = UpdateApplicationDto & { id: string };
 type ApplicationsReviewedPayload = ApplicationReviewDto;
 
-type BallotSubmittedPayload = Omit<SubmitBallotDto, "signature"> & { id: string };
-type BallotUpdatedPayload = Omit<SubmitBallotDto, "signature"> & { id: string };
+type BaseBallotPayload = Omit<SubmitBallotDto, "signature"> & {
+  id: string;
+  badgeholderWalletAddress?: string;
+};
+
+type BallotSubmittedPayload = BaseBallotPayload;
+type BallotUpdatedPayload = BaseBallotPayload;
 
 type ResultsCalculatedPayload = {
   method: ResultCalculationMethod;
