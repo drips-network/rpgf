@@ -895,6 +895,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
 
   const voterWallet = ethers.Wallet.createRandom();
   const voterAuthToken = await getAuthToken(voterWallet);
+  const delegatedVoterWallet = ethers.Wallet.createRandom();
 
   await t.step("should submit a ballot via CSV", async () => {
     const voters: SetRoundVotersDto = {
@@ -976,6 +977,75 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     assert(chainIdIndex >= 0, 'Chain ID column should exist');
     assert(columns[signatureIndex].length > 0, 'Signature value should be present');
     assert(columns[chainIdIndex] === '1', 'Chain ID should be 1');
+  });
+
+  await t.step("should allow an admin to submit a ballot on behalf during pending-results", async () => {
+    const updatedVoters: SetRoundVotersDto = {
+      walletAddresses: [
+        '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
+        '0xf0C0638991c33567B5f068D80DEB87BaA6B886Af',
+        '0x0a97820c0DbDc763Ce6dDbfD482709392a647467',
+        voterWallet.address,
+        delegatedVoterWallet.address,
+      ],
+    };
+
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/voters`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(updatedVoters)
+        .expect(200)
+    );
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'pending-results',
+        })
+        .expect(200)
+    );
+
+    const chainId = 1;
+    const delegatedBallot: Ballot = { [applicationId]: 5 };
+    const delegatedCsv = `ID,Allocation\n${applicationId},5`;
+    const delegatedSignature = await signBallot(delegatedVoterWallet, delegatedBallot, chainId);
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(delegatedSignature)}&chainId=${chainId}&addressOverride=${delegatedVoterWallet.address}`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(delegatedCsv)
+        .expect(200)
+    );
+
+    const ballotsResponse = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballots`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .expect(200)
+    );
+
+    const matchingBallot = ballotsResponse.body.find((ballot: any) =>
+      ballot.user.walletAddress.toLowerCase() === delegatedVoterWallet.address.toLowerCase()
+    );
+
+    assertExists(matchingBallot);
+    assertEquals(matchingBallot.ballot[applicationId], 5);
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'voting',
+        })
+        .expect(200)
+    );
   });
 
   await t.step("should reject submitterOverride unless requester is super admin", async () => {
@@ -1424,6 +1494,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         '0xf0C0638991c33567B5f068D80DEB87BaA6B886Af',
         '0x0a97820c0DbDc763Ce6dDbfD482709392a647467',
         voterWallet.address,
+        delegatedVoterWallet.address,
         newVoterWallet.address, // new voter
       ]
     };
@@ -1435,7 +1506,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(200)
     );
 
-    assertEquals(response.body.length, 5);
+    assertEquals(response.body.length, 6);
   });
 
   await t.step("should allow removing voters without ballots during voting period", async () => {
@@ -1444,7 +1515,9 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       walletAddresses: [
         '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
         '0xf0C0638991c33567B5f068D80DEB87BaA6B886Af',
+        '0x0a97820c0DbDc763Ce6dDbfD482709392a647467',
         voterWallet.address, // keep the voter with a ballot
+        delegatedVoterWallet.address,
       ]
     };
     const response = await withSuperOakApp((request) =>
@@ -1455,7 +1528,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .expect(200)
     );
 
-    assertEquals(response.body.length, 3);
+    assertEquals(response.body.length, 5);
   });
 
   await t.step("should reject removing voters with ballots during voting period", async () => {

@@ -77,3 +77,30 @@ export async function createOrGetUser(tx: Transaction, walletAddress: string) {
 
   return user;
 }
+
+export async function getUserByWalletAddress(
+  walletAddress: string,
+  tx?: Transaction,
+) {
+  const normalizedWalletAddress = walletAddress.toLowerCase();
+
+  log(LogLevel.Info, "Getting user by wallet address", {
+    walletAddress: normalizedWalletAddress,
+  });
+
+  const user = await (tx ?? db).select(USER_FIELDS)
+    .from(users)
+    .where(eq(users.walletAddress, normalizedWalletAddress))
+    .limit(1)
+    .then((res) => res[0] ?? null);
+
+  if (!user) {
+    log(LogLevel.Info, "User not found for wallet address", {
+      walletAddress: normalizedWalletAddress,
+    });
+    return null;
+  }
+
+  log(LogLevel.Info, "User found by wallet address", { id: user.id });
+  return user;
+}

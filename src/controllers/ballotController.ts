@@ -7,11 +7,13 @@ import {
   submitBallot,
 } from "../services/ballotService.ts";
 import parseDto from "../utils/parseDto.ts";
-import { SubmitBallotDto, submitBallotDtoSchema } from "../types/ballot.ts";
+import { submitBallotDtoSchema } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { parse } from "std/csv/parse";
 import z from "zod";
 import { convertXlsxToCsv } from "../utils/csv.ts";
+import { getUserByWalletAddress } from "../services/userService.ts";
+import { ethereumAddressSchema } from "../types/shared.ts";
 
 function _csvToBallotDto(csv: string): { ballot: Record<string, number> } {
   const parsed = parse(csv, { skipFirstRow: true });
@@ -130,6 +132,7 @@ export async function submitBallotAsSpreadsheetController(
 
   const signature = ctx.request.url.searchParams.get("signature");
   const chainIdParam = ctx.request.url.searchParams.get("chainId");
+  const addressOverrideParam = ctx.request.url.searchParams.get("addressOverride");
 
   if (!signature) {
     throw new BadRequestError("Signature is required");
@@ -145,7 +148,26 @@ export async function submitBallotAsSpreadsheetController(
   }
 
   const roundId = ctx.params.roundId;
-  const userId = ctx.state.user.userId;
+  const actorUserId = ctx.state.user.userId;
+
+  let voterUserId = actorUserId;
+
+  if (addressOverrideParam) {
+    const parsedAddress = ethereumAddressSchema.safeParse(addressOverrideParam);
+    if (!parsedAddress.success) {
+      const message = parsedAddress.error.errors[0]?.message ?? "Invalid Ethereum address";
+      throw new BadRequestError(message);
+    }
+
+    const overrideAddress = parsedAddress.data;
+
+    const targetUser = await getUserByWalletAddress(overrideAddress);
+    if (!targetUser) {
+      throw new BadRequestError("No user found for the provided address");
+    }
+
+    voterUserId = targetUser.id;
+  }
 
   let csv: string;
   if (format === "csv") {
@@ -162,7 +184,9 @@ export async function submitBallotAsSpreadsheetController(
     signature,
     chainId,
   };
-  const result = await submitBallot(userId, roundId, dto);
+  const result = await submitBallot(voterUserId, roundId, dto, {
+    actorUserId,
+  });
 
   ctx.response.status = 200;
   ctx.response.body = result;
