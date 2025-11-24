@@ -1010,9 +1010,9 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     const chainId = 1;
-    const delegatedBallot: Ballot = { [applicationId]: 5 };
-    const delegatedCsv = `ID,Allocation\n${applicationId},5`;
-    const delegatedSignature = await signBallot(delegatedVoterWallet, delegatedBallot, chainId);
+  const delegatedBallot: Ballot = { [applicationId]: 5 };
+  const delegatedCsv = `ID,Allocation\n${applicationId},5`;
+  const delegatedSignature = await signBallot(adminWallet, delegatedBallot, chainId);
 
     await withSuperOakApp((request) =>
       request
@@ -1033,8 +1033,10 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       ballot.user.walletAddress.toLowerCase() === delegatedVoterWallet.address.toLowerCase()
     );
 
-    assertExists(matchingBallot);
-    assertEquals(matchingBallot.ballot[applicationId], 5);
+  assertExists(matchingBallot);
+  assertEquals(matchingBallot.ballot[applicationId], 5);
+    assertEquals(matchingBallot.signature, delegatedSignature);
+    assertEquals(matchingBallot.chainId, chainId);
 
     await withSuperOakApp((request) =>
       request
@@ -1547,5 +1549,41 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .send(voters)
         .expect(400) // Should fail with BadRequestError about removing voters with ballots
     );
+  });
+
+  await t.step("should allow adding voters during pending-results period", async () => {
+    // Move round into pending-results state
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'pending-results',
+        })
+        .expect(200)
+    );
+
+    const pendingResultsVoter = ethers.Wallet.createRandom();
+    const voters: SetRoundVotersDto = {
+      walletAddresses: [
+        '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
+        '0xf0C0638991c33567B5f068D80DEB87BaA6B886Af',
+        '0x0a97820c0DbDc763Ce6dDbfD482709392a647467',
+        voterWallet.address,
+        delegatedVoterWallet.address,
+        pendingResultsVoter.address,
+      ]
+    };
+
+    const response = await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/voters`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(voters)
+        .expect(200)
+    );
+
+    assertEquals(response.body.length, 6);
   });
 });
