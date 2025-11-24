@@ -1402,4 +1402,77 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     // Zero allocations should be filtered out
     assertEquals(response.body.ballot, {});
   });
+
+  await t.step("should allow adding voters during voting period", async () => {
+    // Force round to voting state
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'voting',
+        })
+        .expect(200)
+    );
+
+    // Add a new voter during voting period
+    const newVoterWallet = ethers.Wallet.createRandom();
+    const voters: SetRoundVotersDto = {
+      walletAddresses: [
+        '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
+        '0xf0C0638991c33567B5f068D80DEB87BaA6B886Af',
+        '0x0a97820c0DbDc763Ce6dDbfD482709392a647467',
+        voterWallet.address,
+        newVoterWallet.address, // new voter
+      ]
+    };
+    const response = await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/voters`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(voters)
+        .expect(200)
+    );
+
+    assertEquals(response.body.length, 5);
+  });
+
+  await t.step("should allow removing voters without ballots during voting period", async () => {
+    // Remove a voter that hasn't submitted a ballot
+    const voters: SetRoundVotersDto = {
+      walletAddresses: [
+        '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
+        '0xf0C0638991c33567B5f068D80DEB87BaA6B886Af',
+        voterWallet.address, // keep the voter with a ballot
+      ]
+    };
+    const response = await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/voters`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(voters)
+        .expect(200)
+    );
+
+    assertEquals(response.body.length, 3);
+  });
+
+  await t.step("should reject removing voters with ballots during voting period", async () => {
+    // Try to remove the voter that has submitted a ballot
+    const voters: SetRoundVotersDto = {
+      walletAddresses: [
+        '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
+        '0xf0C0638991c33567B5f068D80DEB87BaA6B886Af',
+        // voterWallet.address removed - but they have a ballot!
+      ]
+    };
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/voters`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send(voters)
+        .expect(500) // Should fail with error about removing voters with ballots
+    );
+  });
 });
