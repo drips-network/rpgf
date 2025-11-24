@@ -1010,9 +1010,9 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     const chainId = 1;
-    const delegatedBallot: Ballot = { [applicationId]: 5 };
-    const delegatedCsv = `ID,Allocation\n${applicationId},5`;
-    const delegatedSignature = await signBallot(delegatedVoterWallet, delegatedBallot, chainId);
+  const delegatedBallot: Ballot = { [applicationId]: 5 };
+  const delegatedCsv = `ID,Allocation\n${applicationId},5`;
+  const delegatedSignature = await signBallot(adminWallet, delegatedBallot, chainId);
 
     await withSuperOakApp((request) =>
       request
@@ -1033,8 +1033,10 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       ballot.user.walletAddress.toLowerCase() === delegatedVoterWallet.address.toLowerCase()
     );
 
-    assertExists(matchingBallot);
-    assertEquals(matchingBallot.ballot[applicationId], 5);
+  assertExists(matchingBallot);
+  assertEquals(matchingBallot.ballot[applicationId], 5);
+    assertEquals(matchingBallot.signature, delegatedSignature);
+    assertEquals(matchingBallot.chainId, chainId);
 
     await withSuperOakApp((request) =>
       request
