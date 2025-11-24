@@ -11,6 +11,10 @@ import { escapeCsvValue } from "../utils/csv.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
 import { verifyBallotSignature } from "../utils/ballotSignature.ts";
 
+type SubmitBallotOptions = {
+  actorUserId?: string;
+};
+
 export function validateBallot(ballot: Ballot, votingConfig: {
   maxVotesPerVoter: number;
   maxVotesPerProjectPerVoter: number;
@@ -136,27 +140,76 @@ export async function submitBallot(
   userId: string,
   roundId: string,
   ballotDto: SubmitBallotDto,
+  options?: SubmitBallotOptions,
 ): Promise<WrappedBallot> {
-  log(LogLevel.Info, "Submitting ballot", { userId, roundId });
+  const actorUserId = options?.actorUserId ?? userId;
+  const actingOnBehalf = actorUserId !== userId;
+
+  log(LogLevel.Info, "Submitting ballot", {
+    userId,
+    actorUserId,
+    actingOnBehalf,
+    roundId,
+  });
   const result = await db.transaction(async (tx) => {
-    const round = await getRound(roundId, userId);
+    const round = await getRound(roundId, userId, tx);
     if (!round) {
       log(LogLevel.Error, "Round not found", { roundId });
       throw new NotFoundError("Round not found");
     }
-    if (!round.isVoter) {
+
+    let actorIsAdmin = round.isAdmin;
+
+    if (actingOnBehalf) {
+      const actorRound = await getRound(roundId, actorUserId, tx);
+
+      if (!actorRound) {
+        log(LogLevel.Error, "Actor not authorized to submit ballot for round", {
+          actorUserId,
+          roundId,
+        });
+        throw new UnauthorizedError(
+          "You are not authorized to submit a ballot for this round",
+        );
+      }
+
+      if (!actorRound.isAdmin) {
+        log(LogLevel.Error, "Actor is not a round admin", {
+          actorUserId,
+          roundId,
+        });
+        throw new UnauthorizedError(
+          "Only round admins can submit ballots on behalf of voters",
+        );
+      }
+
+      actorIsAdmin = actorRound.isAdmin;
+    }
+
+    if (!round.isVoter && !actorIsAdmin) {
       log(LogLevel.Error, "User is not a voter for this round", {
         userId,
         roundId,
       });
       throw new UnauthorizedError(
-        "You are not authorized to submit a ballot for this round",
+        "Not authorized to submit a ballot for this round",
       );
     }
-    if (round.state !== "voting") {
-      log(LogLevel.Error, "Round is not in voting state", { roundId });
-      throw new BadRequestError("Round is not in voting state");
+
+    const roundState = round.state;
+    const roundAllowsPendingResults = roundState === "pending-results" && actorIsAdmin && actingOnBehalf;
+    const roundInAllowedState = roundState === "voting" || roundAllowsPendingResults;
+
+    if (!roundInAllowedState) {
+      log(LogLevel.Error, "Round is not in a state that allows ballot submission", {
+        roundId,
+        roundState,
+        actingOnBehalf,
+        actorIsAdmin,
+      });
+      throw new BadRequestError("Round is not in a state that allows ballot submission");
     }
+
     if (!round.published || !round.maxVotesPerProjectPerVoter || !round.maxVotesPerVoter) {
       log(LogLevel.Error, "Round is not properly configured for voting", {
         roundId,
@@ -223,7 +276,7 @@ export async function submitBallot(
       roundId: round.id,
       actor: {
         type: AuditLogActorType.User,
-        userId,
+        userId: actorUserId,
       },
       payload: {
         ballot: ballotDto.ballot,
