@@ -227,10 +227,25 @@ export async function submitBallot(
       throw new NotFoundError("User not found");
     }
 
+    let signatureWalletAddress = user.walletAddress;
+
+    if (actingOnBehalf) {
+      const actorUser = await tx.query.users.findFirst({
+        where: eq(users.id, actorUserId),
+      });
+
+      if (!actorUser) {
+        log(LogLevel.Error, "Actor user not found", { actorUserId });
+        throw new NotFoundError("Round admin not found");
+      }
+
+      signatureWalletAddress = actorUser.walletAddress;
+    }
+
     // Verify ballot signature BEFORE validating content
     try {
       verifyBallotSignature(
-        user.walletAddress,
+        signatureWalletAddress,
         ballotDto.ballot,
         ballotDto.signature,
         ballotDto.chainId,
