@@ -30,16 +30,18 @@ export function isValidResultsCalculationMethod(
 
 /**
  * Calculate the results for a set of applications based on the provided ballots
- * and calculation method, ensuring integer outputs.
+ * and calculation method. Result values preserve fractional precision instead of
+ * being coerced to integers so downstream consumers (imports, drip weights,
+ * etc.) can work with exact allocations.
  */
-function calculateResultsForApplications(
+export function calculateResultsForApplications(
   applicationIds: string[],
   ballots: { [key: string]: number }[],
   method: ResultCalculationMethod,
 ): Record<string, number> {
   const results = Object.fromEntries(applicationIds.map((applicationId) => {
     const votes = ballots.map((ballot) =>
-      ballot[applicationId] || 0
+      ballot[applicationId] ?? 0
     );
 
     let result: number;
@@ -51,10 +53,10 @@ function calculateResultsForApplications(
       if (sortedVotes.length === 0) {
         result = 0;
       } else if (sortedVotes.length % 2 === 0) {
-        // Average of two middle values, rounded to the nearest integer
-        result = Math.round((sortedVotes[mid - 1] + sortedVotes[mid]) / 2);
+        // Average of two middle values without rounding to the nearest integer
+        result = (sortedVotes[mid - 1] + sortedVotes[mid]) / 2;
       } else {
-        // Middle value is already an integer
+        // Middle value already has the right precision
         result = sortedVotes[mid];
       }
     } else if (method === ResultCalculationMethod.AVG) {
@@ -62,11 +64,11 @@ function calculateResultsForApplications(
         result = 0;
       } else {
         const sum = votes.reduce((acc, vote) => acc + vote, 0);
-        // Round the average to the nearest integer
-        result = Math.round(sum / votes.length);
+        // Preserve decimal precision for the calculated average
+        result = sum / votes.length;
       }
     } else if (method === ResultCalculationMethod.SUM) {
-      // Sum is already an integer
+      // Preserve whatever precision individual votes already have
       result = votes.reduce((acc, vote) => acc + vote, 0);
     } else {
       result = 0; // Default case
@@ -368,7 +370,7 @@ export async function calculateDripListWeights(
   // calculate an object where the key is the github URL, and the number is the percentage (as weight) of the total
   // votes allocated
 
-  const totalVotes = results.reduce((acc, result) => acc + result.result, 0);
+  const totalVotes = results.reduce((acc, result) => acc + Number(result.result), 0);
   if (totalVotes === 0) {
     log(LogLevel.Error, "No votes allocated in this round", { roundId });
     throw new BadRequestError("No votes allocated in this round");
@@ -382,7 +384,9 @@ export async function calculateDripListWeights(
       throw new Error(`Application ${result.applicationId} does not have a GitHub URL`);
     }
 
-    const weight = Math.round((result.result / totalVotes) * MAX_WEIGHT);
+    const allocation = Number(result.result);
+
+    const weight = Math.round((allocation / totalVotes) * MAX_WEIGHT);
 
     weights[gitHubUrl] = (weights[gitHubUrl] || 0) + weight;
   }

@@ -12,6 +12,7 @@ import {
   AnyPgColumn,
   boolean,
   pgEnum,
+  bigint,
 } from "drizzle-orm/pg-core";
 import { PossibleColor } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
@@ -308,7 +309,7 @@ export const results = pgTable("results", {
   roundId: uuid("round_id").notNull().references(() => rounds.id),
   applicationId: uuid("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
   method: varchar("method", { length: 255 }).notNull().$type<'median' | 'avg' | 'sum' | 'import'>(),
-  result: integer("result").notNull(),
+  result: bigint({ mode: 'number' }).notNull(),
   calculatedAt: timestamp("calculated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table => [
   primaryKey({ columns: [table.roundId, table.applicationId] }),
