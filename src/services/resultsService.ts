@@ -6,7 +6,7 @@ import { db } from "../db/postgres.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { results as resultsTable, rounds } from "../db/schema.ts";
 import { log, LogLevel } from "./loggingService.ts";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { getRound } from "./roundService.ts";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
@@ -370,7 +370,11 @@ export async function calculateDripListWeights(
 
   // get the results for the round
   const results = await db.query.results.findMany({
-    where: (results, { eq }) => eq(results.roundId, round.id),
+    where: (results, { eq }) =>
+      and(
+        eq(results.roundId, round.id),
+        gt(results.result, 0),
+      ),
     columns: {
       applicationId: true,
       result: true,
