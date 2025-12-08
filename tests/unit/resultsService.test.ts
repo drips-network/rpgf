@@ -2,6 +2,7 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
 	ResultCalculationMethod,
 	calculateResultsForApplications,
+	normalizeImportedResults,
 } from "$app/services/resultsService.ts";
 
 Deno.test("median calculation preserves decimal precision", () => {
@@ -47,4 +48,17 @@ Deno.test("sum calculation accepts fractional votes", () => {
 	);
 
 	assertEquals(results["app-1"], 4);
+});
+
+Deno.test("normalizeImportedResults fills missing application IDs with zeros", () => {
+	const normalized = normalizeImportedResults(
+		["app-1", "app-2", "app-3"],
+		{ "app-2": 42 },
+	);
+
+	assertEquals(normalized, {
+		"app-1": 0,
+		"app-2": 42,
+		"app-3": 0,
+	});
 });

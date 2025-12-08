@@ -80,6 +80,16 @@ export function calculateResultsForApplications(
   return results;
 }
 
+export function normalizeImportedResults(
+  applicationIds: string[],
+  uploadedResults: Record<string, number>,
+): Record<string, number> {
+  return Object.fromEntries(applicationIds.map((applicationId) => [
+    applicationId,
+    uploadedResults[applicationId] ?? 0,
+  ]));
+}
+
 /** For the given round, calculate results, and persist them in the `results` table for later retrieval. */
 export async function recalculateResultsForRound(
   roundId: string,
@@ -228,6 +238,13 @@ export async function importResultsForRound(
       );
     }
 
+    // Ensure every application in the round gets a result row; anything missing
+    // from the uploaded spreadsheet defaults to zero.
+    const normalizedResults = normalizeImportedResults(
+      applications.map((app) => app.id),
+      results,
+    );
+
     // Delete existing results for the round
     await tx
       .delete(resultsTable)
@@ -236,7 +253,7 @@ export async function importResultsForRound(
       );
 
     // Insert new results
-    const resultsToInsert = Object.entries(results).map((
+    const resultsToInsert = Object.entries(normalizedResults).map((
       [applicationId, result],
     ) => ({
       roundId: round.id,
