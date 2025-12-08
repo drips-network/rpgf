@@ -1,0 +1,1 @@
+ALTER TABLE "results" ALTER COLUMN "result" SET DATA TYPE numeric;
