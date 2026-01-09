@@ -47,17 +47,12 @@ if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
 
 app.use((ctx, next) => {
   const origin = ctx.request.headers.get("Origin");
-
-  if (!origin) {
-    console.log("No Origin header present in request");
-    ctx.response.headers.set("Access-Control-Allow-Origin", '*');
-    return next();
-  }
-
   const allowedOriginRegex = /^https:\/\/.*\.drips\.network$/;
 
   if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin || "*");
+  } else if (!origin) {
+    ctx.response.headers.set("Access-Control-Allow-Origin", "*");
   } else if (origin && allowedOriginRegex.test(origin)) {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin);
   }
