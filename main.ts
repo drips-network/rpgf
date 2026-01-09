@@ -52,6 +52,7 @@ app.use((ctx, next) => {
   if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin || "*");
   } else if (!origin) {
+    console.log("No Origin header present in request");
     ctx.response.headers.set("Access-Control-Allow-Origin", "*");
   } else if (origin && allowedOriginRegex.test(origin)) {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin);
