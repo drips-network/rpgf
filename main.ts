@@ -47,8 +47,8 @@ if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
 
 app.use((ctx, next) => {
   const origin = ctx.request.headers.get("Origin");
-  const allowedOriginRegex = /^https:\/\/.*\.drips\.network$/;
- 
+  const allowedOriginRegex = /^https:\/\/([a-zA-Z0-9-]+\.)+drips\.network$/;
+  
   if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin || "*");
   } else if (!origin) {
