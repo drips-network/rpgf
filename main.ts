@@ -61,7 +61,7 @@ app.use((ctx, next) => {
   } else if (!origin) {
     ctx.response.headers.set("Access-Control-Allow-Origin", "*");
   } else if (origin && allowedOriginRegex.test(origin)) {
-    ctx.response.headers.set("Access-Control-Allow-Origin", origin);
+    ctx.response.headers.set("Access-Control-Allow-Origin", "*");
   }
 
   ctx.response.headers.set("Access-Control-Allow-Credentials", "true");
