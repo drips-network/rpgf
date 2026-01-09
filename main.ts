@@ -47,18 +47,17 @@ if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
 
 app.use((ctx, next) => {
   const origin = ctx.request.headers.get("Origin");
+
+  if (!origin) {
+    return next();
+  }
+
   const allowedOriginRegex = /^https:\/\/.*\.drips\.network$/;
 
   if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin || "*");
   } else if (origin && allowedOriginRegex.test(origin)) {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin);
-  }
-
-  const internalTokenHeader = ctx.request.headers.get("X-Drips-Internal-Token");
-  console.log("Internal Token Header:", internalTokenHeader);
-  if (internalTokenHeader && internalTokenHeader === Deno.env.get("INTERNAL_API_TOKEN")) {
-    ctx.response.headers.set("Access-Control-Allow-Origin", origin || "*");
   }
 
   ctx.response.headers.set("Access-Control-Allow-Credentials", "true");
