@@ -56,6 +56,7 @@ app.use((ctx, next) => {
   }
 
   const internalTokenHeader = ctx.request.headers.get("X-Drips-Internal-Token");
+  console.log("Internal Token Header:", internalTokenHeader);
   if (internalTokenHeader && internalTokenHeader === Deno.env.get("INTERNAL_API_TOKEN")) {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin || "*");
   }
