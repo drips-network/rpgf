@@ -49,6 +49,8 @@ app.use((ctx, next) => {
   const origin = ctx.request.headers.get("Origin");
 
   if (!origin) {
+    console.log("No Origin header present in request");
+    ctx.response.headers.set("Access-Control-Allow-Origin", '*');
     return next();
   }
 
