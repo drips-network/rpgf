@@ -4,6 +4,7 @@ export const createApplicationCategoryDtoSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(1000).optional(),
   applicationFormId: z.string().min(1).max(255),
+  minVotePercentage: z.number().int().min(0).max(100).optional(),
 });
 export type CreateApplicationCategoryDto = z.infer<typeof createApplicationCategoryDtoSchema>;
 
@@ -19,5 +20,6 @@ export type ApplicationCategory = {
   id: string;
   name: string;
   description: string | null;
+  minVotePercentage: number | null;
   applicationForm: ApplicationFormNameAndId;
 };

@@ -17,7 +17,7 @@ import {
 import { PossibleColor } from "$app/types/round.ts";
 import type { ApplicationState } from "$app/types/application.ts";
 import { isNull, relations, SQL, sql } from "drizzle-orm";
-import { SubmitBallotDto } from "../types/ballot.ts";
+import type { Ballot } from "../types/ballot.ts";
 import { ProjectData } from "../gql/projects.ts";
 import { ApplicationFormFields } from "../types/applicationForm.ts";
 import { AuditLogAction, AuditLogKycProviderActor, AuditLogSystemActor, AuditLogUserActor } from "../types/auditLog.ts";
@@ -130,6 +130,8 @@ export const roundsRelations = relations(rounds, ({ one, many }) => ({
   admins: many(roundAdmins),
   voters: many(roundVoters),
   ballots: many(ballots),
+  ballotCategoryAllocations: many(ballotCategoryAllocations),
+  ballotDrafts: many(ballotDrafts),
   linkedDripLists: many(linkedDripLists),
   applicationForms: many(applicationForms),
   applicationCategories: many(applicationCategories),
@@ -177,6 +179,7 @@ export const applicationCategories = pgTable("application_categories", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   applicationFormId: uuid("application_form_id").notNull().references(() => applicationForms.id),
+  minVotePercentage: integer("min_vote_percentage"),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 }, (table) => [
   uniqueIndex('application_category_name_unique_index')
@@ -279,7 +282,7 @@ export const ballots = pgTable("ballots", {
   id: uuid("id").primaryKey().defaultRandom(),
   roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: 'cascade' }),
   voterUserId: uuid("voter_user_id").notNull().references(() => users.id),
-  ballot: jsonb("ballot").notNull().$type<SubmitBallotDto['ballot']>(),
+  ballot: jsonb("ballot").notNull().$type<Ballot>(),
   signature: text("signature"),
   chainId: integer("chain_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -290,6 +293,38 @@ export const ballots = pgTable("ballots", {
 export const votesRelations = relations(ballots, ({ one }) => ({
   round: one(rounds, { fields: [ballots.roundId], references: [rounds.id] }),
   user: one(users, { fields: [ballots.voterUserId], references: [users.id] }),
+}));
+
+export const ballotCategoryAllocations = pgTable("ballot_category_allocations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: 'cascade' }),
+  voterUserId: uuid("voter_user_id").notNull().references(() => users.id),
+  allocations: jsonb("allocations").notNull().$type<Record<string, number>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [
+  uniqueIndex('unique_allocation_per_voter_per_round_index').on(table.roundId, table.voterUserId),
+]);
+export const ballotCategoryAllocationsRelations = relations(ballotCategoryAllocations, ({ one }) => ({
+  round: one(rounds, { fields: [ballotCategoryAllocations.roundId], references: [rounds.id] }),
+  user: one(users, { fields: [ballotCategoryAllocations.voterUserId], references: [users.id] }),
+}));
+
+export const ballotDrafts = pgTable("ballot_drafts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  roundId: uuid("round_id").notNull().references(() => rounds.id, { onDelete: 'cascade' }),
+  voterUserId: uuid("voter_user_id").notNull().references(() => users.id),
+  categoryId: uuid("category_id").notNull().references(() => applicationCategories.id),
+  votes: jsonb("votes").notNull().$type<Record<string, number>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => [
+  uniqueIndex('unique_draft_per_voter_per_category_index').on(table.roundId, table.voterUserId, table.categoryId),
+]);
+export const ballotDraftsRelations = relations(ballotDrafts, ({ one }) => ({
+  round: one(rounds, { fields: [ballotDrafts.roundId], references: [rounds.id] }),
+  user: one(users, { fields: [ballotDrafts.voterUserId], references: [users.id] }),
+  category: one(applicationCategories, { fields: [ballotDrafts.categoryId], references: [applicationCategories.id] }),
 }));
 
 export const linkedDripLists = pgTable("linked_drip_lists", {
@@ -337,6 +372,8 @@ export const auditLogAction = pgEnum('audit_log_action', [
   'application_reviewed',
   'ballot_submitted',
   'ballot_updated',
+  'ballot_allocations_saved',
+  'ballot_draft_saved',
   'results_calculated',
   'linked_drip_lists_edited',
   'results_published',

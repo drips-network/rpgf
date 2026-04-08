@@ -15,6 +15,9 @@ const categoryBodySchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().max(1000).optional(),
   applicationFormId: z.string(),
+  minVotePercentage: z.number().int().min(0).max(100).optional().openapi({
+    description: "Minimum percentage of total votes that voters must allocate to this category. Sum of all category minimums in a round must not exceed 100.",
+  }),
 });
 
 registry.registerPath({
@@ -39,6 +42,7 @@ registry.registerPath({
             name: z.string(),
             description: z.string().optional(),
             applicationFormId: z.string(),
+            minVotePercentage: z.number().int().nullable().openapi({ description: "Admin-configured minimum vote percentage for this category" }),
           })),
         },
       },

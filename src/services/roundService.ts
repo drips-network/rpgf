@@ -90,7 +90,7 @@ type RoundSelectModelWithRelations = InferSelectModel<typeof rounds> & {
   linkedDripLists: { dripListAccountId: string }[];
   createdBy: { id: string, walletAddress: string };
   chain: { chainId: number };
-  applicationCategories: { id: string, name: string, applicationFormId: string, description: string | null }[];
+  applicationCategories: { id: string, name: string, applicationFormId: string, description: string | null, minVotePercentage: number | null }[];
   kycConfiguration: { kycProvider: KycProvider, treovaFormId: string | null } | null;
 };
 
@@ -242,6 +242,7 @@ function mapDbRoundToDto(
     applicationCategories: round.applicationCategories.map((c) => ({
       id: c.id,
       name: c.name,
+      minVotePercentage: c.minVotePercentage ?? null,
       applicationForm: {
         id: c.applicationFormId,
         name: c.name,

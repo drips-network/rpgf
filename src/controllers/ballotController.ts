@@ -1,13 +1,23 @@
 import { RouteParams, RouterContext } from "oak";
 import { AuthenticatedAppState } from "../../main.ts";
 import {
+  assembleBallotFromDrafts,
   getBallot,
   getBallots,
   getBallotStats,
+  getCategoryAllocations,
+  getDraftVotes,
+  saveCategoryAllocations,
+  saveDraftVotes,
   submitBallot,
+  submitBallotDirect,
 } from "../services/ballotService.ts";
 import parseDto from "../utils/parseDto.ts";
-import { submitBallotDtoSchema } from "../types/ballot.ts";
+import {
+  saveCategoryAllocationsDtoSchema,
+  saveDraftVotesDtoSchema,
+  submitBallotDtoSchema,
+} from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { parse } from "std/csv/parse";
 import z from "zod";
@@ -18,7 +28,6 @@ import { ethereumAddressSchema } from "../types/shared.ts";
 function _csvToBallotDto(csv: string): { ballot: Record<string, number> } {
   const parsed = parse(csv, { skipFirstRow: true });
 
-  // ensure all the rows have at least ID and Allocation columns
   if (
     !Array.isArray(parsed) ||
     parsed.some((r) => !("ID" in r) || !("Allocation" in r))
@@ -32,8 +41,6 @@ function _csvToBallotDto(csv: string): { ballot: Record<string, number> } {
     .array(
       z.object({
         ID: z.string().uuid(),
-        // parse empty string as null
-        // otherwise, must be 0 or positive int number
         Allocation: z
           .string()
           .transform((value) => (value === "" ? null : value))
@@ -53,7 +60,7 @@ function _csvToBallotDto(csv: string): { ballot: Record<string, number> } {
     let msg = "CSV parsing errors:\n";
 
     for (const err of rows.error.errors) {
-      const rowNo = typeof err.path[0] === "number" ? err.path[0] + 2 : "?"; // +2 for header and 0-index
+      const rowNo = typeof err.path[0] === "number" ? err.path[0] + 2 : "?";
 
       msg += `Row ${rowNo}: ${err.message}\n`;
     }
@@ -73,12 +80,85 @@ function _csvToBallotDto(csv: string): { ballot: Record<string, number> } {
   };
 }
 
+// --- Category Allocations ---
+
+export async function saveCategoryAllocationsController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/ballot-allocations",
+    RouteParams<"/api/rounds/:roundId/ballot-allocations">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const userId = ctx.state.user.userId;
+
+  const dto = await parseDto(saveCategoryAllocationsDtoSchema, ctx);
+  const result = await saveCategoryAllocations(userId, roundId, dto);
+
+  ctx.response.status = 200;
+  ctx.response.body = result;
+}
+
+export async function getOwnCategoryAllocationsController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/ballot-allocations/own",
+    RouteParams<"/api/rounds/:roundId/ballot-allocations/own">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const userId = ctx.state.user.userId;
+
+  const result = await getCategoryAllocations(userId, roundId);
+
+  ctx.response.status = 200;
+  ctx.response.body = result;
+}
+
+// --- Draft Votes ---
+
+export async function saveDraftVotesController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/ballots/draft/:categoryId",
+    RouteParams<"/api/rounds/:roundId/ballots/draft/:categoryId">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const categoryId = ctx.params.categoryId;
+  const userId = ctx.state.user.userId;
+
+  const dto = await parseDto(saveDraftVotesDtoSchema, ctx);
+  const result = await saveDraftVotes(userId, roundId, categoryId, dto);
+
+  ctx.response.status = 200;
+  ctx.response.body = result;
+}
+
+export async function getDraftVotesController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/ballots/draft",
+    RouteParams<"/api/rounds/:roundId/ballots/draft">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const userId = ctx.state.user.userId;
+
+  const result = await getDraftVotes(userId, roundId);
+
+  ctx.response.status = 200;
+  ctx.response.body = result;
+}
+
+// --- Spreadsheet ---
+
 export async function parseBallotFromSpreadsheetController(
   ctx: RouterContext<
     "/api/rounds/:roundId/ballots/parse-spreadsheet",
     RouteParams<"/api/rounds/:roundId/ballots/parse-spreadsheet">,
     AuthenticatedAppState
-  >
+  >,
 ) {
   const format = ctx.request.url.searchParams.get("format");
 
@@ -100,29 +180,12 @@ export async function parseBallotFromSpreadsheetController(
   ctx.response.body = ballotDto;
 }
 
-export async function submitBallotController(
-  ctx: RouterContext<
-    "/api/rounds/:roundId/ballots",
-    RouteParams<"/api/rounds/:roundId/ballots">,
-    AuthenticatedAppState
-  >
-) {
-  const roundId = ctx.params.roundId;
-  const userId = ctx.state.user.userId;
-
-  const dto = await parseDto(submitBallotDtoSchema, ctx);
-  const result = await submitBallot(userId, roundId, dto);
-
-  ctx.response.status = 200;
-  ctx.response.body = result;
-}
-
 export async function submitBallotAsSpreadsheetController(
   ctx: RouterContext<
     "/api/rounds/:roundId/ballots/spreadsheet",
     RouteParams<"/api/rounds/:roundId/ballots/spreadsheet">,
     AuthenticatedAppState
-  >
+  >,
 ) {
   const format = ctx.request.url.searchParams.get("format");
 
@@ -174,7 +237,6 @@ export async function submitBallotAsSpreadsheetController(
     csv = await ctx.request.body.text();
   } else {
     const data = await ctx.request.body.arrayBuffer();
-
     csv = convertXlsxToCsv(data);
   }
 
@@ -184,7 +246,7 @@ export async function submitBallotAsSpreadsheetController(
     signature,
     chainId,
   };
-  const result = await submitBallot(voterUserId, roundId, dto, {
+  const result = await submitBallotDirect(voterUserId, roundId, dto, {
     actorUserId,
   });
 
@@ -192,23 +254,67 @@ export async function submitBallotAsSpreadsheetController(
   ctx.response.body = result;
 }
 
+// --- Ballot Preview & Submission ---
+
+export async function getBallotPreviewController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/ballots/preview",
+    RouteParams<"/api/rounds/:roundId/ballots/preview">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const userId = ctx.state.user.userId;
+
+  const ballot = await assembleBallotFromDrafts(userId, roundId);
+
+  ctx.response.status = 200;
+  ctx.response.body = { ballot };
+}
+
+export async function submitBallotController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/ballots",
+    RouteParams<"/api/rounds/:roundId/ballots">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const userId = ctx.state.user.userId;
+
+  const dto = await parseDto(submitBallotDtoSchema, ctx);
+  const result = await submitBallot(userId, roundId, dto);
+
+  ctx.response.status = 200;
+  ctx.response.body = result;
+}
+
+// --- Read endpoints ---
+
 export async function getOwnBallotController(
   ctx: RouterContext<
     "/api/rounds/:roundId/ballots/own",
     RouteParams<"/api/rounds/:roundId/ballots/own">,
     AuthenticatedAppState
-  >
+  >,
 ) {
   const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;
 
   const ballot = await getBallot(roundId, userId);
-  if (!ballot) {
-    throw new NotFoundError("You haven't submitted a ballot yet");
+  const allocations = await getCategoryAllocations(userId, roundId);
+  const drafts = await getDraftVotes(userId, roundId);
+
+  if (!ballot && !allocations) {
+    throw new NotFoundError("No ballot or allocations found");
   }
 
   ctx.response.status = 200;
-  ctx.response.body = ballot;
+  ctx.response.body = {
+    ballot: ballot ?? null,
+    categoryPercentages: allocations?.categoryPercentages ?? null,
+    drafts,
+  };
 }
 
 export async function getBallotsController(
@@ -216,7 +322,7 @@ export async function getBallotsController(
     "/api/rounds/:roundId/ballots",
     RouteParams<"/api/rounds/:roundId/ballots">,
     AuthenticatedAppState
-  >
+  >,
 ) {
   const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;
@@ -239,7 +345,7 @@ export async function getBallotStatsController(
     "/api/rounds/:roundId/ballots/stats",
     RouteParams<"/api/rounds/:roundId/ballots/stats">,
     AuthenticatedAppState
-  >
+  >,
 ) {
   const roundId = ctx.params.roundId;
   const userId = ctx.state.user.userId;

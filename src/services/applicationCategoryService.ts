@@ -54,11 +54,28 @@ export async function createApplicationCategoryForRound(
       throw new BadRequestError("Application form not found");
     }
 
+    // Validate minVotePercentage sum across all categories in the round
+    if (dto.minVotePercentage !== undefined) {
+      const existingCategories = await tx.query.applicationCategories.findMany({
+        where: and(
+          eq(applicationCategories.roundId, roundId),
+          isNull(applicationCategories.deletedAt),
+        ),
+      });
+      const currentSum = existingCategories.reduce((sum, c) => sum + (c.minVotePercentage ?? 0), 0);
+      if (currentSum + dto.minVotePercentage > 100) {
+        throw new BadRequestError(
+          `Total minimum vote percentages across all categories cannot exceed 100%. Current sum: ${currentSum}%, adding: ${dto.minVotePercentage}%`,
+        );
+      }
+    }
+
     const [category] = await tx.insert(applicationCategories).values({
       name: dto.name,
       description: dto.description,
       roundId,
       applicationFormId: dto.applicationFormId,
+      minVotePercentage: dto.minVotePercentage ?? null,
     }).returning();
 
     await createLog({
@@ -77,6 +94,7 @@ export async function createApplicationCategoryForRound(
 
     return {
       ...category,
+      minVotePercentage: category.minVotePercentage ?? null,
       applicationForm: {
         id: form.id,
         name: form.name,
@@ -146,10 +164,29 @@ export async function updateApplicationCategory(
       throw new BadRequestError("Application form not found");
     }
 
+    // Validate minVotePercentage sum across all categories in the round
+    if (dto.minVotePercentage !== undefined) {
+      const allCategories = await tx.query.applicationCategories.findMany({
+        where: and(
+          eq(applicationCategories.roundId, roundId),
+          isNull(applicationCategories.deletedAt),
+        ),
+      });
+      const currentSum = allCategories
+        .filter((c) => c.id !== categoryId)
+        .reduce((sum, c) => sum + (c.minVotePercentage ?? 0), 0);
+      if (currentSum + dto.minVotePercentage > 100) {
+        throw new BadRequestError(
+          `Total minimum vote percentages across all categories cannot exceed 100%. Other categories sum: ${currentSum}%, setting: ${dto.minVotePercentage}%`,
+        );
+      }
+    }
+
     const [category] = await tx.update(applicationCategories).set({
       name: dto.name,
       description: dto.description,
       applicationFormId: dto.applicationFormId,
+      minVotePercentage: dto.minVotePercentage ?? null,
     }).where(eq(applicationCategories.id, categoryId)).returning();
 
     await createLog({
@@ -169,6 +206,7 @@ export async function updateApplicationCategory(
 
     return {
       ...category,
+      minVotePercentage: category.minVotePercentage ?? null,
       applicationForm: {
         id: form.id,
         name: form.name,
@@ -290,6 +328,7 @@ export async function getApplicationCategoriesByRoundId(
 
   return categories.map((category) => ({
     ...category,
+    minVotePercentage: category.minVotePercentage ?? null,
     applicationForm: {
       id: category.form.id,
       name: category.form.name,

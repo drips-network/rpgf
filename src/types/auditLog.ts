@@ -1,7 +1,7 @@
 import { CreateRoundDto, PatchRoundDto } from "./round.ts";
 import { ApplicationReviewDto, CreateApplicationDto, UpdateApplicationDto } from "./application.ts";
 import { ResultCalculationMethod } from "../services/resultsService.ts";
-import { SubmitBallotDto } from "./ballot.ts";
+import type { Ballot } from "./ballot.ts";
 import { SetRoundAdminsDto } from "./roundAdmin.ts";
 import { SetRoundVotersDto } from "./roundVoter.ts";
 import { CreateApplicationCategoryDto } from "./applicationCategory.ts";
@@ -25,13 +25,17 @@ type ApplicationSubmittedPayload = CreateApplicationDto & { id: string };
 type ApplicationUpdatedPayload = UpdateApplicationDto & { id: string };
 type ApplicationsReviewedPayload = ApplicationReviewDto;
 
-type BaseBallotPayload = Omit<SubmitBallotDto, "signature"> & {
+type BaseBallotPayload = {
   id: string;
+  ballot: Ballot;
+  chainId: number;
   badgeholderWalletAddress?: string;
 };
 
 type BallotSubmittedPayload = BaseBallotPayload;
 type BallotUpdatedPayload = BaseBallotPayload;
+type BallotAllocationsSavedPayload = { categoryPercentages: Record<string, number> };
+type BallotDraftSavedPayload = { categoryId: string; votes: Record<string, number> };
 
 type ResultsCalculatedPayload = {
   method: ResultCalculationMethod;
@@ -68,6 +72,8 @@ export enum AuditLogAction {
 
   BallotSubmitted = "ballot_submitted",
   BallotUpdated = "ballot_updated",
+  BallotAllocationsSaved = "ballot_allocations_saved",
+  BallotDraftSaved = "ballot_draft_saved",
 
   ResultsCalculated = "results_calculated",
   ResultsPublished = "results_published",
@@ -110,6 +116,8 @@ export type PayloadByAction = {
 
   [AuditLogAction.BallotSubmitted]: BallotSubmittedPayload;
   [AuditLogAction.BallotUpdated]: BallotUpdatedPayload;
+  [AuditLogAction.BallotAllocationsSaved]: BallotAllocationsSavedPayload;
+  [AuditLogAction.BallotDraftSaved]: BallotDraftSavedPayload;
 
   [AuditLogAction.ResultsCalculated]: ResultsCalculatedPayload;
   [AuditLogAction.ResultsPublished]: ResultPublishedPayload;

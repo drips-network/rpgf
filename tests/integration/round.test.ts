@@ -897,7 +897,7 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
   const voterAuthToken = await getAuthToken(voterWallet);
   const delegatedVoterWallet = ethers.Wallet.createRandom();
 
-  await t.step("should submit a ballot via CSV", async () => {
+  await t.step("should set up voters and force voting state", async () => {
     const voters: SetRoundVotersDto = {
       walletAddresses: [
         '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
@@ -924,7 +924,191 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         })
         .expect(200)
     );
+  });
 
+  await t.step("should reject category percentages that don't sum to 100", async () => {
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballot-allocations`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send({ categoryPercentages: { [category.id]: 50 } })
+        .expect(400)
+    );
+  });
+
+  await t.step("should save category percentages", async () => {
+    const response = await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballot-allocations`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send({ categoryPercentages: { [category.id]: 100 } })
+        .expect(200)
+    );
+
+    assertEquals(response.body.categoryPercentages[category.id], 100);
+  });
+
+  await t.step("should get own category percentages", async () => {
+    const response = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballot-allocations/own`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .expect(200)
+    );
+
+    assertEquals(response.body.categoryPercentages[category.id], 100);
+  });
+
+  await t.step("should reject draft votes without category percentages set", async () => {
+    const nonVoterWallet = ethers.Wallet.createRandom();
+    const nonVoterAuthToken = await getAuthToken(nonVoterWallet);
+
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballots/draft/${category.id}`)
+        .set("Authorization", `Bearer ${nonVoterAuthToken}`)
+        .send({ votes: { [applicationId]: 10 } })
+        .expect(401)
+    );
+  });
+
+  await t.step("should save draft votes", async () => {
+    const response = await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballots/draft/${category.id}`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send({ votes: { [applicationId]: 10 } })
+        .expect(200)
+    );
+
+    assertEquals(response.body[applicationId], 10);
+  });
+
+  await t.step("should reject draft votes exceeding category budget", async () => {
+    // maxVotesPerVoter is 100, category percentage is 100%, so budget is 100
+    // maxVotesPerProjectPerVoter is 10
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballots/draft/${category.id}`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send({ votes: { [applicationId]: 11 } }) // exceeds per-project limit of 10
+        .expect(400)
+    );
+  });
+
+  await t.step("should get all draft votes", async () => {
+    const response = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballots/draft`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .expect(200)
+    );
+
+    assertEquals(response.body[category.id][applicationId], 10);
+  });
+
+  await t.step("should get ballot preview", async () => {
+    const response = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballots/preview`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .expect(200)
+    );
+
+    assertEquals(response.body.ballot[applicationId], 10);
+    assertEquals(Object.keys(response.body.ballot).length, 1);
+  });
+
+  await t.step("should submit a ballot with signature", async () => {
+    const ballot: Ballot = { [applicationId]: 10 };
+    const chainId = 1;
+    const signature = await signBallot(voterWallet, ballot, chainId);
+
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballots`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send({ signature, chainId })
+        .expect(200)
+    );
+  });
+
+  await t.step("should get own ballot with allocations and drafts", async () => {
+    const response = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballots/own`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .expect(200)
+    );
+
+    assertExists(response.body.ballot);
+    assertEquals(response.body.ballot.ballot[applicationId], 10);
+    assertEquals(response.body.categoryPercentages[category.id], 100);
+    assertEquals(response.body.drafts[category.id][applicationId], 10);
+  });
+
+  await t.step("should reject ballot with invalid signature", async () => {
+    const wrongWallet = ethers.Wallet.createRandom();
+    const ballot: Ballot = { [applicationId]: 10 };
+    const chainId = 1;
+    const invalidSignature = await signBallot(wrongWallet, ballot, chainId);
+
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballots`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send({ signature: invalidSignature, chainId })
+        .expect(401)
+    );
+  });
+
+  await t.step("should reject ballot from non-voter", async () => {
+    const nonVoterWallet = ethers.Wallet.createRandom();
+    const nonVoterAuthToken = await getAuthToken(nonVoterWallet);
+
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballot-allocations`)
+        .set("Authorization", `Bearer ${nonVoterAuthToken}`)
+        .send({ categoryPercentages: { [category.id]: 100 } })
+        .expect(401)
+    );
+  });
+
+  await t.step("should reject ballot in wrong round state", async () => {
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'intake',
+        })
+        .expect(200)
+    );
+
+    await withSuperOakApp((request) =>
+      request
+        .put(`/api/rounds/${roundId}/ballot-allocations`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send({ categoryPercentages: { [category.id]: 100 } })
+        .expect(400)
+    );
+
+    // Restore voting state
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/testing/force-round-state`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({
+          roundSlug,
+          desiredState: 'voting',
+        })
+        .expect(200)
+    );
+  });
+
+  await t.step("should submit a ballot via CSV spreadsheet", async () => {
     const csv = `ID,Allocation\n${applicationId},10`;
     const ballot: Ballot = { [applicationId]: 10 };
     const chainId = 1;
@@ -937,49 +1121,55 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         .send(csv)
         .expect(200)
     );
+  });
+
+  await t.step("should parse ballot from CSV spreadsheet", async () => {
+    const csv = `ID,Allocation\n${applicationId},10`;
 
     const response = await withSuperOakApp((request) =>
       request
-        .get(`/api/rounds/${roundId}/ballots/own`)
+        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
         .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
         .expect(200)
     );
 
     assertEquals(response.body.ballot[applicationId], 10);
+    assertEquals(Object.keys(response.body.ballot).length, 1);
   });
 
-  await t.step("should include signature and chainId in CSV ballot export", async () => {
-    const csvResponse = await withSuperOakApp((request) =>
+  await t.step("should reject spreadsheet ballot exceeding per-project limit", async () => {
+    const csv = `ID,Allocation\n${applicationId},11`;
+    const ballot: Ballot = { [applicationId]: 11 };
+    const chainId = 1;
+    const signature = await signBallot(voterWallet, ballot, chainId);
+
+    await withSuperOakApp((request) =>
       request
-        .get(`/api/rounds/${roundId}/ballots?format=csv`)
-        .set("Authorization", `Bearer ${authToken}`)
-        .expect(200)
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(400)
     );
-
-    const csvText = csvResponse.text;
-    const lines = csvText.split('\n');
-
-    // Check header includes Signature and Chain ID columns
-    const header = lines[0];
-    assert(header.includes('Signature'));
-    assert(header.includes('Chain ID'));
-
-    // Check that data row includes signature and chainId
-    const dataRow = lines[1];
-    assert(dataRow.length > 0);
-
-    // Parse the CSV to verify signature is present
-    const columns = dataRow.split(',');
-    const signatureIndex = header.split(',').indexOf('Signature');
-    const chainIdIndex = header.split(',').indexOf('Chain ID');
-
-    assert(signatureIndex >= 0, 'Signature column should exist');
-    assert(chainIdIndex >= 0, 'Chain ID column should exist');
-    assert(columns[signatureIndex].length > 0, 'Signature value should be present');
-    assert(columns[chainIdIndex] === '1', 'Chain ID should be 1');
   });
 
-  await t.step("should allow an admin to submit a ballot on behalf during pending-results", async () => {
+  await t.step("should reject spreadsheet ballot with invalid signature", async () => {
+    const csv = `ID,Allocation\n${applicationId},10`;
+    const ballot: Ballot = { [applicationId]: 10 };
+    const chainId = 1;
+    const wrongWallet = ethers.Wallet.createRandom();
+    const invalidSignature = await signBallot(wrongWallet, ballot, chainId);
+
+    await withSuperOakApp((request) =>
+      request
+        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(invalidSignature)}&chainId=${chainId}`)
+        .set("Authorization", `Bearer ${voterAuthToken}`)
+        .send(csv)
+        .expect(401)
+    );
+  });
+
+  await t.step("should allow an admin to submit a spreadsheet ballot on behalf during pending-results", async () => {
     const updatedVoters: SetRoundVotersDto = {
       walletAddresses: [
         '0xB3539Ba5a4243f5c2c9F05E8DAF7e96061A9B7B0',
@@ -1010,9 +1200,9 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     );
 
     const chainId = 1;
-  const delegatedBallot: Ballot = { [applicationId]: 5 };
-  const delegatedCsv = `ID,Allocation\n${applicationId},5`;
-  const delegatedSignature = await signBallot(adminWallet, delegatedBallot, chainId);
+    const delegatedBallot: Ballot = { [applicationId]: 5 };
+    const delegatedCsv = `ID,Allocation\n${applicationId},5`;
+    const delegatedSignature = await signBallot(adminWallet, delegatedBallot, chainId);
 
     await withSuperOakApp((request) =>
       request
@@ -1033,11 +1223,10 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
       ballot.user.walletAddress.toLowerCase() === delegatedVoterWallet.address.toLowerCase()
     );
 
-  assertExists(matchingBallot);
-  assertEquals(matchingBallot.ballot[applicationId], 5);
-    assertEquals(matchingBallot.signature, delegatedSignature);
-    assertEquals(matchingBallot.chainId, chainId);
+    assertExists(matchingBallot);
+    assertEquals(matchingBallot.ballot[applicationId], 5);
 
+    // Restore voting state for remaining tests
     await withSuperOakApp((request) =>
       request
         .post(`/api/testing/force-round-state`)
@@ -1048,6 +1237,34 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
         })
         .expect(200)
     );
+  });
+
+  await t.step("should include signature and chainId in CSV ballot export", async () => {
+    const csvResponse = await withSuperOakApp((request) =>
+      request
+        .get(`/api/rounds/${roundId}/ballots?format=csv`)
+        .set("Authorization", `Bearer ${authToken}`)
+        .expect(200)
+    );
+
+    const csvText = csvResponse.text;
+    const lines = csvText.split('\n');
+
+    const header = lines[0];
+    assert(header.includes('Signature'));
+    assert(header.includes('Chain ID'));
+
+    const dataRow = lines[1];
+    assert(dataRow.length > 0);
+
+    const columns = dataRow.split(',');
+    const signatureIndex = header.split(',').indexOf('Signature');
+    const chainIdIndex = header.split(',').indexOf('Chain ID');
+
+    assert(signatureIndex >= 0, 'Signature column should exist');
+    assert(chainIdIndex >= 0, 'Chain ID column should exist');
+    assert(columns[signatureIndex].length > 0, 'Signature value should be present');
+    assert(columns[chainIdIndex] === '1', 'Chain ID should be 1');
   });
 
   await t.step("should reject submitterOverride unless requester is super admin", async () => {
@@ -1186,293 +1403,6 @@ Deno.test("Round lifecycle", { sanitizeOps: false, sanitizeResources: false }, a
     } finally {
       overrideProjectStub.restore();
     }
-  });
-
-  await t.step("should reject ballot from non-voter", async () => {
-    const nonVoterWallet = ethers.Wallet.createRandom();
-    const nonVoterAuthToken = await getAuthToken(nonVoterWallet);
-
-    const csv = `ID,Allocation\n${applicationId},10`;
-    const ballot: Ballot = { [applicationId]: 10 };
-    const chainId = 1;
-    const signature = await signBallot(nonVoterWallet, ballot, chainId);
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${nonVoterAuthToken}`)
-        .send(csv)
-        .expect(401)
-    );
-  });
-
-  await t.step("should reject ballot in wrong round state", async () => {
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/testing/force-round-state`)
-        .set("Authorization", `Bearer ${authToken}`)
-        .send({
-          roundSlug,
-          desiredState: 'intake',
-        })
-        .expect(200)
-    );
-
-    const csv = `ID,Allocation\n${applicationId},10`;
-    const ballot: Ballot = { [applicationId]: 10 };
-    const chainId = 1;
-    const signature = await signBallot(voterWallet, ballot, chainId);
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/testing/force-round-state`)
-        .set("Authorization", `Bearer ${authToken}`)
-        .send({
-          roundSlug,
-          desiredState: 'voting',
-        })
-        .expect(200)
-    );
-  });
-
-  await t.step("should reject unauthenticated ballot submission", async () => {
-    const csv = `ID,Allocation\n${applicationId},10`;
-    const ballot: Ballot = { [applicationId]: 10 };
-    const chainId = 1;
-    // Use voterWallet to sign even though we won't authenticate
-    const signature = await signBallot(voterWallet, ballot, chainId);
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
-        .send(csv)
-        .expect(401)
-    );
-  });
-
-  await t.step("should reject ballot submission without signature", async () => {
-    const csv = `ID,Allocation\n${applicationId},10`;
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-  });
-
-  await t.step("should reject ballot submission with invalid signature", async () => {
-    const csv = `ID,Allocation\n${applicationId},10`;
-    const ballot: Ballot = { [applicationId]: 10 };
-    const chainId = 1;
-
-    // Sign with a different wallet to create a valid signature format but wrong signer
-    const wrongWallet = ethers.Wallet.createRandom();
-    const invalidSignature = await signBallot(wrongWallet, ballot, chainId);
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(invalidSignature)}&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(401)
-    );
-  });
-
-  await t.step("should reject ballot with invalid content", async () => {
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/testing/force-round-state`)
-        .set("Authorization", `Bearer ${authToken}`)
-        .send({
-          roundSlug,
-          desiredState: 'voting',
-        })
-        .expect(200)
-    );
-
-    const chainId = 1;
-
-
-    // Exceeding total vote limit
-    let csv = `ID,Allocation\n${applicationId},101`;
-    let ballot: Ballot = { [applicationId]: 101 };
-    let signature = await signBallot(voterWallet, ballot, chainId);
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-
-    // Exceeding per-project vote limit
-    csv = `ID,Allocation\n${applicationId},11`;
-    ballot = { [applicationId]: 11 };
-    signature = await signBallot(voterWallet, ballot, chainId);
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-
-    // Voting for a non-existent application
-    csv = `ID,Allocation\nbc7534eb-acd3-43f0-952a-4a431e1b1065,10`;
-    ballot = { "bc7534eb-acd3-43f0-952a-4a431e1b1065": 10 };
-    signature = await signBallot(voterWallet, ballot, chainId);
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-
-    // Empty ballot
-    csv = `ID,Allocation\n`;
-    ballot = {};
-    signature = await signBallot(voterWallet, ballot, chainId);
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=${encodeURIComponent(signature)}&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-
-    // Negative allocation - this should fail at CSV parsing before signature validation
-    csv = `ID,Allocation\n${applicationId},-10`;
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=dummy&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-  });
-
-  await t.step("should reject ballot with invalid CSV format", async () => {
-    const chainId = 1;
-
-    // Missing required columns - fails at CSV parsing, signature not needed
-    let csv = `ID\n${applicationId}`;
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=dummysig&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-
-    // Invalid data types - fails at CSV parsing, signature not needed
-    csv = `ID,Allocation\nnot-a-uuid,10`;
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=dummysig&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-
-    csv = `ID,Allocation\n${applicationId},not-a-number`;
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/spreadsheet?format=csv&signature=dummysig&chainId=${chainId}`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-  });
-
-  await t.step("should parse ballot from CSV spreadsheet", async () => {
-    const csv = `ID,Allocation\n${applicationId},10`;
-
-    const response = await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(200)
-    );
-
-    assertEquals(response.body.ballot[applicationId], 10);
-    assertEquals(Object.keys(response.body.ballot).length, 1);
-  });
-
-  await t.step("should parse ballot and filter out zero allocations", async () => {
-    const csv = `ID,Allocation\n${applicationId},10\n${applicationId},0`;
-
-    const response = await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(200)
-    );
-
-    // Only non-zero allocations should be included
-    assertEquals(response.body.ballot[applicationId], 10);
-  });
-
-  await t.step("should reject parse-spreadsheet with invalid format", async () => {
-    const csv = `ID,Allocation\n${applicationId},10`;
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=invalid`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-  });
-
-  await t.step("should reject parse-spreadsheet with invalid CSV", async () => {
-    const csv = `ID\n${applicationId}`;
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(400)
-    );
-  });
-
-  await t.step("should reject unauthenticated parse-spreadsheet request", async () => {
-    const csv = `ID,Allocation\n${applicationId},10`;
-
-    await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
-        .send(csv)
-        .expect(401)
-    );
-  });
-
-  await t.step("should parse empty CSV (no allocations)", async () => {
-    const csv = `ID,Allocation\n${applicationId},0`;
-
-    const response = await withSuperOakApp((request) =>
-      request
-        .post(`/api/rounds/${roundId}/ballots/parse-spreadsheet?format=csv`)
-        .set("Authorization", `Bearer ${voterAuthToken}`)
-        .send(csv)
-        .expect(200)
-    );
-
-    // Zero allocations should be filtered out
-    assertEquals(response.body.ballot, {});
   });
 
   await t.step("should allow adding voters during voting period", async () => {
