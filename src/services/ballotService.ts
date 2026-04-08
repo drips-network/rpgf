@@ -993,6 +993,16 @@ export async function submitExternalVoteResult(
     voterAddress: dto.voterAddress,
   });
 
+  // Look up round for chainId
+  const round = await db.query.rounds.findFirst({
+    where: eq(rounds.id, roundId),
+    columns: { chainId: true },
+    with: { chain: true },
+  });
+  if (!round) {
+    throw new NotFoundError("Round not found");
+  }
+
   // Look up category and verify it has an external voting tool
   const category = await db.query.applicationCategories.findFirst({
     where: and(
@@ -1059,7 +1069,7 @@ export async function submitExternalVoteResult(
   );
 
   const baseUrl = Deno.env.get("BASE_URL") || "http://localhost:8000";
-  const callbackUrl = `${baseUrl}/rpgf/external-vote-landing?externalVoteResultId=${resultId}&roundId=${roundId}`;
+  const callbackUrl = `${baseUrl}/rpgf/external-vote-landing?externalVoteResultId=${resultId}&roundId=${roundId}&chainId=${round.chain.chainId}`;
 
   return { id: resultId, callbackUrl };
 }

@@ -71,7 +71,7 @@ registry.registerPath({
             id: z.string().uuid().openapi({ description: "Ephemeral result ID" }),
             callbackUrl: z.string().url().openapi({
               description: "Full URL to redirect the voter to",
-              example: "https://drips.network/rpgf/external-vote-landing?externalVoteResultId=abc-123&roundId=def-456",
+              example: "https://drips.network/rpgf/external-vote-landing?externalVoteResultId=abc-123&roundId=def-456&chainId=1",
             }),
           }),
         },
