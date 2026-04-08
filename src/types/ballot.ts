@@ -50,3 +50,18 @@ export type CategoryAllocations = {
 }
 
 export type DraftVotes = Record<string, Record<string, number>>; // categoryId -> applicationId -> voteCount
+
+// External vote result submitted by an external voting tool
+export const submitExternalVoteResultDtoSchema = z.object({
+  categoryId: z.string().uuid(),
+  voterAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid Ethereum address"),
+  votes: z.record(z.string().uuid(), z.number().int().min(0)),
+});
+export type SubmitExternalVoteResultDto = z.infer<typeof submitExternalVoteResultDtoSchema>;
+
+export type ExternalVoteResult = {
+  roundId: string;
+  categoryId: string;
+  voterAddress: string;
+  votes: Record<string, number>;
+};

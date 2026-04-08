@@ -17,8 +17,10 @@ import {
   DraftVotes,
   SaveCategoryAllocationsDto,
   SaveDraftVotesDto,
+  ExternalVoteResult,
   SubmitBallotDirectDto,
   SubmitBallotDto,
+  SubmitExternalVoteResultDto,
   WrappedBallot,
 } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
@@ -32,6 +34,7 @@ import {
   type PayloadByAction,
 } from "../types/auditLog.ts";
 import { verifyBallotSignature } from "../utils/ballotSignature.ts";
+import { cachingService } from "./cachingService.ts";
 
 type SubmitBallotOptions = {
   actorUserId?: string;
@@ -943,6 +946,151 @@ export async function submitBallotDirect(
 
     return ballot;
   });
+
+  return result;
+}
+
+// --- External Vote Results ---
+
+const EXTERNAL_VOTE_RESULT_TTL_SECONDS = 43200; // 12 hours
+
+async function verifyHmacSignature(
+  secret: string,
+  body: string,
+  signature: string,
+): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(body));
+  const expected = Array.from(new Uint8Array(mac))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  // Timing-safe comparison
+  if (expected.length !== signature.length) return false;
+  let result = 0;
+  for (let i = 0; i < expected.length; i++) {
+    result |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+export async function submitExternalVoteResult(
+  roundId: string,
+  dto: SubmitExternalVoteResultDto,
+  rawBody: string,
+  signature: string,
+): Promise<{ id: string; callbackUrl: string }> {
+  log(LogLevel.Info, "Submitting external vote result", {
+    roundId,
+    categoryId: dto.categoryId,
+    voterAddress: dto.voterAddress,
+  });
+
+  // Look up category and verify it has an external voting tool
+  const category = await db.query.applicationCategories.findFirst({
+    where: and(
+      eq(applicationCategories.id, dto.categoryId),
+      eq(applicationCategories.roundId, roundId),
+      isNull(applicationCategories.deletedAt),
+    ),
+  });
+
+  if (!category) {
+    throw new NotFoundError("Category not found");
+  }
+
+  if (!category.externalVotingToolSecret) {
+    throw new BadRequestError(
+      "This category does not have an external voting tool configured",
+    );
+  }
+
+  // Verify HMAC signature
+  const valid = await verifyHmacSignature(
+    category.externalVotingToolSecret,
+    rawBody,
+    signature,
+  );
+
+  if (!valid) {
+    throw new UnauthorizedError("Invalid HMAC signature");
+  }
+
+  // Validate all application IDs belong to the category and are approved
+  const appIds = Object.keys(dto.votes);
+  if (appIds.length > 0) {
+    const approvedApps = await db.query.applications.findMany({
+      where: and(
+        eq(applicationsModel.roundId, roundId),
+        eq(applicationsModel.state, "approved"),
+        eq(applicationsModel.categoryId, dto.categoryId),
+      ),
+    });
+    const approvedIds = new Set(approvedApps.map((a) => a.id));
+    for (const appId of appIds) {
+      if (!approvedIds.has(appId)) {
+        throw new BadRequestError(
+          `Application ${appId} is not an approved application in category ${dto.categoryId}`,
+        );
+      }
+    }
+  }
+
+  // Store in Redis
+  const resultId = crypto.randomUUID();
+  const result: ExternalVoteResult = {
+    roundId,
+    categoryId: dto.categoryId,
+    voterAddress: dto.voterAddress.toLowerCase(),
+    votes: dto.votes,
+  };
+
+  await cachingService.set(
+    `external-vote-result:${resultId}`,
+    result,
+    EXTERNAL_VOTE_RESULT_TTL_SECONDS,
+  );
+
+  const baseUrl = Deno.env.get("BASE_URL") || "http://localhost:8000";
+  const callbackUrl = `${baseUrl}/rpgf/external-vote-landing?externalVoteResultId=${resultId}&roundId=${roundId}`;
+
+  return { id: resultId, callbackUrl };
+}
+
+export async function getExternalVoteResult(
+  roundId: string,
+  resultId: string,
+  userWalletAddress: string,
+): Promise<ExternalVoteResult> {
+  log(LogLevel.Info, "Getting external vote result", {
+    roundId,
+    resultId,
+  });
+
+  const result = await cachingService.get<ExternalVoteResult>(
+    `external-vote-result:${resultId}`,
+  );
+
+  if (!result) {
+    throw new NotFoundError("External vote result not found or expired");
+  }
+
+  if (result.roundId !== roundId) {
+    throw new NotFoundError("External vote result not found");
+  }
+
+  if (result.voterAddress !== userWalletAddress.toLowerCase()) {
+    throw new UnauthorizedError(
+      "You are not authorized to view this external vote result",
+    );
+  }
 
   return result;
 }

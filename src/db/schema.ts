@@ -180,6 +180,9 @@ export const applicationCategories = pgTable("application_categories", {
   description: text("description"),
   applicationFormId: uuid("application_form_id").notNull().references(() => applicationForms.id),
   minVotePercentage: integer("min_vote_percentage"),
+  externalVotingToolName: varchar("external_voting_tool_name", { length: 255 }),
+  externalVotingToolUrl: varchar("external_voting_tool_url", { length: 510 }),
+  externalVotingToolSecret: varchar("external_voting_tool_secret", { length: 255 }),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 }, (table) => [
   uniqueIndex('application_category_name_unique_index')

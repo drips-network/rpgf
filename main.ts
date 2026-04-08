@@ -15,6 +15,7 @@ import auditLogRoutes from "$app/routes/auditLogRoutes.ts";
 import kycRoutes from "$app/routes/kycRoutes.ts";
 import customDatasetRoutes from "$app/routes/customDatasetRoutes.ts";
 import docsRouter from "$app/openapi/docs.router.ts";
+import externalVoteRoutes from "$app/routes/externalVoteRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
 import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
@@ -99,6 +100,9 @@ app.use(healthRoutes.allowedMethods());
 
 app.use(docsRouter.routes());
 app.use(docsRouter.allowedMethods());
+
+app.use(externalVoteRoutes.routes());
+app.use(externalVoteRoutes.allowedMethods());
 
 app.use(authMiddleware);
 

@@ -11,12 +11,15 @@ import {
   saveDraftVotes,
   submitBallot,
   submitBallotDirect,
+  submitExternalVoteResult,
+  getExternalVoteResult,
 } from "../services/ballotService.ts";
 import parseDto from "../utils/parseDto.ts";
 import {
   saveCategoryAllocationsDtoSchema,
   saveDraftVotesDtoSchema,
   submitBallotDtoSchema,
+  submitExternalVoteResultDtoSchema,
 } from "../types/ballot.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { parse } from "std/csv/parse";
@@ -354,4 +357,48 @@ export async function getBallotStatsController(
 
   ctx.response.status = 200;
   ctx.response.body = stats;
+}
+
+// --- External Vote Results ---
+
+export async function submitExternalVoteResultController(
+  // deno-lint-ignore no-explicit-any
+  ctx: any,
+) {
+  const roundId = ctx.params.roundId;
+  const signature = ctx.request.headers.get("x-signature");
+
+  if (!signature) {
+    throw new BadRequestError("x-signature header is required");
+  }
+
+  const rawBody = await ctx.request.body.text();
+  const parsed = JSON.parse(rawBody);
+  const dto = submitExternalVoteResultDtoSchema.parse(parsed);
+
+  const result = await submitExternalVoteResult(roundId, dto, rawBody, signature);
+
+  ctx.response.status = 200;
+  ctx.response.body = result;
+}
+
+export async function getExternalVoteResultController(
+  ctx: RouterContext<
+    "/api/rounds/:roundId/external-vote-results/:id",
+    RouteParams<"/api/rounds/:roundId/external-vote-results/:id">,
+    AuthenticatedAppState
+  >,
+) {
+  const roundId = ctx.params.roundId;
+  const resultId = ctx.params.id;
+  const userWalletAddress = ctx.state.user.walletAddress;
+
+  const result = await getExternalVoteResult(roundId, resultId, userWalletAddress);
+
+  ctx.response.status = 200;
+  ctx.response.body = {
+    categoryId: result.categoryId,
+    voterAddress: result.voterAddress,
+    votes: result.votes,
+  };
 }

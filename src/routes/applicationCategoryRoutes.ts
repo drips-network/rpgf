@@ -18,6 +18,15 @@ const categoryBodySchema = z.object({
   minVotePercentage: z.number().int().min(0).max(100).optional().openapi({
     description: "Minimum percentage of total votes that voters must allocate to this category. Sum of all category minimums in a round must not exceed 100.",
   }),
+  externalVotingToolName: z.string().max(255).optional().openapi({
+    description: "Display name of the external voting tool (e.g. 'Pairwise'). If set, url and secret must also be provided.",
+  }),
+  externalVotingToolUrl: z.string().url().max(510).optional().openapi({
+    description: "Base URL of the external voting tool. The frontend appends query params (voterAddress, categoryId, roundId, voteBudget).",
+  }),
+  externalVotingToolSecret: z.string().max(255).optional().openapi({
+    description: "Shared HMAC secret for verifying vote results from the external tool. Never exposed in API responses.",
+  }),
 });
 
 registry.registerPath({
@@ -43,6 +52,10 @@ registry.registerPath({
             description: z.string().optional(),
             applicationFormId: z.string(),
             minVotePercentage: z.number().int().nullable().openapi({ description: "Admin-configured minimum vote percentage for this category" }),
+            externalVotingTool: z.object({
+              name: z.string(),
+              url: z.string().url(),
+            }).nullable().openapi({ description: "External voting tool configuration, or null if not configured" }),
           })),
         },
       },

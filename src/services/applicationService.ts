@@ -297,6 +297,9 @@ function mapDbApplicationToDto(
         name: latestVersion.category.name,
         description: latestVersion.category.description,
         minVotePercentage: latestVersion.category.minVotePercentage ?? null,
+        externalVotingTool: latestVersion.category.externalVotingToolName && latestVersion.category.externalVotingToolUrl
+          ? { name: latestVersion.category.externalVotingToolName, url: latestVersion.category.externalVotingToolUrl }
+          : null,
         applicationForm: latestVersion.form,
       },
       answers: latestVersion.answers,
@@ -1197,6 +1200,9 @@ export async function getApplicationHistory(
       name: v.category.name,
       description: v.category.description,
       minVotePercentage: v.category.minVotePercentage ?? null,
+      externalVotingTool: v.category.externalVotingToolName && v.category.externalVotingToolUrl
+        ? { name: v.category.externalVotingToolName, url: v.category.externalVotingToolUrl }
+        : null,
       applicationForm: v.form,
     },
     answers: mapDbAnswersToDto(v.answers, !userIsAdmin && !userIsSubmitter),

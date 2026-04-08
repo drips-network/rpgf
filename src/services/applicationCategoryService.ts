@@ -2,12 +2,31 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
 import { applicationCategories, applicationForms, rounds } from "../db/schema.ts";
 import { log, LogLevel } from "./loggingService.ts";
-import { ApplicationCategory, CreateApplicationCategoryDto, UpdateApplicationCategoryDto } from "../types/applicationCategory.ts";
+import { ApplicationCategory, CreateApplicationCategoryDto, ExternalVotingTool, UpdateApplicationCategoryDto } from "../types/applicationCategory.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
 import { UnauthorizedError } from "../errors/auth.ts";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+
+function mapCategoryToResponse(
+  category: { id: string; name: string; description: string | null; minVotePercentage: number | null; externalVotingToolName: string | null; externalVotingToolUrl: string | null },
+  form: { id: string; name: string },
+): ApplicationCategory {
+  const externalVotingTool: ExternalVotingTool | null =
+    category.externalVotingToolName && category.externalVotingToolUrl
+      ? { name: category.externalVotingToolName, url: category.externalVotingToolUrl }
+      : null;
+
+  return {
+    id: category.id,
+    name: category.name,
+    description: category.description,
+    minVotePercentage: category.minVotePercentage ?? null,
+    externalVotingTool,
+    applicationForm: { id: form.id, name: form.name },
+  };
+}
 
 export async function createApplicationCategoryForRound(
   dto: CreateApplicationCategoryDto,
@@ -70,12 +89,24 @@ export async function createApplicationCategoryForRound(
       }
     }
 
+    // Validate external voting tool config consistency
+    if (dto.externalVotingToolName || dto.externalVotingToolUrl || dto.externalVotingToolSecret) {
+      if (!dto.externalVotingToolName || !dto.externalVotingToolUrl || !dto.externalVotingToolSecret) {
+        throw new BadRequestError(
+          "External voting tool requires name, url, and secret to all be set",
+        );
+      }
+    }
+
     const [category] = await tx.insert(applicationCategories).values({
       name: dto.name,
       description: dto.description,
       roundId,
       applicationFormId: dto.applicationFormId,
       minVotePercentage: dto.minVotePercentage ?? null,
+      externalVotingToolName: dto.externalVotingToolName ?? null,
+      externalVotingToolUrl: dto.externalVotingToolUrl ?? null,
+      externalVotingToolSecret: dto.externalVotingToolSecret ?? null,
     }).returning();
 
     await createLog({
@@ -87,19 +118,13 @@ export async function createApplicationCategoryForRound(
       },
       payload: {
         ...dto,
+        externalVotingToolSecret: undefined, // Never log the secret
         id: category.id,
       },
       tx,
     })
 
-    return {
-      ...category,
-      minVotePercentage: category.minVotePercentage ?? null,
-      applicationForm: {
-        id: form.id,
-        name: form.name,
-      },
-    };
+    return mapCategoryToResponse(category, form);
   });
 }
 
@@ -182,11 +207,23 @@ export async function updateApplicationCategory(
       }
     }
 
+    // Validate external voting tool config consistency
+    if (dto.externalVotingToolName || dto.externalVotingToolUrl || dto.externalVotingToolSecret) {
+      if (!dto.externalVotingToolName || !dto.externalVotingToolUrl || !dto.externalVotingToolSecret) {
+        throw new BadRequestError(
+          "External voting tool requires name, url, and secret to all be set",
+        );
+      }
+    }
+
     const [category] = await tx.update(applicationCategories).set({
       name: dto.name,
       description: dto.description,
       applicationFormId: dto.applicationFormId,
       minVotePercentage: dto.minVotePercentage ?? null,
+      externalVotingToolName: dto.externalVotingToolName ?? null,
+      externalVotingToolUrl: dto.externalVotingToolUrl ?? null,
+      externalVotingToolSecret: dto.externalVotingToolSecret ?? null,
     }).where(eq(applicationCategories.id, categoryId)).returning();
 
     await createLog({
@@ -204,14 +241,7 @@ export async function updateApplicationCategory(
       tx,
     });
 
-    return {
-      ...category,
-      minVotePercentage: category.minVotePercentage ?? null,
-      applicationForm: {
-        id: form.id,
-        name: form.name,
-      },
-    };
+    return mapCategoryToResponse(category, form);
   });
 }
 
@@ -326,12 +356,5 @@ export async function getApplicationCategoriesByRoundId(
     },
   });
 
-  return categories.map((category) => ({
-    ...category,
-    minVotePercentage: category.minVotePercentage ?? null,
-    applicationForm: {
-      id: category.form.id,
-      name: category.form.name,
-    },
-  }));
+  return categories.map((category) => mapCategoryToResponse(category, category.form));
 }

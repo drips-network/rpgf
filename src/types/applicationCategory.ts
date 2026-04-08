@@ -5,6 +5,9 @@ export const createApplicationCategoryDtoSchema = z.object({
   description: z.string().max(1000).optional(),
   applicationFormId: z.string().min(1).max(255),
   minVotePercentage: z.number().int().min(0).max(100).optional(),
+  externalVotingToolName: z.string().max(255).optional(),
+  externalVotingToolUrl: z.string().url().max(510).optional(),
+  externalVotingToolSecret: z.string().max(255).optional(),
 });
 export type CreateApplicationCategoryDto = z.infer<typeof createApplicationCategoryDtoSchema>;
 
@@ -16,10 +19,16 @@ export type ApplicationFormNameAndId = {
   name: string;
 };
 
+export type ExternalVotingTool = {
+  name: string;
+  url: string;
+};
+
 export type ApplicationCategory = {
   id: string;
   name: string;
   description: string | null;
   minVotePercentage: number | null;
+  externalVotingTool: ExternalVotingTool | null;
   applicationForm: ApplicationFormNameAndId;
 };
