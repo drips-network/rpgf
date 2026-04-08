@@ -68,6 +68,7 @@ To add a new chain, you'll need the following:
 - `chainId`: The canonical chain ID as a number (from e.g. chainlist.org)
 - `gqlName`: The name of the chain on the Drips GQL API (e.g. `SEPOLIA` for Ethereum Sepolia)
 - `rpcUrl`: A read-only RPC, no archive access necessary.
+- `whitelistMode`: Whether to enable / disable whitelist mode (only whitelisted users can create new round drafts)
 - Optionally: EAS setup. If any of the following arguments are not provided, the server will NOT require attestation of applications on-chain.
     - `easAddress`: The address of the `EAS` contract on the given chain.
     - `applicationAttestationSchemaUID`: The EAS schema ID for Drips RPGF Application attestations.
@@ -76,7 +77,7 @@ To add a new chain, you'll need the following:
 To configure new chain data, you can use the `deno task configure-chain` command:
 
 ```bash
-deno task configure-chain <chainId> <gqlName> <rpcUrl> <easAddress>? <applicationAttestationSchemaUID>? <applicationReviewAttestationSchemaUID>?
+deno task configure-chain <chainId> <gqlName> <rpcUrl> <whitelistMode> <easAddress>? <applicationAttestationSchemaUID>? <applicationReviewAttestationSchemaUID>?
 ```
 
 Alternatively, configure your chain manually directly in the DB using e.g. Drizzle Studio. The expected format of the `attestation_setup` jsonb column is (example values for Ethereum Sepolia):
