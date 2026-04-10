@@ -66,10 +66,10 @@ app.use(healthRoutes.allowedMethods());
 app.use(docsRouter.routes());
 app.use(docsRouter.allowedMethods());
 
+app.use(authMiddleware);
+
 app.use(externalVoteRoutes.routes());
 app.use(externalVoteRoutes.allowedMethods());
-
-app.use(authMiddleware);
 
 app.use(authRoutes.routes());
 app.use(authRoutes.allowedMethods());
