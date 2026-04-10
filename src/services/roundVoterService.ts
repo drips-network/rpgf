@@ -1,7 +1,9 @@
 import type { SetRoundVotersDto, RoundVoter } from '$app/types/roundVoter.ts';
 import { eq } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
-import { log, LogLevel } from "./loggingService.ts";
+import { Logger } from "./loggingService.ts";
+
+const logger = new Logger("roundVoterService");
 import { rounds, roundVoters } from "../db/schema.ts";
 import { createOrGetUser } from "./userService.ts";
 import { inferRoundState, isUserRoundAdmin } from "./roundService.ts";
@@ -16,7 +18,7 @@ export async function setRoundVoters(
   requestingUserId: string,
   roundId: string,
 ): Promise<RoundVoter[]> {
-  log(LogLevel.Info, "Setting round voters", {
+  logger.info("Setting round voters", {
     requestingUserId,
     roundId,
   });
@@ -27,11 +29,11 @@ export async function setRoundVoters(
     }
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("Round not found.");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
-    log(LogLevel.Error, "User is not authorized to modify this round", {
+    logger.error("User is not authorized to modify this round", {
       requestingUserId,
       roundId,
     });
@@ -49,7 +51,7 @@ export async function setRoundVoters(
   ];
 
   if (roundState && !editingAllowedInStates.includes(roundState)) {
-    log(LogLevel.Error, "Round voters can no longer be edited for this round", {
+    logger.error("Round voters can no longer be edited for this round", {
       roundId,
     });
     throw new BadRequestError("Round voters can no longer be edited for this round");
@@ -57,7 +59,7 @@ export async function setRoundVoters(
 
   const uniqueAddresses = new Set(dto.walletAddresses.map((addr) => addr.toLowerCase()));
   if (uniqueAddresses.size !== dto.walletAddresses.length) {
-    log(LogLevel.Error, "Duplicate wallet addresses are not allowed");
+    logger.error("Duplicate wallet addresses are not allowed");
     throw new BadRequestError("Duplicate wallet addresses are not allowed.");
   }
 
@@ -140,7 +142,7 @@ export async function setRoundVoters(
 }
 
 export async function getRoundVotersByRoundId(roundId: string, requestingUserId: string): Promise<RoundVoter[]> {
-  log(LogLevel.Info, "Getting round voters by round ID", {
+  logger.info("Getting round voters by round ID", {
     roundId,
     requestingUserId,
   });
@@ -151,11 +153,11 @@ export async function getRoundVotersByRoundId(roundId: string, requestingUserId:
     }
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new Error("Round not found.");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
-    log(LogLevel.Error, "User is not authorized to view this round's voters", {
+    logger.error("User is not authorized to view this round's voters", {
       requestingUserId,
       roundId,
     });

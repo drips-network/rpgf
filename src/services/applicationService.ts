@@ -14,7 +14,9 @@ import {
   rounds,
   users,
 } from "../db/schema.ts";
-import { log, LogLevel } from "./loggingService.ts";
+import { Logger } from "./loggingService.ts";
+
+const logger = new Logger("applicationService");
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import {
   Application,
@@ -83,9 +85,7 @@ export async function validateEasAttestation(
         break;
       }
     } catch (error) {
-      log(
-        LogLevel.Error,
-        `Attempt to fetch attestation failed: ${error}. Retrying...`,
+      logger.error(`Attempt to fetch attestation failed: ${error}. Retrying...`,
       );
     }
 
@@ -93,14 +93,14 @@ export async function validateEasAttestation(
   }
 
   if (!attestation) {
-    log(LogLevel.Error, "EAS attestation not found", { uid });
+    logger.error("EAS attestation not found", { uid });
     throw new BadRequestError("EAS attestation not found");
   }
 
   if (
     attestation.attester.toLowerCase() !== submitterWalletAddress.toLowerCase()
   ) {
-    log(LogLevel.Error, "EAS attestation attester does not match submitter", {
+    logger.error("EAS attestation attester does not match submitter", {
       uid,
       attester: attestation.attester,
       submitterWalletAddress,
@@ -120,9 +120,7 @@ export async function validateEasAttestation(
     decoded.find((v) => v.name === "applicationDataIpfs")?.value.value,
   );
   if (!ipfsHashParse.success) {
-    log(
-      LogLevel.Error,
-      "EAS attestation missing or invalid applicationDataIpfs",
+    logger.error("EAS attestation missing or invalid applicationDataIpfs",
       {
         uid,
         decodedData: decoded,
@@ -140,7 +138,7 @@ export async function validateEasAttestation(
     updateApplicationDtoSchema,
   ).safeParse(JSON.parse(ipfsData));
   if (!attestedApplicationDtoParse.success) {
-    log(LogLevel.Error, "EAS attestation data is not a valid application DTO", {
+    logger.error("EAS attestation data is not a valid application DTO", {
       uid,
       ipfsData,
       validationErrors: attestedApplicationDtoParse.error.issues,
@@ -154,9 +152,7 @@ export async function validateEasAttestation(
   const attestedApplicationDto = attestedApplicationDtoParse.data;
 
   if (attestedApplicationDto.projectName !== projectName) {
-    log(
-      LogLevel.Error,
-      "EAS attestation project name does not match submitted application",
+    logger.error("EAS attestation project name does not match submitted application",
       {
         uid,
         attestedProjectName: attestedApplicationDto.projectName,
@@ -170,9 +166,7 @@ export async function validateEasAttestation(
   }
 
   if (attestedApplicationDto.dripsAccountId !== dripsAccountId) {
-    log(
-      LogLevel.Error,
-      "EAS attestation drips account ID does not match submitted application",
+    logger.error("EAS attestation drips account ID does not match submitted application",
       {
         uid,
         attestedDripsAccountId: attestedApplicationDto.dripsAccountId,
@@ -200,7 +194,7 @@ export async function validateEasAttestation(
 
     if (field.private) {
       if (attestedAnswers.find((a) => a.fieldId === fieldId)) {
-        log(LogLevel.Error, "EAS attestation contains private field", {
+        logger.error("EAS attestation contains private field", {
           uid,
           fieldId,
         });
@@ -212,7 +206,7 @@ export async function validateEasAttestation(
     }
 
     if (!attestedAnswers.find((a) => a.fieldId === fieldId)) {
-      log(LogLevel.Error, "EAS attestation is missing non-private field", {
+      logger.error("EAS attestation is missing non-private field", {
         uid,
         fieldId,
       });
@@ -224,9 +218,7 @@ export async function validateEasAttestation(
     const attestedValue = attestedAnswers.find((a) => a.fieldId === fieldId);
 
     if (typeof attestedValue?.value !== typeof value) {
-      log(
-        LogLevel.Error,
-        "EAS attestation field type does not match submitted application",
+      logger.error("EAS attestation field type does not match submitted application",
         {
           uid,
           fieldId,
@@ -240,9 +232,7 @@ export async function validateEasAttestation(
     }
 
     if (JSON.stringify(attestedValue?.value) !== JSON.stringify(value)) {
-      log(
-        LogLevel.Error,
-        "EAS attestation field value does not match submitted application",
+      logger.error("EAS attestation field value does not match submitted application",
         {
           uid,
           fieldId,
@@ -333,7 +323,7 @@ export async function createApplication(
   submitterWalletAddress: string,
   applicationDto: CreateApplicationDto,
 ): Promise<Application> {
-  log(LogLevel.Info, "Creating application", {
+  logger.info("Creating application", {
     roundId,
     submitterUserId,
   });
@@ -351,13 +341,13 @@ export async function createApplication(
     },
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
 
   const actorIsSuperAdmin = isUserRoundSuperAdmin(round, actingUserId);
   if (submittingOnBehalf && !actorIsSuperAdmin) {
-    log(LogLevel.Error, "User attempted to submit on behalf without super admin rights", {
+    logger.error("User attempted to submit on behalf without super admin rights", {
       roundId,
       actingUserId,
       submitterOverride,
@@ -371,7 +361,7 @@ export async function createApplication(
 
   const roundState = inferRoundState(round);
   if (roundState !== "intake" && !actorIsSuperAdmin) {
-    log(LogLevel.Error, "Round is not currently accepting applications", {
+    logger.error("Round is not currently accepting applications", {
       roundId,
       roundState,
     });
@@ -397,7 +387,7 @@ export async function createApplication(
   });
 
   if (!applicationCategory) {
-    log(LogLevel.Error, "Invalid application category", {
+    logger.error("Invalid application category", {
       categoryId: applicationDto.categoryId,
     });
     throw new BadRequestError("Invalid application category");
@@ -413,9 +403,7 @@ export async function createApplication(
     chainGqlName,
   );
   if (!onChainProject) {
-    log(
-      LogLevel.Error,
-      "Drips Account ID is not for a valid, claimed project",
+    logger.error("Drips Account ID is not for a valid, claimed project",
       {
         dripsAccountId: applicationDto.dripsAccountId,
       },
@@ -428,9 +416,7 @@ export async function createApplication(
     onChainProject.owner.address.toLowerCase() !==
       effectiveWalletAddress.toLowerCase()
   ) {
-    log(
-      LogLevel.Error,
-      "Drips Account ID is pointing at a project not currently owned by the submitter",
+    logger.error("Drips Account ID is pointing at a project not currently owned by the submitter",
       {
         dripsAccountId: applicationDto.dripsAccountId,
         submitterWalletAddress: effectiveWalletAddress,
@@ -447,7 +433,7 @@ export async function createApplication(
 
   if (attestationSetup) {
     if (!hasAttestationUid && !hasDeferredTx) {
-      log(LogLevel.Error, "Missing attestation proof for attestation-enabled round", {
+      logger.error("Missing attestation proof for attestation-enabled round", {
         roundId,
         submitterUserId,
       });
@@ -465,7 +451,7 @@ export async function createApplication(
         await getProviderForChain(round.chain),
       );
     } else {
-      log(LogLevel.Info, "Deferring attestation validation until transaction confirms", {
+      logger.info("Deferring attestation validation until transaction confirms", {
         roundId,
         submitterUserId,
         deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
@@ -534,16 +520,14 @@ export async function createApplication(
           tx,
         });
 
-        log(LogLevel.Info, "Linked existing KYC Request to new application", {
+        logger.info("Linked existing KYC Request to new application", {
           userId: resolvedSubmitter.id,
           roundId: round.id,
           applicationId: insertedApplication.id,
           kycRequestId: existingKycRequest.id,
         });
       } else {
-        log(
-          LogLevel.Info,
-          "No existing KYC Request for user and round, not linking",
+        logger.info("No existing KYC Request for user and round, not linking",
           {
             userId: resolvedSubmitter.id,
             roundId: round.id,
@@ -567,7 +551,7 @@ export async function createApplication(
       tx,
     });
 
-    log(LogLevel.Info, "Created new application", {
+    logger.info("Created new application", {
       applicationId: insertedApplication.id,
       roundId,
       actorUserId: actingUserId,
@@ -612,7 +596,7 @@ export async function updateApplication(
   submitterWalletAddress: string,
   applicationDto: UpdateApplicationDto,
 ): Promise<Application> {
-  log(LogLevel.Info, "Updating application", {
+  logger.info("Updating application", {
     applicationId,
     roundId,
     submitterUserId,
@@ -631,18 +615,18 @@ export async function updateApplication(
   });
 
   if (!application) {
-    log(LogLevel.Error, "Application not found", { applicationId });
+    logger.error("Application not found", { applicationId });
     throw new NotFoundError("Application not found");
   }
   if (application.submitterUserId !== submitterUserId) {
-    log(LogLevel.Error, "Not authorized to update this application", {
+    logger.error("Not authorized to update this application", {
       applicationId,
       submitterUserId,
     });
     throw new UnauthorizedError("Not authorized to update this application");
   }
   if (inferRoundState(application.round) !== "intake") {
-    log(LogLevel.Error, "Round is not currently accepting applications", {
+    logger.error("Round is not currently accepting applications", {
       roundId,
     });
     throw new BadRequestError("Round is not currently accepting applications");
@@ -655,11 +639,11 @@ export async function updateApplication(
     },
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
   if (inferRoundState(round) !== "intake") {
-    log(LogLevel.Error, "Round is not currently accepting applications", {
+    logger.error("Round is not currently accepting applications", {
       roundId,
     });
     throw new BadRequestError("Round is not currently accepting applications");
@@ -683,7 +667,7 @@ export async function updateApplication(
   });
 
   if (!applicationCategory) {
-    log(LogLevel.Error, "Invalid application category", {
+    logger.error("Invalid application category", {
       categoryId: applicationDto.categoryId,
     });
     throw new BadRequestError("Invalid application category");
@@ -698,9 +682,7 @@ export async function updateApplication(
     chainGqlName,
   );
   if (!onChainProject) {
-    log(
-      LogLevel.Error,
-      "Drips Account ID is not for a valid, claimed project",
+    logger.error("Drips Account ID is not for a valid, claimed project",
       {
         dripsAccountId: applicationDto.dripsAccountId,
       },
@@ -713,9 +695,7 @@ export async function updateApplication(
     onChainProject.owner.address.toLowerCase() !==
       submitterWalletAddress.toLowerCase()
   ) {
-    log(
-      LogLevel.Error,
-      "Drips Account ID is pointing at a project not currently owned by the submitter",
+    logger.error("Drips Account ID is pointing at a project not currently owned by the submitter",
       { dripsAccountId: applicationDto.dripsAccountId, submitterWalletAddress },
     );
     throw new BadRequestError(
@@ -728,7 +708,7 @@ export async function updateApplication(
 
   if (attestationSetup) {
     if (!hasAttestationUid && !hasDeferredTx) {
-      log(LogLevel.Error, "Missing attestation proof for attestation-enabled round on update", {
+      logger.error("Missing attestation proof for attestation-enabled round on update", {
         roundId,
         applicationId,
         submitterUserId,
@@ -747,7 +727,7 @@ export async function updateApplication(
         await getProviderForChain(round.chain),
       );
     } else {
-      log(LogLevel.Info, "Deferring attestation validation until transaction confirms", {
+      logger.info("Deferring attestation validation until transaction confirms", {
         applicationId,
         submitterUserId,
         deferredAttestationTxHash: applicationDto.deferredAttestationTxHash,
@@ -846,7 +826,7 @@ export async function addApplicationAttestationFromTransaction(
   submitterUserId: string,
   submitterWalletAddress: string,
 ): Promise<Application> {
-  log(LogLevel.Info, "Adding attestation UID from transaction", {
+  logger.info("Adding attestation UID from transaction", {
     applicationId,
     roundId,
     submitterUserId,
@@ -870,7 +850,7 @@ export async function addApplicationAttestationFromTransaction(
   });
 
   if (!application) {
-    log(LogLevel.Error, "Application not found when adding attestation", {
+    logger.error("Application not found when adding attestation", {
       applicationId,
       roundId,
     });
@@ -878,7 +858,7 @@ export async function addApplicationAttestationFromTransaction(
   }
 
   if (application.submitterUserId !== submitterUserId) {
-    log(LogLevel.Error, "User not authorized to add attestation", {
+    logger.error("User not authorized to add attestation", {
       applicationId,
       submitterUserId,
     });
@@ -886,14 +866,14 @@ export async function addApplicationAttestationFromTransaction(
   }
 
   if (!application.round) {
-    log(LogLevel.Error, "Application round missing while adding attestation", {
+    logger.error("Application round missing while adding attestation", {
       applicationId,
     });
     throw new NotFoundError("Round not found");
   }
 
   if (inferRoundState(application.round) !== "intake") {
-    log(LogLevel.Error, "Round is not currently accepting applications", {
+    logger.error("Round is not currently accepting applications", {
       roundId,
     });
     throw new BadRequestError("Round is not currently accepting applications");
@@ -901,7 +881,7 @@ export async function addApplicationAttestationFromTransaction(
 
   const attestationSetup = application.round.chain?.attestationSetup;
   if (!attestationSetup) {
-    log(LogLevel.Error, "Attestation setup missing for round when adding attestation", {
+    logger.error("Attestation setup missing for round when adding attestation", {
       roundId,
     });
     throw new BadRequestError("Round does not accept attestations");
@@ -912,7 +892,7 @@ export async function addApplicationAttestationFromTransaction(
   );
 
   if (!pendingVersion) {
-    log(LogLevel.Error, "No deferred attestation found for application", {
+    logger.error("No deferred attestation found for application", {
       applicationId,
     });
     throw new BadRequestError(
@@ -923,7 +903,7 @@ export async function addApplicationAttestationFromTransaction(
   const transactionHash = pendingVersion.deferredAttestationTxHash;
 
   if (!transactionHash) {
-    log(LogLevel.Error, "Deferred attestation transaction hash missing", {
+    logger.error("Deferred attestation transaction hash missing", {
       applicationId,
     });
     throw new BadRequestError(
@@ -931,7 +911,7 @@ export async function addApplicationAttestationFromTransaction(
     );
   }
 
-  log(LogLevel.Info, "Resolving deferred attestation", {
+  logger.info("Resolving deferred attestation", {
     applicationId,
     transactionHash,
   });
@@ -949,7 +929,7 @@ export async function addApplicationAttestationFromTransaction(
   }
 
   if (!receipt) {
-    log(LogLevel.Error, "Transaction receipt not found for attestation", {
+    logger.error("Transaction receipt not found for attestation", {
       transactionHash,
     });
     throw new BadRequestError("Attestation transaction not found or not yet mined");
@@ -985,7 +965,7 @@ export async function addApplicationAttestationFromTransaction(
   }
 
   if (!parsedLog) {
-    log(LogLevel.Error, "No attestation log found in transaction", {
+    logger.error("No attestation log found in transaction", {
       transactionHash,
       expectedSchemaUid: attestationSetup.applicationAttestationSchemaUID,
     });
@@ -996,14 +976,14 @@ export async function addApplicationAttestationFromTransaction(
   const attesterAddress = (parsedLog.args.attester as string).toLowerCase();
 
   if (!attestationUid) {
-    log(LogLevel.Error, "Attestation UID missing in parsed log", {
+    logger.error("Attestation UID missing in parsed log", {
       transactionHash,
     });
     throw new BadRequestError("Attestation UID could not be determined from transaction");
   }
 
   if (attesterAddress !== submitterWalletAddress.toLowerCase()) {
-    log(LogLevel.Error, "Attestation attester does not match submitter", {
+    logger.error("Attestation attester does not match submitter", {
       transactionHash,
       attesterAddress,
       submitterWalletAddress,
@@ -1039,7 +1019,7 @@ export async function addApplicationAttestationFromTransaction(
   });
 
   if (!applicationCategory) {
-    log(LogLevel.Error, "Application category not found during attestation validation", {
+    logger.error("Application category not found during attestation validation", {
       applicationId,
       categoryId: pendingVersion.categoryId,
     });
@@ -1131,7 +1111,7 @@ export async function getApplicationHistory(
   roundId: string,
   requestingUserId: string | null,
 ): Promise<ApplicationVersion[]> {
-  log(LogLevel.Info, "Getting application history", {
+  logger.info("Getting application history", {
     applicationId,
     roundId,
     requestingUserId,
@@ -1162,11 +1142,11 @@ export async function getApplicationHistory(
   });
 
   if (!application) {
-    log(LogLevel.Error, "Application not found", { applicationId });
+    logger.error("Application not found", { applicationId });
     throw new NotFoundError("Application not found");
   }
   if (application.roundId !== roundId) {
-    log(LogLevel.Error, "Application does not belong to the specified round", {
+    logger.error("Application does not belong to the specified round", {
       applicationId,
       roundId,
     });
@@ -1179,7 +1159,7 @@ export async function getApplicationHistory(
   const userIsSubmitter = application.submitter.id === requestingUserId;
 
   if (!userIsAdmin && !userIsSubmitter && application.state !== "approved") {
-    log(LogLevel.Error, "Not authorized to view this application", {
+    logger.error("Not authorized to view this application", {
       applicationId,
       requestingUserId,
     });
@@ -1218,7 +1198,7 @@ export async function getApplication(
   roundId: string,
   requestingUserId: string | null,
 ): Promise<Application | null> {
-  log(LogLevel.Info, "Getting application", {
+  logger.info("Getting application", {
     applicationId,
     roundId,
     requestingUserId,
@@ -1231,7 +1211,7 @@ export async function getApplication(
   ]);
   const cachedApplication = await cachingService.get<Application>(cacheKey);
   if (cachedApplication) {
-    log(LogLevel.Info, "Returning cached application", { applicationId });
+    logger.info("Returning cached application", { applicationId });
     return cachedApplication;
   }
 
@@ -1278,7 +1258,7 @@ export async function getApplication(
     return null;
   }
   if (application.roundId !== roundId) {
-    log(LogLevel.Error, "Application does not belong to the specified round", {
+    logger.error("Application does not belong to the specified round", {
       applicationId,
       roundId,
     });
@@ -1292,7 +1272,7 @@ export async function getApplication(
 
   // If the application is not in a public state, only admins and the submitter can view it
   if (application.state !== "approved" && !userIsAdmin && !userIsSubmitter) {
-    log(LogLevel.Error, "Not authorized to view this application", {
+    logger.error("Not authorized to view this application", {
       applicationId,
       requestingUserId,
     });
@@ -1346,7 +1326,7 @@ export async function getApplications(
   limit = 20,
   offset = 0,
 ): Promise<ListingApplication[]> {
-  log(LogLevel.Info, "Getting applications", {
+  logger.info("Getting applications", {
     roundId,
     requestingUserId,
     filterConfig,
@@ -1369,7 +1349,7 @@ export async function getApplications(
     cacheKey,
   );
   if (cachedApplications) {
-    log(LogLevel.Info, "Returning cached applications", { roundId });
+    logger.info("Returning cached applications", { roundId });
     return cachedApplications;
   }
 
@@ -1380,7 +1360,7 @@ export async function getApplications(
     },
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
 
@@ -1466,7 +1446,7 @@ export async function getApplicationsCsv(
   requestingUserId: string | null,
   onlyApproved = false,
 ) {
-  log(LogLevel.Info, "Getting applications CSV", {
+  logger.info("Getting applications CSV", {
     roundId,
     requestingUserId,
   });
@@ -1477,7 +1457,7 @@ export async function getApplicationsCsv(
     },
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
 
@@ -1631,7 +1611,7 @@ export async function setApplicationsState(
   applicationIds: string[],
   newState: ApplicationState,
 ): Promise<ListingApplication[]> {
-  log(LogLevel.Info, "Setting applications state", {
+  logger.info("Setting applications state", {
     applicationIds,
     newState,
   });
@@ -1654,7 +1634,7 @@ export async function setApplicationsState(
     ).returning();
 
   if (updatedApplications.length !== applicationIds.length) {
-    log(LogLevel.Error, "Some applications were not in pending state", {
+    logger.error("Some applications were not in pending state", {
       applicationIds,
     });
     throw new BadRequestError("Some applications were not in pending state");
@@ -1673,7 +1653,7 @@ export async function applyApplicationReview(
   requestingUserId: string,
   review: ApplicationReviewDto,
 ): Promise<ListingApplication[]> {
-  log(LogLevel.Info, "Applying application review", {
+  logger.info("Applying application review", {
     roundId,
     requestingUserId,
   });
@@ -1684,13 +1664,11 @@ export async function applyApplicationReview(
     },
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
-    log(
-      LogLevel.Error,
-      "Not authorized to review applications for this round",
+    logger.error("Not authorized to review applications for this round",
       { roundId, requestingUserId },
     );
     throw new UnauthorizedError(

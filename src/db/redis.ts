@@ -1,11 +1,10 @@
 import { createClient, RedisClientType } from "redis";
-import { log, LogLevel } from "$app/services/loggingService.ts";
+import { Logger } from "$app/services/loggingService.ts";
 
-const redisUrl = Deno.env.get("REDIS_URL");
+const logger = new Logger("db:redis");
+import { config } from "../../config.ts";
 
-if (!redisUrl) {
-  log(LogLevel.Info, "REDIS_URL not set, caching will be disabled.");
-}
+const redisUrl = config.redis.url;
 
 let redis: RedisClientType | undefined;
 
@@ -16,9 +15,9 @@ if (redisUrl) {
     });
     await redis.connect();
 
-    log(LogLevel.Info, "Successfully connected to Redis.");
+    logger.info("Successfully connected to Redis.");
   } catch (error) {
-    log(LogLevel.Error, "Failed to connect to Redis:", { error });
+    logger.error("Failed to connect to Redis:", { error });
   }
 }
 

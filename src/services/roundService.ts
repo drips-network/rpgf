@@ -1,5 +1,7 @@
 import { db, Transaction } from "$app/db/postgres.ts";
-import { log, LogLevel } from "./loggingService.ts";
+import { Logger } from "./loggingService.ts";
+
+const logger = new Logger("roundService");
 import {
   chains,
   linkedDripLists,
@@ -268,7 +270,7 @@ export async function getRounds(
   offset = 0,
   tx?: Transaction,
 ): Promise<Round<boolean>[]> {
-  log(LogLevel.Info, "Getting rounds", {
+  logger.info("Getting rounds", {
     requestingUserId,
     filter,
     limit,
@@ -300,7 +302,7 @@ export async function getRoundsByUser(
   filter?: { chainId?: number, published?: boolean },
   tx?: Transaction,
 ): Promise<Round<true>[]> {
-  log(LogLevel.Info, "Getting rounds by user", {
+  logger.info("Getting rounds by user", {
     userId,
     filter,
   });
@@ -342,7 +344,7 @@ export async function getRound(
   requestingUserId: string | null,
   tx?: Transaction,
 ): Promise<Round<boolean> | null> {
-  log(LogLevel.Info, "Getting round", {
+  logger.info("Getting round", {
     roundIdOrSlug,
     requestingUserId,
   });
@@ -402,7 +404,7 @@ export async function createRound(
   dto: CreateRoundDto,
   creatorUserId: string,
 ): Promise<Round<false>> {
-  log(LogLevel.Info, "Creating round", {
+  logger.info("Creating round", {
     creatorUserId,
   });
   const result = await db.transaction(async (tx) => {
@@ -410,7 +412,7 @@ export async function createRound(
       where: eq(chains.chainId, dto.chainId),
     });
     if (!chain) {
-      log(LogLevel.Error, "Unsupported chain ID", { chainId: dto.chainId });
+      logger.error("Unsupported chain ID", { chainId: dto.chainId });
       throw new BadRequestError(
         `Chain with ID ${dto.chainId} is unsupported.`,
       );
@@ -424,7 +426,7 @@ export async function createRound(
       });
 
       if (!user?.whitelisted) {
-        log(LogLevel.Error, "User is not whitelisted to create rounds on this chain", {
+        logger.error("User is not whitelisted to create rounds on this chain", {
           creatorUserId,
         });
         throw new UnauthorizedError(
@@ -491,7 +493,7 @@ export async function createRound(
 
 
 export async function deleteRound(roundId: string, requestingUserId: string): Promise<void> {
-  log(LogLevel.Info, "Deleting round", { roundId, requestingUserId });
+  logger.info("Deleting round", { roundId, requestingUserId });
   await db.transaction(async (tx) => {
     const round = await tx.query.rounds.findFirst({
       where: eq(rounds.id, roundId),
@@ -501,18 +503,18 @@ export async function deleteRound(roundId: string, requestingUserId: string): Pr
       }
     });
     if (!round) {
-      log(LogLevel.Error, "Round not found", { roundId });
+      logger.error("Round not found", { roundId });
       throw new NotFoundError(`Round with ID ${roundId} not found.`);
     }
     if (!isUserRoundAdmin(round, requestingUserId)) {
-      log(LogLevel.Error, "Only round admins can delete the round", {
+      logger.error("Only round admins can delete the round", {
         roundId,
         requestingUserId,
       });
       throw new UnauthorizedError("Only round admins can delete the round.");
     }
     if (round.published) {
-      log(LogLevel.Error, "Cannot delete a published round", { roundId });
+      logger.error("Cannot delete a published round", { roundId });
       throw new BadRequestError("Cannot delete a published round.");
     }
 
@@ -557,7 +559,7 @@ export function validateSchedule(
     !votingPeriodStart || !votingPeriodEnd ||
     !resultsPeriodStart
   ) {
-    log(LogLevel.Error, "Schedule dates are missing", { schedule });
+    logger.error("Schedule dates are missing", { schedule });
     if (throwOnError) {
       throw new BadRequestError("All schedule dates must be provided.");
     }
@@ -567,7 +569,7 @@ export function validateSchedule(
   if (
     applicationPeriodStart >= applicationPeriodEnd
   ) {
-    log(LogLevel.Error, "Application period start must be before end", { schedule });
+    logger.error("Application period start must be before end", { schedule });
     if (throwOnError) {
       throw new BadRequestError(
         "Application period start must be before end.",
@@ -579,7 +581,7 @@ export function validateSchedule(
   if (
     votingPeriodStart >= votingPeriodEnd
   ) {
-    log(LogLevel.Error, "Voting period start must be before end", { schedule });
+    logger.error("Voting period start must be before end", { schedule });
     if (throwOnError) {
       throw new BadRequestError(
         "Voting period start must be before end.",
@@ -590,7 +592,7 @@ export function validateSchedule(
   if (
     applicationPeriodEnd >= votingPeriodStart
   ) {
-    log(LogLevel.Error, "Voting period must start after application period ends", { schedule });
+    logger.error("Voting period must start after application period ends", { schedule });
     if (throwOnError) {
       throw new BadRequestError(
         "Voting period must start after application period ends.",
@@ -601,7 +603,7 @@ export function validateSchedule(
   if (
     votingPeriodEnd >= resultsPeriodStart
   ) {
-    log(LogLevel.Error, "Results period must start after voting period ends", { schedule });
+    logger.error("Results period must start after voting period ends", { schedule });
     if (throwOnError) {
       throw new BadRequestError(
         "Results period must start after voting period ends.",
@@ -635,7 +637,7 @@ function validateRoundReadyForPublishing(
   round: RoundSelectModelWithRelations,
 ): boolean {
   if (!validateSchedule(round, false)) {
-    log(LogLevel.Info, "Round schedule is not valid", { roundId: round.id });
+    logger.info("Round schedule is not valid", { roundId: round.id });
     return false;
   }
 
@@ -645,7 +647,7 @@ function validateRoundReadyForPublishing(
     !round.maxVotesPerProjectPerVoter ||
     !round.maxVotesPerVoter
   ) {
-    log(LogLevel.Info, "Round is missing required fields", {
+    logger.info("Round is missing required fields", {
       name: round.name,
       urlSlug: round.urlSlug,
       maxVotesPerProjectPerVoter: round.maxVotesPerProjectPerVoter,
@@ -655,17 +657,17 @@ function validateRoundReadyForPublishing(
   }
 
   if (round.admins.length === 0) {
-    log(LogLevel.Info, "Round has no admins", { roundId: round.id });
+    logger.info("Round has no admins", { roundId: round.id });
     return false;
   }
 
   if (round.applicationCategories.length === 0) {
-    log(LogLevel.Info, "Round has no application categories", { roundId: round.id });
+    logger.info("Round has no application categories", { roundId: round.id });
     return false;
   }
 
   if (round.voters.length === 0) {
-    log(LogLevel.Info, "Round has no voters", { roundId: round.id });
+    logger.info("Round has no voters", { roundId: round.id });
     return false;
   }
 
@@ -676,7 +678,7 @@ export async function publishRound(
   roundId: string,
   publishedByUserId: string,
 ): Promise<Round<true>> {
-  log(LogLevel.Info, "Publishing round", { roundId, publishedByUserId });
+  logger.info("Publishing round", { roundId, publishedByUserId });
   return await db.transaction(async (tx) => {
     const round = await tx.query.rounds.findFirst({
       where: eq(rounds.id, roundId),
@@ -684,15 +686,15 @@ export async function publishRound(
     });
 
     if (!round) {
-      log(LogLevel.Error, "Round not found", { roundId });
+      logger.error("Round not found", { roundId });
       throw new NotFoundError(`Round with ID ${roundId} not found.`);
     }
     if (round.published) {
-      log(LogLevel.Error, "Round is already published", { roundId });
+      logger.error("Round is already published", { roundId });
       throw new BadRequestError("Round is already published.");
     }
     if (!isUserRoundAdmin(round, publishedByUserId)) {
-      log(LogLevel.Error, "Only round admins can publish the round", {
+      logger.error("Only round admins can publish the round", {
         roundId,
         publishedByUserId,
       });
@@ -701,9 +703,7 @@ export async function publishRound(
 
     const readyToPublish = validateRoundReadyForPublishing(round);
     if (!readyToPublish) {
-      log(
-        LogLevel.Error,
-        "Round is not ready to be published. Ensure all required fields are set, at least one admin and one application category exist, and the schedule is valid.",
+      logger.error("Round is not ready to be published. Ensure all required fields are set, at least one admin and one application category exist, and the schedule is valid.",
         { roundId },
       );
       throw new BadRequestError(
@@ -746,7 +746,7 @@ export async function patchRound(
   dto: PatchRoundDto,
   patchingUserId: string,
 ): Promise<Round<true>> {
-  log(LogLevel.Info, "Patching round", { roundId, patchingUserId });
+  logger.info("Patching round", { roundId, patchingUserId });
   const result = await db.transaction(async (tx) => {
     const existingRound = await tx.query.rounds.findFirst({
       where: eq(rounds.id, roundId),
@@ -754,12 +754,12 @@ export async function patchRound(
     });
 
     if (!existingRound) {
-      log(LogLevel.Error, "Round not found", { roundId });
+      logger.error("Round not found", { roundId });
       throw new NotFoundError(`Round not found.`);
     }
 
     if (!isUserRoundAdmin(existingRound, patchingUserId)) {
-      log(LogLevel.Error, "Only round admins can update the round", {
+      logger.error("Only round admins can update the round", {
         roundId,
         patchingUserId,
       });
@@ -796,9 +796,7 @@ export async function patchRound(
         .filter((field) => (dto as any)[field] !== (existingRound as any)[field]);
       
       if (invalidFields.length > 0) {
-        log(
-          LogLevel.Error,
-          `Cannot update fields ${invalidFields.join(", ")} on a published round.`,
+        logger.error(`Cannot update fields ${invalidFields.join(", ")} on a published round.`,
           { roundId },
         );
         throw new BadRequestError(
@@ -938,7 +936,7 @@ export async function linkDripListsToRound(
   requestingUserId: string,
   dripListAccountIds: string[],
 ): Promise<void> {
-  log(LogLevel.Info, "Linking drip lists to round", {
+  logger.info("Linking drip lists to round", {
     roundId,
     requestingUserId,
   });
@@ -953,13 +951,13 @@ export async function linkDripListsToRound(
       }
     });
     if (!round) {
-      log(LogLevel.Error, "Round not found", { roundId });
+      logger.error("Round not found", { roundId });
       throw new NotFoundError(
         `Round with id ${roundId} not found`,
       );
     }
     if (!isUserRoundAdmin(round, requestingUserId)) {
-      log(LogLevel.Error, "User is not an admin of this round", {
+      logger.error("User is not an admin of this round", {
         roundId,
         requestingUserId,
       });

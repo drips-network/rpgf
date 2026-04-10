@@ -21,3 +21,4 @@ import "$app/routes/auditLogRoutes.ts";
 import "$app/routes/kycRoutes.ts";
 import "$app/routes/customDatasetRoutes.ts";
 import "$app/routes/externalVoteRoutes.ts";
+import "$app/routes/dangerousTestRoutes.ts";

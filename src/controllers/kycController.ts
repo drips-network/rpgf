@@ -8,16 +8,10 @@ import { createKycRequestForApplicationDtoSchema, KycProvider, KycStatus, KycTyp
 import parseDto from "../utils/parseDto.ts";
 import { ethereumAddressSchema } from "../types/shared.ts";
 import { log } from "node:console";
+import { config } from "../../config.ts";
 
-const FERN_WEBHOOK_SECRET = Deno.env.get("FERN_KYC_WEBHOOK_SECRET") || "";
-if (Deno.env.get("DENO_ENV") === "production" && !FERN_WEBHOOK_SECRET) {
-  throw new Error("FERN_KYC_WEBHOOK_SECRET is not set");
-}
-
-const TREOVA_KYC_WEBHOOK_SECRET = Deno.env.get("TREOVA_KYC_WEBHOOK_SECRET");
-if (Deno.env.get("DENO_ENV") === "production" && !TREOVA_KYC_WEBHOOK_SECRET) {
-  throw new Error("TREOVA_KYC_WEBHOOK_SECRET is not set");
-}
+const FERN_WEBHOOK_SECRET = config.kyc.fern.webhookSecret ?? "";
+const TREOVA_KYC_WEBHOOK_SECRET = config.kyc.treova.webhookSecret;
 
 const generateWebhookSig = (
   body: string,

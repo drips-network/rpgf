@@ -2,15 +2,11 @@ import { drizzle, NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
 import * as schema from "$app/db/schema.ts";
 import { PgTransaction } from "drizzle-orm/pg-core/session";
 import { ExtractTablesWithRelations } from "drizzle-orm";
-
-const connectionString = Deno.env.get("DB_CONNECTION_STRING");
-if (!connectionString) {
-  throw new Error("Missing database credentials in environment variables.");
-}
+import { config } from "../../config.ts";
 
 export const db = drizzle({
   connection: {
-    connectionString,
+    connectionString: config.database.connectionString,
   },
   schema,
 });

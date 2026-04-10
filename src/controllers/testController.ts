@@ -10,12 +10,13 @@ import { UnauthenticatedAppState } from "../../main.ts";
 import { Context } from "oak";
 import parseDto from "../utils/parseDto.ts";
 import { z } from "zod";
-import { log, LogLevel } from "$app/services/loggingService.ts";
+import { Logger } from "$app/services/loggingService.ts";
 
-const ENABLE_DANGEROUS_TEST_ROUTES = Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true";
+const logger = new Logger("controllers:test");
+import { config } from "../../config.ts";
 
 function checkDangerousRoutesEnabled() {
-  if (!ENABLE_DANGEROUS_TEST_ROUTES) {
+  if (!config.testing.enableDangerousTestRoutes) {
     throw new UnauthorizedError("Dangerous test routes are not enabled. Set ENABLE_DANGEROUS_TEST_ROUTES to true in your environment.");
   }
 }
@@ -120,7 +121,7 @@ export async function dangerouslyForceRoundStateController(
     resultsPeriodStart: newSchedule.resultsPeriodStart,
   }).where(eq(rounds.urlSlug, roundSlug)).returning();
 
-  log(LogLevel.Info, `Round ${roundSlug} forced into state ${desiredState}`, {
+  logger.info(`Round ${roundSlug} forced into state ${desiredState}`, {
     roundSlug: roundSlug,
     desiredState: desiredState,
     roundId: updated[0].id,

@@ -4,6 +4,7 @@ import {
   OpenAPIRegistry,
 } from "@asteasolutions/zod-to-openapi";
 import { z } from "zod";
+import { config } from "../../config.ts";
 
 // Extend Zod with OpenAPI capabilities - must be done before any schemas are created
 extendZodWithOpenApi(z);
@@ -90,7 +91,7 @@ export const notFoundResponse = {
 export function generateOpenAPIDocument() {
   const generator = new OpenApiGeneratorV31(registry.definitions);
 
-  const baseUrl = Deno.env.get("BASE_URL") || "http://localhost:8000";
+  const baseUrl = config.server.baseUrl;
 
   return generator.generateDocument({
     openapi: "3.1.0",

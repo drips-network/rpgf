@@ -1,5 +1,6 @@
 import { Router } from "oak";
 import { generateOpenAPIDocument } from "./registry.ts";
+import { config } from "../../config.ts";
 // Import routes to ensure they're registered
 import "./routes.ts";
 
@@ -14,7 +15,7 @@ docsRouter.get("/api/openapi.json", (ctx) => {
 
 // Serve Scalar UI
 docsRouter.get("/api/docs", (ctx) => {
-  const baseUrl = Deno.env.get("BASE_URL") || "http://localhost:8000";
+  const baseUrl = config.server.baseUrl;
 
   ctx.response.headers.set("Content-Type", "text/html");
   ctx.response.body = `

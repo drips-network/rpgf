@@ -1,7 +1,9 @@
 import { db } from "$app/db/postgres.ts";
 import { applicationVersions } from "$app/db/schema.ts";
 import { addApplicationAttestationFromTransaction } from "$app/services/applicationService.ts";
-import { log, LogLevel } from "$app/services/loggingService.ts";
+import { Logger } from "$app/services/loggingService.ts";
+
+const logger = new Logger("scripts:resolve-deferred-attestations");
 import { desc } from "drizzle-orm";
 
 async function fetchPendingApplicationVersions() {
@@ -25,7 +27,7 @@ async function fetchPendingApplicationVersions() {
 async function resolvePendingAttestations() {
   const versions = await fetchPendingApplicationVersions();
 
-  log(LogLevel.Info, "Found pending attestations", {
+  logger.info("Found pending attestations", {
     count: versions.length,
   });
 
@@ -38,7 +40,7 @@ async function resolvePendingAttestations() {
 
     if (!application) {
       skippedCount += 1;
-      log(LogLevel.Warn, "Application missing for version", {
+      logger.warn("Application missing for version", {
         applicationVersionId: version.id,
       });
       continue;
@@ -48,14 +50,14 @@ async function resolvePendingAttestations() {
 
     if (!submitter) {
       skippedCount += 1;
-      log(LogLevel.Warn, "Submitter missing for application", {
+      logger.warn("Submitter missing for application", {
         applicationVersionId: version.id,
         applicationId: application.id,
       });
       continue;
     }
 
-    log(LogLevel.Info, "Attempting to resolve deferred attestation", {
+    logger.info("Attempting to resolve deferred attestation", {
       applicationVersionId: version.id,
       applicationId: application.id,
       roundId: application.roundId,
@@ -70,13 +72,13 @@ async function resolvePendingAttestations() {
         submitter.walletAddress,
       );
       resolvedCount += 1;
-      log(LogLevel.Info, "Resolved deferred attestation", {
+      logger.info("Resolved deferred attestation", {
         applicationVersionId: version.id,
         applicationId: application.id,
       });
     } catch (error) {
       errorCount += 1;
-      log(LogLevel.Error, "Failed to resolve deferred attestation", {
+      logger.error("Failed to resolve deferred attestation", {
         applicationVersionId: version.id,
         applicationId: application.id,
         error,
@@ -84,7 +86,7 @@ async function resolvePendingAttestations() {
     }
   }
 
-  log(LogLevel.Info, "Deferred attestation resolution complete", {
+  logger.info("Deferred attestation resolution complete", {
     total: versions.length,
     resolvedCount,
     skippedCount,

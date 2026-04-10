@@ -10,7 +10,9 @@ import {
   users,
 } from "../db/schema.ts";
 import { db, Transaction } from "../db/postgres.ts";
-import { log, LogLevel } from "./loggingService.ts";
+import { Logger } from "./loggingService.ts";
+
+const logger = new Logger("ballotService");
 import {
   Ballot,
   CategoryAllocations,
@@ -35,6 +37,7 @@ import {
 } from "../types/auditLog.ts";
 import { verifyBallotSignature } from "../utils/ballotSignature.ts";
 import { cachingService } from "./cachingService.ts";
+import { config } from "../../config.ts";
 
 type SubmitBallotOptions = {
   actorUserId?: string;
@@ -125,7 +128,7 @@ export async function saveCategoryAllocations(
   roundId: string,
   dto: SaveCategoryAllocationsDto,
 ): Promise<CategoryAllocations> {
-  log(LogLevel.Info, "Saving category allocations", { userId, roundId });
+  logger.info("Saving category allocations", { userId, roundId });
 
   return await db.transaction(async (tx) => {
     const round = await getRound(roundId, userId, tx);
@@ -282,7 +285,7 @@ export async function getCategoryAllocations(
   userId: string,
   roundId: string,
 ): Promise<CategoryAllocations | null> {
-  log(LogLevel.Info, "Getting category allocations", { userId, roundId });
+  logger.info("Getting category allocations", { userId, roundId });
 
   const result = await db.query.ballotCategoryAllocations.findFirst({
     where: and(
@@ -308,7 +311,7 @@ export async function saveDraftVotes(
   categoryId: string,
   dto: SaveDraftVotesDto,
 ): Promise<Record<string, number>> {
-  log(LogLevel.Info, "Saving draft votes", { userId, roundId, categoryId });
+  logger.info("Saving draft votes", { userId, roundId, categoryId });
 
   return await db.transaction(async (tx) => {
     const round = await getRound(roundId, userId, tx);
@@ -447,7 +450,7 @@ export async function getDraftVotes(
   userId: string,
   roundId: string,
 ): Promise<DraftVotes> {
-  log(LogLevel.Info, "Getting draft votes", { userId, roundId });
+  logger.info("Getting draft votes", { userId, roundId });
 
   const drafts = await db.query.ballotDrafts.findMany({
     where: and(
@@ -496,7 +499,7 @@ export async function getBallot(
   userId: string,
   tx?: Transaction,
 ): Promise<WrappedBallot | null> {
-  log(LogLevel.Info, "Getting ballot", { roundId, userId });
+  logger.info("Getting ballot", { roundId, userId });
   const round = await (tx ?? db).query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: { voters: true },
@@ -523,7 +526,7 @@ export async function submitBallot(
   const actorUserId = options?.actorUserId ?? userId;
   const actingOnBehalf = actorUserId !== userId;
 
-  log(LogLevel.Info, "Submitting ballot", {
+  logger.info("Submitting ballot", {
     userId,
     actorUserId,
     actingOnBehalf,
@@ -622,7 +625,7 @@ export async function submitBallot(
         ballotDto.chainId,
       );
     } catch (error) {
-      log(LogLevel.Error, "Ballot signature verification failed", {
+      logger.error("Ballot signature verification failed", {
         userId,
         roundId,
         error: error instanceof Error ? error.message : String(error),
@@ -777,7 +780,7 @@ export async function submitBallotDirect(
   const actorUserId = options?.actorUserId ?? userId;
   const actingOnBehalf = actorUserId !== userId;
 
-  log(LogLevel.Info, "Submitting ballot directly", {
+  logger.info("Submitting ballot directly", {
     userId,
     actorUserId,
     actingOnBehalf,
@@ -856,7 +859,7 @@ export async function submitBallotDirect(
         ballotDto.chainId,
       );
     } catch (error) {
-      log(LogLevel.Error, "Ballot signature verification failed", {
+      logger.error("Ballot signature verification failed", {
         userId,
         roundId,
         error: error instanceof Error ? error.message : String(error),
@@ -987,7 +990,7 @@ export async function submitExternalVoteResult(
   rawBody: string,
   signature: string,
 ): Promise<{ id: string; callbackUrl: string }> {
-  log(LogLevel.Info, "Submitting external vote result", {
+  logger.info("Submitting external vote result", {
     roundId,
     categoryId: dto.categoryId,
     voterAddress: dto.voterAddress,
@@ -1068,7 +1071,7 @@ export async function submitExternalVoteResult(
     EXTERNAL_VOTE_RESULT_TTL_SECONDS,
   );
 
-  const baseUrl = Deno.env.get("BASE_URL") || "http://localhost:8000";
+  const baseUrl = config.server.baseUrl;
   const callbackUrl = `${baseUrl}/rpgf/external-vote-landing?externalVoteResultId=${resultId}&roundId=${roundId}&chainId=${round.chain.chainId}`;
 
   return { id: resultId, callbackUrl };
@@ -1079,7 +1082,7 @@ export async function getExternalVoteResult(
   resultId: string,
   userWalletAddress: string,
 ): Promise<ExternalVoteResult> {
-  log(LogLevel.Info, "Getting external vote result", {
+  logger.info("Getting external vote result", {
     roundId,
     resultId,
   });
@@ -1153,7 +1156,7 @@ export async function getBallots(
   offset = 0,
   format: "json" | "csv" = "json",
 ): Promise<WrappedBallot[] | string> {
-  log(LogLevel.Info, "Getting ballots", {
+  logger.info("Getting ballots", {
     roundId,
     requestingUserId,
     limit,
@@ -1208,7 +1211,7 @@ export async function getBallotStats(
   roundId: string,
   requestingUserId: string,
 ) {
-  log(LogLevel.Info, "Getting ballot stats", { roundId, requestingUserId });
+  logger.info("Getting ballot stats", { roundId, requestingUserId });
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
     with: { admins: true },

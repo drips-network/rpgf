@@ -5,7 +5,9 @@
 import { db } from "../db/postgres.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { results as resultsTable, rounds } from "../db/schema.ts";
-import { log, LogLevel } from "./loggingService.ts";
+import { Logger } from "./loggingService.ts";
+
+const logger = new Logger("resultsService");
 import { and, eq, gt } from "drizzle-orm";
 import { getRound } from "./roundService.ts";
 import { createLog } from "./auditLogService.ts";
@@ -96,7 +98,7 @@ export async function recalculateResultsForRound(
   requestingUserId: string,
   method: ResultCalculationMethod,
 ) {
-  log(LogLevel.Info, "Recalculating results for round", {
+  logger.info("Recalculating results for round", {
     roundId,
     requestingUserId,
     method,
@@ -104,11 +106,11 @@ export async function recalculateResultsForRound(
   await db.transaction(async (tx) => {
     const round = await getRound(roundId, requestingUserId, tx);
     if (!round) {
-      log(LogLevel.Error, "Round not found", { roundId });
+      logger.error("Round not found", { roundId });
       throw new NotFoundError("Round not found");
     }
     if (!round.isAdmin) {
-      log(LogLevel.Error, "User is not authorized to modify this round", {
+      logger.error("User is not authorized to modify this round", {
         roundId,
         requestingUserId,
       });
@@ -116,7 +118,7 @@ export async function recalculateResultsForRound(
     }
 
     if (!(round.state === "results" || round.state === "pending-results")) {
-      log(LogLevel.Error, "Round voting hasn't concluded yet", { roundId });
+      logger.error("Round voting hasn't concluded yet", { roundId });
       throw new BadRequestError("Round voting hasn't concluded yet");
     }
 
@@ -195,18 +197,18 @@ export async function importResultsForRound(
   requestingUserId: string,
   results: Record<string, number>,
 ) {
-  log(LogLevel.Info, "Importing results for round", {
+  logger.info("Importing results for round", {
     roundId,
     requestingUserId,
   });
   await db.transaction(async (tx) => {
     const round = await getRound(roundId, requestingUserId, tx);
     if (!round) {
-      log(LogLevel.Error, "Round not found", { roundId });
+      logger.error("Round not found", { roundId });
       throw new NotFoundError("Round not found");
     }
     if (!round.isAdmin) {
-      log(LogLevel.Error, "User is not authorized to modify this round", {
+      logger.error("User is not authorized to modify this round", {
         roundId,
         requestingUserId,
       });
@@ -214,7 +216,7 @@ export async function importResultsForRound(
     }
 
     if (!(round.state === "results" || round.state === "pending-results")) {
-      log(LogLevel.Error, "Round voting hasn't concluded yet", { roundId });
+      logger.error("Round voting hasn't concluded yet", { roundId });
       throw new BadRequestError("Round voting hasn't concluded yet");
     }
 
@@ -302,15 +304,15 @@ export async function publishResults(
   roundId: string,
   requestingUserId: string,
 ): Promise<void> {
-  log(LogLevel.Info, "Publishing results", { roundId, requestingUserId });
+  logger.info("Publishing results", { roundId, requestingUserId });
   await db.transaction(async (tx) => {
     const round = await getRound(roundId, requestingUserId, tx);
     if (!round) {
-      log(LogLevel.Error, "Round not found", { roundId });
+      logger.error("Round not found", { roundId });
       throw new NotFoundError("Round not found");
     }
     if (!round.isAdmin) {
-      log(LogLevel.Error, "User is not authorized to modify this round", {
+      logger.error("User is not authorized to modify this round", {
         roundId,
         requestingUserId,
       });
@@ -318,7 +320,7 @@ export async function publishResults(
     }
 
     if (!round.resultsCalculated) {
-      log(LogLevel.Error, "Results have not been calculated for this round", {
+      logger.error("Results have not been calculated for this round", {
         roundId,
       });
       throw new BadRequestError("Results have not been calculated for this round");
@@ -351,17 +353,17 @@ export async function calculateDripListWeights(
   roundId: string,
   requestingUserId: string,
 ): Promise<{ [gitHubUrl: string]: number}> {
-  log(LogLevel.Info, "Calculating drip list weights", {
+  logger.info("Calculating drip list weights", {
     roundId,
     requestingUserId,
   });
   const round = await getRound(roundId, requestingUserId);
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("Round not found");
   }
   if (!round.isAdmin) {
-    log(LogLevel.Error, "User is not authorized to modify this round", {
+    logger.error("User is not authorized to modify this round", {
       roundId,
       requestingUserId,
     });
@@ -393,7 +395,7 @@ export async function calculateDripListWeights(
 
   const totalVotes = results.reduce((acc, result) => acc + Number(result.result), 0);
   if (totalVotes === 0) {
-    log(LogLevel.Error, "No votes allocated in this round", { roundId });
+    logger.error("No votes allocated in this round", { roundId });
     throw new BadRequestError("No votes allocated in this round");
   }
 

@@ -1,7 +1,9 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
 import { applicationCategories, applicationForms, rounds } from "../db/schema.ts";
-import { log, LogLevel } from "./loggingService.ts";
+import { Logger } from "./loggingService.ts";
+
+const logger = new Logger("applicationCategoryService");
 import { ApplicationCategory, CreateApplicationCategoryDto, ExternalVotingTool, UpdateApplicationCategoryDto } from "../types/applicationCategory.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
@@ -33,7 +35,7 @@ export async function createApplicationCategoryForRound(
   requestingUserId: string,
   roundId: string,
 ): Promise<ApplicationCategory> {
-  log(LogLevel.Info, "Creating application category for round", {
+  logger.info("Creating application category for round", {
     requestingUserId,
     roundId,
   });
@@ -48,11 +50,11 @@ export async function createApplicationCategoryForRound(
       }
     });
     if (!round) {
-      log(LogLevel.Error, "Round not found", { roundId });
+      logger.error("Round not found", { roundId });
       throw new BadRequestError("Round not found");
     }
     if (!isUserRoundAdmin(round, requestingUserId)) {
-      log(LogLevel.Error, "User not authorized to modify round", {
+      logger.error("User not authorized to modify round", {
         requestingUserId,
         roundId,
       });
@@ -67,7 +69,7 @@ export async function createApplicationCategoryForRound(
       )
     });
     if (!form) {
-      log(LogLevel.Error, "Application form not found", {
+      logger.error("Application form not found", {
         applicationFormId: dto.applicationFormId,
       });
       throw new BadRequestError("Application form not found");
@@ -134,7 +136,7 @@ export async function updateApplicationCategory(
   requestingUserId: string,
   dto: UpdateApplicationCategoryDto,
 ): Promise<ApplicationCategory | null> {
-  log(LogLevel.Info, "Updating application category", {
+  logger.info("Updating application category", {
     roundId,
     categoryId,
     requestingUserId,
@@ -151,25 +153,23 @@ export async function updateApplicationCategory(
       }
     });
     if (!existingCategory) {
-      log(LogLevel.Error, "Application category not found", { categoryId });
+      logger.error("Application category not found", { categoryId });
       throw new NotFoundError("Application category not found");
     }
     if (existingCategory.round.published) {
-      log(LogLevel.Error, "Cannot modify category of a published round", {
+      logger.error("Cannot modify category of a published round", {
         roundId,
       });
       throw new BadRequestError("Cannot modify category of a published round");
     }
     if (!isUserRoundAdmin(existingCategory.round, requestingUserId)) {
-      log(
-        LogLevel.Error,
-        "User not authorized to modify round",
+      logger.error("User not authorized to modify round",
         { requestingUserId, roundId },
       );
       throw new BadRequestError("You are not authorized to modify this round");
     }
     if (existingCategory.roundId !== roundId) {
-      log(LogLevel.Error, "Category does not belong to the specified round", {
+      logger.error("Category does not belong to the specified round", {
         categoryId,
         roundId,
       });
@@ -183,7 +183,7 @@ export async function updateApplicationCategory(
       )
     });
     if (!form) {
-      log(LogLevel.Error, "Application form not found", {
+      logger.error("Application form not found", {
         applicationFormId: dto.applicationFormId,
       });
       throw new BadRequestError("Application form not found");
@@ -250,7 +250,7 @@ export async function deleteApplicationCategory(
   categoryId: string,
   requestingUserId: string,
 ): Promise<void> {
-  log(LogLevel.Info, "Deleting application category", {
+  logger.info("Deleting application category", {
     roundId,
     categoryId,
     requestingUserId,
@@ -268,19 +268,17 @@ export async function deleteApplicationCategory(
       }
     });
     if (!existingCategory) {
-      log(LogLevel.Error, "Application category not found", { categoryId });
+      logger.error("Application category not found", { categoryId });
       throw new NotFoundError("Application category not found");
     }
     if (!isUserRoundAdmin(existingCategory.round, requestingUserId)) {
-      log(
-        LogLevel.Error,
-        "User not authorized to modify round",
+      logger.error("User not authorized to modify round",
         { requestingUserId, roundId },
       );
       throw new BadRequestError("You are not authorized to modify this round");
     }
     if (existingCategory.roundId !== roundId) {
-      log(LogLevel.Error, "Category does not belong to the specified round", {
+      logger.error("Category does not belong to the specified round", {
         categoryId,
         roundId,
       });
@@ -294,7 +292,7 @@ export async function deleteApplicationCategory(
       }
     });
     if (!category) {
-      log(LogLevel.Error, "Application category not found", { categoryId });
+      logger.error("Application category not found", { categoryId });
       throw new NotFoundError("Application category not found");
     }
 
@@ -323,7 +321,7 @@ export async function getApplicationCategoriesByRoundId(
   roundId: string,
   requestingUserId: string | null,
 ): Promise<ApplicationCategory[]> {
-  log(LogLevel.Info, "Getting application categories by round ID", {
+  logger.info("Getting application categories by round ID", {
     roundId,
     requestingUserId,
   });
@@ -334,13 +332,11 @@ export async function getApplicationCategoriesByRoundId(
     }
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("Round not found.");
   }
   if (!round.published && !isUserRoundAdmin(round, requestingUserId)) {
-    log(
-      LogLevel.Error,
-      "User not authorized to view this round's application categories",
+    logger.error("User not authorized to view this round's application categories",
       { requestingUserId, roundId },
     );
     throw new UnauthorizedError("You are not authorized to view this round's application categories.");

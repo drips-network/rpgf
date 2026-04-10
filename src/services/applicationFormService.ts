@@ -1,7 +1,9 @@
 import { eq, inArray, InferSelectModel, isNull } from "drizzle-orm";
 import { db } from "../db/postgres.ts";
 import { applicationFormFields, applicationForms } from "../db/schema.ts";
-import { log, LogLevel } from "./loggingService.ts";
+import { Logger } from "./loggingService.ts";
+
+const logger = new Logger("applicationFormService");
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { type ApplicationForm, type CreateApplicationFormDto } from "../types/applicationForm.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
@@ -17,7 +19,7 @@ function ensureUniqueSlugs(fields: CreateApplicationFormDto["fields"]) {
   const uniqueSlugs = new Set(slugs);
 
   if (slugs.length !== uniqueSlugs.size) {
-    log(LogLevel.Error, "Field slugs must be unique");
+    logger.error("Field slugs must be unique");
     throw new BadRequestError("Field slugs must be unique");
   }
 }
@@ -45,7 +47,7 @@ export async function createApplicationForm(
   requestingUserId: string,
   roundId: string,
 ): Promise<ApplicationForm> {
-  log(LogLevel.Info, "Creating application form", {
+  logger.info("Creating application form", {
     requestingUserId,
     roundId,
   });
@@ -60,11 +62,11 @@ export async function createApplicationForm(
     }
   });
   if (!round) {
-    log(LogLevel.Error, "Round not found", { roundId });
+    logger.error("Round not found", { roundId });
     throw new NotFoundError("No round found for the provided ID");
   }
   if (!isUserRoundAdmin(round, requestingUserId)) {
-    log(LogLevel.Error, "User not authorized to modify round", {
+    logger.error("User not authorized to modify round", {
       requestingUserId,
       roundId,
     });
@@ -80,7 +82,7 @@ export async function createApplicationForm(
     ),
   });
   if (existingForm) {
-    log(LogLevel.Error, "Application form with the same name already exists", {
+    logger.error("Application form with the same name already exists", {
       roundId,
       name: dto.name,
     });
@@ -137,7 +139,7 @@ export async function updateApplicationForm(
   roundDraftId: string,
   formId: string,
 ): Promise<ApplicationForm> {
-  log(LogLevel.Info, "Updating application form", {
+  logger.info("Updating application form", {
     requestingUserId,
     roundDraftId,
     formId,
@@ -158,24 +160,22 @@ export async function updateApplicationForm(
     }
   });
   if (!existingForm) {
-    log(LogLevel.Error, "Application form not found", { formId });
+    logger.error("Application form not found", { formId });
     throw new NotFoundError("No application form found for the provided ID");
   }
   if (!isUserRoundAdmin(existingForm.round, requestingUserId)) {
-    log(LogLevel.Error, "User not authorized to modify round", {
+    logger.error("User not authorized to modify round", {
       requestingUserId,
       roundId: existingForm.roundId,
     });
     throw new BadRequestError("You are not authorized to modify this round");
   }
   if (existingForm.deletedAt) {
-    log(LogLevel.Error, "Cannot update a deleted application form", { formId });
+    logger.error("Cannot update a deleted application form", { formId });
     throw new BadRequestError("Cannot update a deleted application form");
   }
   if (existingForm.roundId !== roundDraftId) {
-    log(
-      LogLevel.Error,
-      "The application form does not belong to the specified round draft",
+    logger.error("The application form does not belong to the specified round draft",
       { formId, roundDraftId },
     );
     throw new NotFoundError("The application form does not belong to the specified round draft");
@@ -272,7 +272,7 @@ export async function getApplicationFormForCategory(
   roundId: string,
   categoryId: string,
 ): Promise<ApplicationForm | null> {
-  log(LogLevel.Info, "Getting application form for category", {
+  logger.info("Getting application form for category", {
     roundId,
     categoryId,
   });
@@ -295,13 +295,11 @@ export async function getApplicationFormForCategory(
   });
 
   if (!category) {
-    log(LogLevel.Error, "Application category not found", { categoryId });
+    logger.error("Application category not found", { categoryId });
     throw new NotFoundError("No application category found for the provided ID");
   }
   if (category.roundId !== roundId) {
-    log(
-      LogLevel.Error,
-      "The application category does not belong to the specified round",
+    logger.error("The application category does not belong to the specified round",
       { categoryId, roundId },
     );
     throw new NotFoundError("The application category does not belong to the specified round");
@@ -319,7 +317,7 @@ export async function deleteApplicationForm(
   requestingUserId: string,
   roundId: string,
 ) {
-  log(LogLevel.Info, "Deleting application form", {
+  logger.info("Deleting application form", {
     formId,
     requestingUserId,
     roundId,
@@ -337,30 +335,28 @@ export async function deleteApplicationForm(
       }
     });
     if (!form) {
-      log(LogLevel.Error, "Application form not found", { formId });
+      logger.error("Application form not found", { formId });
       throw new NotFoundError("No application form found for the provided ID");
     }
     if (!isUserRoundAdmin(form.round, requestingUserId)) {
-      log(LogLevel.Error, "User not authorized to modify round", {
+      logger.error("User not authorized to modify round", {
         requestingUserId,
         roundId,
       });
       throw new BadRequestError("You are not authorized to modify this round");
     }
     if (form.deletedAt) {
-      log(LogLevel.Error, "Application form is already deleted", { formId });
+      logger.error("Application form is already deleted", { formId });
       throw new BadRequestError("Application form is already deleted");
     }
     if (form.round.published) {
-      log(LogLevel.Error, "Cannot delete application form for a published round", {
+      logger.error("Cannot delete application form for a published round", {
         formId,
       });
       throw new BadRequestError("Cannot delete application form for a published round");
     }
     if (form.roundId !== roundId) {
-      log(
-        LogLevel.Error,
-        "The application form does not belong to the specified round",
+      logger.error("The application form does not belong to the specified round",
         { formId, roundId },
       );
       throw new NotFoundError("The application form does not belong to the specified round");
@@ -374,9 +370,7 @@ export async function deleteApplicationForm(
       ),
     });
     if (categories.length > 0) {
-      log(
-        LogLevel.Error,
-        "Cannot delete application form assigned to a category",
+      logger.error("Cannot delete application form assigned to a category",
         { formId },
       );
       throw new BadRequestError("Cannot delete application form assigned to a category");
@@ -410,7 +404,7 @@ export async function deleteApplicationForm(
 export async function getApplicationFormsByRoundId(
   roundId: string,
 ): Promise<ApplicationForm[]> {
-  log(LogLevel.Info, "Getting application forms by round ID", { roundId });
+  logger.info("Getting application forms by round ID", { roundId });
   const forms = await db.query.applicationForms.findMany({
     where: (forms, { and, eq, isNull }) => and(
       eq(forms.roundId, roundId),

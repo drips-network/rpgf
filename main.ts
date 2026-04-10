@@ -1,4 +1,5 @@
 import { Application } from "oak";
+import { config } from "./config.ts";
 import authRoutes from "$app/routes/authRoutes.ts";
 import roundRoutes from "$app/routes/roundRoutes.ts";
 import applicationRoutes from "$app/routes/applicationRoutes.ts";
@@ -34,24 +35,11 @@ export type AppState = UnauthenticatedAppState | AuthenticatedAppState;
 
 const app = new Application<AppState>({ state: { user: undefined } });
 
-if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
-  console.warn(
-    "----------------------------------------------------------------------",
-  );
-  console.warn("🔒 CORS DISABLED! 🔒");
-  console.warn(
-    "The CORS_ALLOW_ALL_ORIGINS environment variable is set to true, which is a security risk in production environments.",
-  );
-  console.warn(
-    "----------------------------------------------------------------------",
-  );
-}
-
 app.use((ctx, next) => {
   const origin = ctx.request.headers.get("Origin");
   const allowedOriginRegex = /^https:\/\/([a-zA-Z0-9-]+\.)+drips\.network$/;
-  
-  if (Deno.env.get("CORS_ALLOW_ALL_ORIGINS") === "true") {
+
+  if (config.cors.allowAllOrigins) {
     ctx.response.headers.set("Access-Control-Allow-Origin", origin || "*");
   } else if (!origin) {
     ctx.response.headers.set("Access-Control-Allow-Origin", "*");
@@ -145,24 +133,13 @@ app.use(kycRoutes.allowedMethods());
 app.use(customDatasetRoutes.routes());
 app.use(customDatasetRoutes.allowedMethods());
 
-if (Deno.env.get("ENABLE_DANGEROUS_TEST_ROUTES") === "true") {
-  console.warn(
-    "----------------------------------------------------------------------",
-  );
-  console.warn("☠️⚠️☠️ DANGEROUS TEST ROUTES ENABLED! ☠️⚠️☠️");
-  console.warn(
-    "The ENABLE_DANGEROUS_TEST_ROUTES environment variable MUST be set to false in production environments.",
-  );
-  console.warn(
-    "----------------------------------------------------------------------",
-  );
-
+if (config.testing.enableDangerousTestRoutes) {
   app.use(dangerousTestRoutes.routes());
   app.use(dangerousTestRoutes.allowedMethods());
 }
 
 if (import.meta.main) {
-  const port = parseInt(Deno.env.get("PORT") || "8000");
+  const port = config.server.port;
   await warmProviderRegistry();
   console.log(`Server listening on http://localhost:${port}`);
   await app.listen({ port, hostname: "[::]" });

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { CreateKycRequestForApplicationDto, KycProvider, KycRequest, KycStatus, KycType } from "../types/kyc.ts";
 import { db, Transaction } from "../db/postgres.ts";
-import { log, LogLevel } from "./loggingService.ts";
+import { Logger } from "./loggingService.ts";
+
+const logger = new Logger("kycService");
 import { applicationKycRequests, applications, kycRequests, roundKycConfigurations, treovaWebhooks, users } from "../db/schema.ts";
 import { BadRequestError, NotFoundError } from "../errors/generic.ts";
 import { isUserRoundAdmin } from "./roundService.ts";
@@ -10,13 +12,10 @@ import { InferSelectModel } from "drizzle-orm/table";
 import { and, eq, ilike } from "drizzle-orm";
 import { createLog } from "./auditLogService.ts";
 import { AuditLogAction, AuditLogActorType } from "../types/auditLog.ts";
+import { config } from "../../config.ts";
 
 const FERN_API_BASE = "https://api.fernhq.com";
-const FERN_API_KEY = Deno.env.get("FERN_KYC_API_KEY");
-
-if (!FERN_API_KEY && Deno.env.get("DENO_ENV") === "production") {
-  throw new Error("FERN_KYC_API_KEY is not set");
-}
+const FERN_API_KEY = config.kyc.fern.apiKey;
 
 function _assertCanKyc() {
   if (!FERN_API_KEY) {
@@ -32,7 +31,7 @@ function _fetchFern(
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": Deno.env.get("FERN_KYC_API_KEY") || "",
+      "x-api-key": FERN_API_KEY ?? "",
       ...(options.headers || {}),
     },
   });
@@ -143,7 +142,7 @@ export async function createKycRequest({
   businessName?: string,
   roundId: string,
 }, tx: Transaction): Promise<KycRequest> {
-  log(LogLevel.Info, "Creating KYC request", {
+  logger.info("Creating KYC request", {
     userId,
     requestingUserId,
     applicationId,
@@ -157,7 +156,7 @@ export async function createKycRequest({
     where: eq(roundKycConfigurations.roundId, roundId),
   });
   if (!kycConfiguration) {
-    log(LogLevel.Error, "KYC is not configured for this round", { roundId });
+    logger.error("KYC is not configured for this round", { roundId });
     throw new BadRequestError("KYC is not configured for this round");
   }
 
@@ -237,7 +236,7 @@ export async function createKycRequestForApplication(
   requestingUserId: string,
   dto: CreateKycRequestForApplicationDto,
 ): Promise<KycRequest> {
-  log(LogLevel.Info, "Creating KYC request for application", {
+  logger.info("Creating KYC request for application", {
     applicationId,
     requestingUserId,
   });
@@ -257,20 +256,18 @@ export async function createKycRequestForApplication(
       }
     });
     if (!application) {
-      log(LogLevel.Error, "Application not found", { applicationId });
+      logger.error("Application not found", { applicationId });
       throw new NotFoundError("Application not found");
     }
     if (!application.round.kycConfiguration) {
-      log(LogLevel.Error, "KYC is not required for this application", {
+      logger.error("KYC is not required for this application", {
         applicationId,
       });
       throw new BadRequestError("KYC is not required for this application");
     }
 
     if (application.round.kycConfiguration.kycProvider !== KycProvider.Fern) {
-      log(
-        LogLevel.Error,
-        `KYC provider ${application.round.kycConfiguration.kycProvider} is not supported for creating KYC requests via the API`,
+      logger.error(`KYC provider ${application.round.kycConfiguration.kycProvider} is not supported for creating KYC requests via the API`,
         { applicationId },
       );
       throw new BadRequestError(`KYC provider ${application.round.kycConfiguration.kycProvider} is not supported for creating KYC requests via the API`);
@@ -280,9 +277,7 @@ export async function createKycRequestForApplication(
     const isRoundAdmin = isUserRoundAdmin(application.round, requestingUserId);
 
     if (!isSubmitter && !isRoundAdmin) {
-      log(
-        LogLevel.Error,
-        "You are not allowed to create a KYC request for this application",
+      logger.error("You are not allowed to create a KYC request for this application",
         { applicationId, requestingUserId },
       );
       throw new UnauthorizedError("You are not allowed to create a KYC request for this application");
@@ -292,7 +287,7 @@ export async function createKycRequestForApplication(
       where: eq(applicationKycRequests.applicationId, applicationId)
     });
     if (existingKyc) {
-      log(LogLevel.Error, "KYC request already exists for this application", {
+      logger.error("KYC request already exists for this application", {
         applicationId,
       });
       throw new BadRequestError("KYC request already exists for this application");
@@ -317,7 +312,7 @@ export async function getKycRequestForApplication(
   applicationId: string,
   requestingUserId: string,
 ): Promise<KycRequest> {
-  log(LogLevel.Info, "Getting KYC request for application", {
+  logger.info("Getting KYC request for application", {
     applicationId,
     requestingUserId,
   });
@@ -340,7 +335,7 @@ export async function getKycRequestForApplication(
     }
   });
   if (!applicationKycRequest) {
-    log(LogLevel.Error, "KYC record not found", { applicationId });
+    logger.error("KYC record not found", { applicationId });
     throw new NotFoundError("KYC record not found");
   }
 
@@ -348,7 +343,7 @@ export async function getKycRequestForApplication(
   const isRequesterRoundAdmin = isUserRoundAdmin(applicationKycRequest.application.round, requestingUserId);
 
   if (!isRequesterApplicationOwner && !isRequesterRoundAdmin) {
-    log(LogLevel.Error, "You are not allowed to view this KYC status", {
+    logger.error("You are not allowed to view this KYC status", {
       applicationId,
       requestingUserId,
     });
@@ -362,7 +357,7 @@ export async function getKycRequestsForRound(
   roundId: string,
   requestingUserId: string,
 ): Promise<KycRequest[]> {
-  log(LogLevel.Info, "Getting KYC requests for round", {
+  logger.info("Getting KYC requests for round", {
     roundId,
     requestingUserId,
   });
@@ -391,7 +386,7 @@ export async function linkExistingKycToApplication(
   kycRequestId: string,
   requestingUserId: string,
 ) {
-  log(LogLevel.Info, "Linking existing KYC to application", {
+  logger.info("Linking existing KYC to application", {
     applicationId,
     kycRequestId,
     requestingUserId,
@@ -408,15 +403,13 @@ export async function linkExistingKycToApplication(
     }
   });
   if (!application) {
-    log(LogLevel.Error, "Application not found", { applicationId });
+    logger.error("Application not found", { applicationId });
     throw new NotFoundError("Application not found");
   }
   const isSubmitter = application.submitterUserId === requestingUserId;
   const isRoundAdmin = isUserRoundAdmin(application.round, requestingUserId);
   if (!isSubmitter && !isRoundAdmin) {
-    log(
-      LogLevel.Error,
-      "You are not allowed to link a KYC request to this application",
+    logger.error("You are not allowed to link a KYC request to this application",
       { applicationId, requestingUserId },
     );
     throw new UnauthorizedError("You are not allowed to link a KYC request to this application");
@@ -426,9 +419,7 @@ export async function linkExistingKycToApplication(
     where: eq(applicationKycRequests.applicationId, applicationId)
   });
   if (existingApplicationKyc) {
-    log(
-      LogLevel.Error,
-      "A KYC request is already linked to this application",
+    logger.error("A KYC request is already linked to this application",
       { applicationId },
     );
     throw new BadRequestError("A KYC request is already linked to this application");
@@ -437,21 +428,17 @@ export async function linkExistingKycToApplication(
     where: eq(kycRequests.id, kycRequestId)
   });
   if (!kycRequest) {
-    log(LogLevel.Error, "KYC request not found", { kycRequestId });
+    logger.error("KYC request not found", { kycRequestId });
     throw new NotFoundError("KYC request not found");
   }
   if (kycRequest.userId !== requestingUserId && !isRoundAdmin) {
-    log(
-      LogLevel.Error,
-      "You are not allowed to link this KYC request to the application",
+    logger.error("You are not allowed to link this KYC request to the application",
       { kycRequestId, requestingUserId },
     );
     throw new UnauthorizedError("You are not allowed to link this KYC request to the application");
   }
   if (kycRequest.roundId !== application.roundId) {
-    log(
-      LogLevel.Error,
-      "The KYC request and application must belong to the same round",
+    logger.error("The KYC request and application must belong to the same round",
       { kycRequestId, applicationId },
     );
     throw new BadRequestError("The KYC request and application must belong to the same round");
@@ -469,7 +456,7 @@ export async function updateKycStatus(
   providerUserId: string,
   provider: KycProvider,
 ) {
-  log(LogLevel.Info, "Updating KYC status", {
+  logger.info("Updating KYC status", {
     newStatus,
     providerUserId,
     provider,
@@ -511,7 +498,7 @@ export async function updateKycStatusTreova(
   idempotencyKey: string,
   kycType: KycType,
 ) {
-  log(LogLevel.Info, "Updating KYC status for Treova", {
+  logger.info("Updating KYC status for Treova", {
     newStatus,
     applicantId,
     walletAddress,
@@ -526,7 +513,7 @@ export async function updateKycStatusTreova(
     });
 
     if (existingWebhook) {
-      log(LogLevel.Info, "Treova webhook with this idempotency key has already been processed, skipping", {
+      logger.info("Treova webhook with this idempotency key has already been processed, skipping", {
         idempotencyKey,
       });
       return;
@@ -536,7 +523,7 @@ export async function updateKycStatusTreova(
       where: eq(roundKycConfigurations.treovaFormId, formId),
     });
     if (!kycConfiguration) {
-      log(LogLevel.Error, "KYC configuration not found for this form ID", {
+      logger.error("KYC configuration not found for this form ID", {
         formId,
       });
       throw new NotFoundError("KYC configuration not found for this form ID");
@@ -549,7 +536,7 @@ export async function updateKycStatusTreova(
       }
     });
     if (!user) {
-      log(LogLevel.Error, "User not found for this wallet address", {
+      logger.error("User not found for this wallet address", {
         walletAddress,
       });
       throw new NotFoundError("User not found for this wallet address");

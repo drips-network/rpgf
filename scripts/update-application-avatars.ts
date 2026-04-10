@@ -2,7 +2,9 @@ import { db } from "$app/db/postgres.ts";
 import { applications, applicationVersions } from "$app/db/schema.ts";
 import projects, { type ProjectData } from "$app/gql/projects.ts";
 import { cachingService } from "$app/services/cachingService.ts";
-import { log, LogLevel } from "$app/services/loggingService.ts";
+import { Logger } from "$app/services/loggingService.ts";
+
+const logger = new Logger("scripts:update-application-avatars");
 import { desc, eq } from "drizzle-orm";
 
 function isEmojiAvatar(
@@ -49,7 +51,7 @@ function snapshotsEqual(
 }
 
 async function main() {
-  log(LogLevel.Info, "Fetching applications for avatar refresh");
+  logger.info("Fetching applications for avatar refresh");
 
   const allApplications = await db.query.applications.findMany({
     with: {
@@ -73,9 +75,7 @@ async function main() {
 
     if (!latestVersion) {
       skippedCount += 1;
-      log(
-        LogLevel.Warn,
-        "Application has no versions; skipping avatar update",
+      logger.warn("Application has no versions; skipping avatar update",
         {
           applicationId: application.id,
         },
@@ -87,9 +87,7 @@ async function main() {
 
     if (!chain) {
       skippedCount += 1;
-      log(
-        LogLevel.Warn,
-        "Application round has no associated chain; skipping avatar update",
+      logger.warn("Application round has no associated chain; skipping avatar update",
         {
           applicationId: application.id,
           roundId: application.roundId,
@@ -106,9 +104,7 @@ async function main() {
 
       if (!latestProjectSnapshot) {
         skippedCount += 1;
-        log(
-          LogLevel.Warn,
-          "Project snapshot unavailable; skipping avatar update",
+        logger.warn("Project snapshot unavailable; skipping avatar update",
           {
             applicationId: application.id,
             dripsAccountId: latestVersion.dripsAccountId,
@@ -145,19 +141,19 @@ async function main() {
       );
 
       updatedCount += 1;
-      log(LogLevel.Info, "Updated application avatar snapshot", {
+      logger.info("Updated application avatar snapshot", {
         applicationId: application.id,
       });
     } catch (error) {
       errorCount += 1;
-      log(LogLevel.Error, "Failed to refresh application avatar", {
+      logger.error("Failed to refresh application avatar", {
         applicationId: application.id,
         error,
       });
     }
   }
 
-  log(LogLevel.Info, "Avatar refresh completed", {
+  logger.info("Avatar refresh completed", {
     totalApplications: allApplications.length,
     updatedCount,
     skippedCount,
