@@ -18,9 +18,8 @@ import customDatasetRoutes from "$app/routes/customDatasetRoutes.ts";
 import docsRouter from "$app/openapi/docs.router.ts";
 import externalVoteRoutes from "$app/routes/externalVoteRoutes.ts";
 import { authMiddleware } from "$app/middleware/authMiddleware.ts";
+import errorMiddleware from "$app/middleware/errorMiddleware.ts";
 import type { AuthenticatedUserState } from "$app/types/auth.ts";
-import { BadRequestError, NotFoundError } from "$app/errors/generic.ts";
-import { AuthError, ExpiredJwtError } from "$app/errors/auth.ts";
 import { warmProviderRegistry } from "$app/ethereum/providerRegistry.ts";
 
 export interface UnauthenticatedAppState {
@@ -59,29 +58,7 @@ app.use((ctx, next) => {
   return next();
 });
 
-app.use(async (ctx, next) => {
-  try {
-    await next();
-  } catch (e) {
-    if (e instanceof BadRequestError) {
-      ctx.response.status = 400;
-      ctx.response.body = { error: e.message };
-    } else if (e instanceof AuthError) {
-      ctx.response.status = 401;
-      ctx.response.body = { error: e.message };
-    } else if (e instanceof NotFoundError) {
-      ctx.response.status = 404;
-      ctx.response.body = { error: e.message };
-    } else if (e instanceof ExpiredJwtError) {
-      ctx.response.status = 401;
-      ctx.response.body = { error: "Token expired" };
-    } else {
-      ctx.response.status = 500;
-      ctx.response.body = { error: "Internal Server Error" };
-      console.error("Internal Server Error:", e);
-    }
-  }
-});
+app.use(errorMiddleware);
 
 app.use(healthRoutes.routes());
 app.use(healthRoutes.allowedMethods());
