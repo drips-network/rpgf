@@ -5,6 +5,9 @@ const configSchema = z.object({
     port: z.coerce.number().int().positive().default(8000),
     baseUrl: z.string().url().default("http://localhost:8000"),
   }),
+  frontend: z.object({
+    baseUrl: z.string().url().default("http://localhost:5173"),
+  }),
   env: z.enum(["development", "production", "test"]).default("development"),
   database: z.object({
     connectionString: z.string().min(1),
@@ -64,6 +67,9 @@ function loadConfig(): Config {
     server: {
       port: Deno.env.get("PORT"),
       baseUrl: Deno.env.get("BASE_URL"),
+    },
+    frontend: {
+      baseUrl: Deno.env.get("FRONTEND_BASE_URL"),
     },
     env: Deno.env.get("DENO_ENV"),
     database: {

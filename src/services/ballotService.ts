@@ -1071,7 +1071,7 @@ export async function submitExternalVoteResult(
     EXTERNAL_VOTE_RESULT_TTL_SECONDS,
   );
 
-  const baseUrl = config.server.baseUrl;
+  const baseUrl = config.frontend.baseUrl;
   const callbackUrl = `${baseUrl}/rpgf/external-vote-landing?externalVoteResultId=${resultId}&roundId=${roundId}&chainId=${round.chain.chainId}`;
 
   return { id: resultId, callbackUrl };
