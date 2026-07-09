@@ -115,11 +115,27 @@ async function main() {
 
   const round = await db.query.rounds.findFirst({
     where: eq(rounds.id, roundId),
-    columns: { id: true, name: true, emoji: true, urlSlug: true },
+    columns: {
+      id: true,
+      name: true,
+      emoji: true,
+      urlSlug: true,
+      resultsPublished: true,
+      votingPeriodEnd: true,
+    },
   });
 
   if (!round) {
     log(LogLevel.Error, "No round found with that id; aborting", { roundId });
+    Deno.exit(1);
+  }
+
+  if (!round.resultsPublished) {
+    log(
+      LogLevel.Error,
+      "Round results are not published; refusing to purge private answers",
+      { roundId: round.id, votingPeriodEnd: round.votingPeriodEnd },
+    );
     Deno.exit(1);
   }
 
