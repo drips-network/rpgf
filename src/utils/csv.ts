@@ -1,5 +1,5 @@
 // @deno-types="https://cdn.sheetjs.com/xlsx-0.20.3/package/types/index.d.ts"
-import XLSX from 'xlsx';
+import * as XLSX from 'xlsx';
 
 export function escapeCsvValue(value: unknown): string {
   const stringValue = String(value ?? "");
